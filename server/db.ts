@@ -31,7 +31,7 @@ export const dbEnabled = () => cfg() !== null;
 export async function saveAnalysis(result: AnalysisResult): Promise<{ id: string; created_at: string } | null> {
   if (!dbEnabled()) return null;
   const p = result.player;
-  const rows = await rest('analyses?on_conflict=report_code,fight_id,player_name&select=id,created_at', {
+  const rows = await rest('analyses?on_conflict=report_code,fight_id,player_name,compare_key&select=id,created_at', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
     body: JSON.stringify({
@@ -45,6 +45,7 @@ export async function saveAnalysis(result: AnalysisResult): Promise<{ id: string
       spec_name: p.specName,
       dps: p.dps,
       parse_percent: p.parsePercent,
+      compare_key: result.compareKey ?? 'auto',
       result,
     }),
   });
@@ -53,7 +54,7 @@ export async function saveAnalysis(result: AnalysisResult): Promise<{ id: string
 
 export async function listHistory(limit = 100): Promise<HistoryRow[]> {
   if (!dbEnabled()) return [];
-  return rest(`analyses?select=id,created_at,report_code,fight_id,encounter_name,player_name,class_name,spec_name,dps,parse_percent&order=created_at.desc&limit=${limit}`);
+  return rest(`analyses?select=id,created_at,report_code,fight_id,encounter_name,player_name,class_name,spec_name,dps,parse_percent,compare_key&order=created_at.desc&limit=${limit}`);
 }
 
 export async function getAnalysis(id: string): Promise<AnalysisResult | null> {

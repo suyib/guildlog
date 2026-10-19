@@ -141,7 +141,11 @@ export async function analyze(params: { host: string; code: string; fightId: num
     else if (s.status === 'rejected') notes.push(`Couldn\u2019t load ${labels[i]}: ${(s.reason as Error)?.message ?? s.reason}`);
   });
 
-  const result: AnalysisResult = { player, comparisons, findings: buildFindings(player, comparisons), notes };
+  const compareKey =
+    compare.kind === 'player'
+      ? `p:${meta.masterData.actors.find((a) => a.id === compare.playerId)?.name ?? compare.playerId}`
+      : compare.kind;
+  const result: AnalysisResult = { player, comparisons, findings: buildFindings(player, comparisons), notes, compareKey };
   try {
     const saved = await saveAnalysis(result);
     if (saved) {

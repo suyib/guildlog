@@ -1,5 +1,6 @@
 import type { PlayerSnapshot } from '../../server/types';
 import { mmss } from '../format';
+import { classCss } from './emoji';
 
 const LABEL_W = 150;
 const W = 760;
@@ -24,7 +25,7 @@ export default function Timeline({ players }: { players: { label: string; snapsh
         const y = 24 + i * ROW_H;
         return (
           <g key={p.label}>
-            <text x={0} y={y + 16} className={i === 0 ? 'name me' : 'name'}>{p.label.length > 22 ? p.label.slice(0, 21) + '…' : p.label}</text>
+            <text x={0} y={y + 16} className={`name ${classCss(p.snapshot.className)}-fill${i === 0 ? ' me' : ''}`}>{p.label.length > 22 ? p.label.slice(0, 21) + '…' : p.label}</text>
             {p.snapshot.gaps.map((g, j) => (
               <rect key={j} x={x(g.start)} y={y + 2} width={Math.max(1, x(g.end) - x(g.start))} height={ROW_H - 10} className="gap" />
             ))}

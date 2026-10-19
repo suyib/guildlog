@@ -5,35 +5,44 @@ import SavedPage from './components/SavedPage';
 
 type Route = { page: 'analyze' } | { page: 'history' } | { page: 'saved'; id: string };
 
-function parseHash(): Route {
+// Shareable analyses live at /a/<id>; the rest of the app uses hash routes (#/ and #/history).
+function parseRoute(): Route {
   const h = window.location.hash.replace(/^#\/?/, '');
-  if (h.startsWith('a/')) return { page: 'saved', id: h.slice(2) };
   if (h === 'history') return { page: 'history' };
+  if (h.startsWith('a/')) return { page: 'saved', id: h.slice(2) }; // older #/a/<id> links
+  const m = window.location.pathname.match(/^\/a\/([0-9a-f-]{36})\/?$/i);
+  if (m && !h) return { page: 'saved', id: m[1] };
   return { page: 'analyze' };
 }
 
 export default function App() {
-  const [route, setRoute] = useState<Route>(parseHash);
+  const [route, setRoute] = useState<Route>(parseRoute);
   useEffect(() => {
-    const onHash = () => setRoute(parseHash());
-    window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
+    const onChange = () => setRoute(parseRoute());
+    window.addEventListener('hashchange', onChange);
+    window.addEventListener('popstate', onChange);
+    return () => {
+      window.removeEventListener('hashchange', onChange);
+      window.removeEventListener('popstate', onChange);
+    };
   }, []);
 
   return (
-    <div className="shell">
-      <header className="top">
-        <a href="#/" className="brand">⚔️ Guild Logs</a>
-        <nav>
-          <a href="#/" className={route.page === 'analyze' ? 'on' : ''}>🔍 Analyse</a>
-          <a href="#/history" className={route.page === 'history' ? 'on' : ''}>📚 History</a>
-        </nav>
+    <>
+      <header className="topbar">
+        <div className="shell topbar-inner">
+          <a href="/#/" className="brand">⚔️ <span>Guild</span> Logs</a>
+          <nav>
+            <a href="/#/" className={route.page === 'analyze' ? 'on' : ''}>🔍 Analyse</a>
+            <a href="/#/history" className={route.page === 'history' ? 'on' : ''}>📚 History</a>
+          </nav>
+        </div>
       </header>
-      <main>
+      <main className="shell">
         {route.page === 'analyze' && <AnalyzePage />}
         {route.page === 'history' && <HistoryPage />}
         {route.page === 'saved' && <SavedPage id={route.id} />}
       </main>
-    </div>
+    </>
   );
 }

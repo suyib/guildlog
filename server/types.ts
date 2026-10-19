@@ -69,6 +69,8 @@ export interface Finding {
 
 export interface AnalysisResult {
   id?: string;
+  /** Which comparison was chosen: 'auto' | 'top' | 'previous' | 'p:<player name>'. */
+  compareKey?: string;
   createdAt?: string;
   player: PlayerSnapshot;
   comparisons: Comparison[];
@@ -97,4 +99,5 @@ export interface HistoryRow {
   spec_name: string;
   dps: number;
   parse_percent: number | null;
+  compare_key: string;
 }

@@ -53,7 +53,7 @@ export default function AnalyzePage() {
     try {
       const res = await runAnalysis({ host: report.host, code: report.code, fightId, playerId, compare: toChoice(compareWith) });
       setResult(res);
-      if (res.id) history.replaceState(null, '', `#/a/${res.id}`);
+      if (res.id) history.replaceState(null, '', `/a/${res.id}`);
     } catch (err) {
       setError((err as Error).message);
     } finally {
