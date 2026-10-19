@@ -1,10 +1,11 @@
-// The analysis runs in three short steps so no single request hits Vercel's time limit:
-//   1. targets  -> who to compare with (needs the fight table and, for a top parse, the rankings)
-//   2. snapshot -> one player's numbers for one fight (called once for you and once per comparison)
-//   3. finish   -> adds your previous kill, builds the findings and saves the result
+// The analysis runs as several short requests so no single one hits Vercel's time limit:
+//   1. fight    -> the fight-wide table for everyone (damage, rankings, item levels), fetched ONCE
+//   2. snapshot -> one player's own tables + casts (called for you and each comparison, in parallel)
+//   3. top      -> finds a top-ranked parse of your spec on this boss (optional)
+//   4. finish   -> adds your previous kill, builds the findings and saves the result
 import { buildFindings, buildSnapshot } from './analysis.js';
-import { previousKill, saveAnalysis } from './db.js';
-import type { ActorRef, AnalysisResult, CompareChoice, Comparison, FightRef, PlayerSnapshot, ReportSummary, SnapshotTarget } from './types.js';
+import { getCachedSnapshot, getCachedTop, previousKill, putCachedSnapshot, putCachedTop, saveAnalysis } from './db.js';
+import type { ActorRef, AnalysisResult, Comparison, FightPlayerRow, FightRef, PlayerSnapshot, ReportSummary, SnapshotTarget } from './types.js';
 import { type Actor, type Fight, getCastEvents, getFightData, getPlayerTables, getReportMeta, getTopRankings, parseReportUrl } from './wcl.js';
 
 export async function reportSummary(url: string): Promise<ReportSummary> {
@@ -30,7 +31,9 @@ export async function reportSummary(url: string): Promise<ReportSummary> {
       startTime: f.startTime,
       endTime: f.endTime,
     })),
-    players: players.map((p) => ({ id: p.id, name: p.name, className: p.subType })).sort((a, b) => a.name.localeCompare(b.name)),
+    players: players
+      .map((p) => ({ id: p.id, name: p.name, className: p.subType, server: p.server ?? null }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
     suggestedFight,
     suggestedPlayer: players.some((p) => p.id === parsed.source) ? parsed.source : undefined,
   };
@@ -41,86 +44,109 @@ function rankingRows(rankings: any): any[] {
   return ['tanks', 'healers', 'dps'].flatMap((r) => roles[r]?.characters ?? []);
 }
 
+function detailRows(details: any): any[] {
+  const d = details?.data?.playerDetails ?? details?.playerDetails ?? {};
+  return ['tanks', 'healers', 'dps'].flatMap((r) => d[r] ?? []);
+}
+
+/** Step 1: everyone's fight-wide numbers in one query. */
+export async function fightRows(host: string, code: string, fightId: number, withRankings = true): Promise<FightPlayerRow[]> {
+  const fd = await getFightData(host, code, fightId, { rankings: withRankings });
+  const ranks = rankingRows(fd.rankings);
+  const details = detailRows(fd.details);
+  return (fd.damage?.data?.entries ?? [])
+    .filter((e: any) => e.type !== 'Pet' && e.type !== 'NPC')
+    .map((e: any): FightPlayerRow => {
+      const rank = ranks.find((r) => r.name === e.name);
+      const det = details.find((x) => x.id === e.id || x.name === e.name);
+      const [iconClass, iconSpec] = String(e.icon ?? '').split('-');
+      const ilvl = Number(det?.maxItemLevel ?? det?.minItemLevel ?? 0);
+      return {
+        id: e.id,
+        name: e.name,
+        className: rank?.class ?? iconClass ?? e.type,
+        specName: rank?.spec ?? det?.specs?.[0]?.spec ?? iconSpec ?? '',
+        icon: e.icon ?? '',
+        total: Number(e.total ?? 0),
+        activeTime: typeof e.activeTime === 'number' ? e.activeTime : null,
+        rankPercent: typeof rank?.rankPercent === 'number' ? rank.rankPercent : null,
+        itemLevel: ilvl > 0 ? ilvl : null,
+        server: det?.server ?? rank?.server?.name ?? null,
+      };
+    });
+}
+
 const toFight = (f: FightRef): Fight => ({ ...f, size: null, difficulty: null });
 const toActor = (a: ActorRef): Actor => ({ id: a.id, name: a.name, type: 'Player', subType: a.className, petOwner: null });
 
-/** Step 2: one player's snapshot. All three Warcraft Logs queries run at the same time. */
-export async function snapshotOne(host: string, code: string, fightRef: FightRef, actorRef: ActorRef): Promise<PlayerSnapshot> {
+/**
+ * Step 2: one player's snapshot. Pass the player's fight row from step 1 so the fight-wide
+ * table isn't fetched again; without it (a top parse from another report) only the damage table is fetched.
+ */
+export async function snapshotOne(host: string, code: string, fightRef: FightRef, actorRef: ActorRef, row?: FightPlayerRow): Promise<PlayerSnapshot> {
+  const cacheKey = `v1:${host}:${code}:${fightRef.id}:${fightRef.endTime}:${actorRef.id}`;
+  const cached = await getCachedSnapshot(cacheKey);
+  if (cached) return cached;
+  const fresh = await buildFreshSnapshot(host, code, fightRef, actorRef, row);
+  await putCachedSnapshot(cacheKey, fresh);
+  return fresh;
+}
+
+async function buildFreshSnapshot(host: string, code: string, fightRef: FightRef, actorRef: ActorRef, row?: FightPlayerRow): Promise<PlayerSnapshot> {
   const fight = toFight(fightRef);
   const actor = toActor(actorRef);
-  const [fd, tables, casts] = await Promise.all([
-    getFightData(host, code, fight.id),
+  const [r, tables, casts] = await Promise.all([
+    row ? Promise.resolve(row) : fightRows(host, code, fight.id, false).then((rows) => rows.find((x) => x.id === actor.id || x.name === actor.name)),
     getPlayerTables(host, code, fight.id, actor.id),
     getCastEvents(host, code, fight, actor.id),
   ]);
-  const fightRow = (fd.damage?.data?.entries ?? []).find((e: any) => e.id === actor.id || e.name === actor.name);
-  const rankingRow = rankingRows(fd.rankings).find((r) => r.name === actor.name);
-  return buildSnapshot({ host, code, fight, actor, fightRow, rankingRow, tables, casts });
+  const snapshot = buildSnapshot({
+    host,
+    code,
+    fight,
+    actor,
+    fightRow: r ? { icon: r.icon, activeTime: r.activeTime } : undefined,
+    rankingRow: r ? { rankPercent: r.rankPercent, class: r.className, spec: r.specName } : undefined,
+    itemLevel: r?.itemLevel ?? null,
+    tables,
+    casts,
+  });
+  snapshot.server = r?.server ?? null;
+  return snapshot;
 }
 
-/** Step 1: work out who to compare with. Player choices are resolved in the browser, so this handles auto and top. */
-export async function comparisonTargets(host: string, code: string, fight: FightRef, me: ActorRef, compare: CompareChoice): Promise<{ targets: SnapshotTarget[]; notes: string[] }> {
-  const notes: string[] = [];
-  const targets: SnapshotTarget[] = [];
-  if (compare.kind === 'previous' || compare.kind === 'player') return { targets, notes };
-
-  const fd = await getFightData(host, code, fight.id);
-  const entries: any[] = fd.damage?.data?.entries ?? [];
-  const myRank = rankingRows(fd.rankings).find((r) => r.name === me.name);
-  const myIcon: string = entries.find((e) => e.id === me.id || e.name === me.name)?.icon ?? '';
-  const className: string = myRank?.class ?? myIcon.split('-')[0] ?? me.className;
-  const specName: string = myRank?.spec ?? myIcon.split('-')[1] ?? '';
-
-  if (compare.kind === 'auto') {
-    entries
-      .filter((e) => e.type === me.className && e.name !== me.name)
-      .sort((a, b) => (b.total ?? 0) - (a.total ?? 0))
-      .slice(0, 2)
-      .forEach((e) => targets.push({
-        kind: 'same-report',
-        label: `${e.name} (${me.className}, same raid)`,
-        host,
-        code,
-        fight,
-        actor: { id: e.id, name: e.name, className: e.type },
-        sameClass: true,
-      }));
-  }
-
-  // Top-ranked parse of the same spec on this boss
-  try {
-    if (!specName) throw new Error('spec unknown');
-    const ranks = await getTopRankings(host, fight.encounterID, className, specName);
-    const pick = ranks.find((r) => r.name !== me.name);
-    if (pick) {
-      const tMeta = await getReportMeta(host, pick.code);
-      const tFight = tMeta.fights.find((f) => f.id === pick.fightID);
-      const tActor = tMeta.masterData.actors.find((a) => a.name === pick.name && a.type === 'Player');
-      if (tFight && tActor) {
-        targets.push({
-          kind: 'top-parse',
-          label: `${pick.name} (top ranked)`,
-          host,
-          code: pick.code,
-          fight: { id: tFight.id, encounterID: tFight.encounterID, name: tFight.name, startTime: tFight.startTime, endTime: tFight.endTime, kill: !!tFight.kill },
-          actor: { id: tActor.id, name: tActor.name, className: tActor.subType },
-          sameClass: tActor.subType === me.className,
-        });
-      }
-    }
-  } catch (e) {
-    notes.push(`Couldn’t find a top-ranked parse: ${(e as Error).message}`);
-  }
-  return { targets, notes };
+/** Step 3: a top-ranked parse of the same spec on this boss. */
+export async function topParseTarget(host: string, fight: FightRef, me: { name: string; className: string; specName: string }): Promise<SnapshotTarget | null> {
+  if (!me.specName) throw new Error('your spec is unknown for this fight');
+  const cacheKey = `v1:${host}:${fight.encounterID}:${me.className}:${me.specName}:${me.name}`;
+  const cached = await getCachedTop(cacheKey);
+  if (cached !== undefined) return cached as SnapshotTarget | null;
+  const target = await findTopParse(host, fight, me);
+  await putCachedTop(cacheKey, target);
+  return target;
 }
 
-/** Step 3: add your previous kill (if wanted), build findings and save. */
-export async function finish(input: {
-  player: PlayerSnapshot;
-  comparisons: Comparison[];
-  compareKey: string;
-  notes: string[];
-}): Promise<AnalysisResult> {
+async function findTopParse(host: string, fight: FightRef, me: { name: string; className: string; specName: string }): Promise<SnapshotTarget | null> {
+  const ranks = await getTopRankings(host, fight.encounterID, me.className, me.specName);
+  const pick = ranks.find((r) => r.name !== me.name);
+  if (!pick) return null;
+  const tMeta = await getReportMeta(host, pick.code);
+  const tFight = tMeta.fights.find((f) => f.id === pick.fightID);
+  const tActor = tMeta.masterData.actors.find((a) => a.name === pick.name && a.type === 'Player');
+  if (!tFight || !tActor) return null;
+  return {
+    kind: 'top-parse',
+    label: `${pick.name} (top ranked)`,
+    host,
+    code: pick.code,
+    fight: { id: tFight.id, encounterID: tFight.encounterID, name: tFight.name, startTime: tFight.startTime, endTime: tFight.endTime, kill: !!tFight.kill },
+    actor: { id: tActor.id, name: tActor.name, className: tActor.subType },
+    sameClass: tActor.subType === me.className,
+  };
+}
+
+/** Step 4: add your previous kill (if wanted), build findings and save. */
+export async function finish(input: { player: PlayerSnapshot; comparisons: Comparison[]; compareKey: string; notes: string[] }): Promise<AnalysisResult> {
   const { player, compareKey } = input;
   const comparisons = [...input.comparisons];
   const notes = [...input.notes];

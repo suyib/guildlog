@@ -75,3 +75,54 @@ export async function previousKill(playerName: string, encounterId: number, excl
   if (!rows?.[0]) return null;
   return { snapshot: rows[0].result.player, createdAt: rows[0].created_at };
 }
+
+// ---------- Caches (make repeat analyses fast) ----------
+
+/** A finished fight doesn't change, so a player's snapshot for it can be reused. */
+export async function getCachedSnapshot(key: string): Promise<PlayerSnapshot | null> {
+  if (!dbEnabled()) return null;
+  try {
+    const rows = await rest(`snapshot_cache?key=eq.${encodeURIComponent(key)}&select=snapshot`);
+    return rows?.[0]?.snapshot ?? null;
+  } catch {
+    return null; // cache is optional
+  }
+}
+
+export async function putCachedSnapshot(key: string, snapshot: PlayerSnapshot): Promise<void> {
+  if (!dbEnabled()) return;
+  try {
+    await rest('snapshot_cache?on_conflict=key', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ key, snapshot }),
+    });
+  } catch {
+    /* cache is optional */
+  }
+}
+
+/** Top-ranked parse lookups are slow and rankings change slowly, so reuse them for 12 hours. */
+export async function getCachedTop(key: string): Promise<unknown | undefined> {
+  if (!dbEnabled()) return undefined;
+  try {
+    const since = new Date(Date.now() - 12 * 3600_000).toISOString();
+    const rows = await rest(`top_cache?key=eq.${encodeURIComponent(key)}&created_at=gte.${since}&select=target`);
+    return rows?.[0] ? rows[0].target : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function putCachedTop(key: string, target: unknown): Promise<void> {
+  if (!dbEnabled()) return;
+  try {
+    await rest('top_cache?on_conflict=key', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ key, target, created_at: new Date().toISOString() }),
+    });
+  } catch {
+    /* cache is optional */
+  }
+}

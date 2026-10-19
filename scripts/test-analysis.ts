@@ -17,7 +17,6 @@ function tables(steady: number, buffs: { name: string; up: number }[]): PlayerTa
     buffs: { data: { totalTime: 177_000, auras: buffs.map((b, i) => ({ name: b.name, guid: i, totalUptime: b.up * 1770, totalUses: 1 })) } },
     taken: { data: { entries: [{ name: 'Conflagration', total: 6000 }] } },
     deaths: { data: { entries: [] } },
-    summary: { data: { itemLevel: 113 } },
   };
 }
 

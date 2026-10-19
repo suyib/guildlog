@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isGeneralBuff } from '../../server/buffs';
 import type { AnalysisResult, PlayerSnapshot } from '../../server/types';
+import { loadPortrait } from '../api';
 import { compact, mmss, n0, pct } from '../format';
 import { ClassIcon, GameIcon, SeverityDot, classCss, compareLabel, parseCss } from './icons';
 import Timeline from './Timeline';
@@ -48,7 +49,7 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
       <section className="panel hero">
         <div className="hero-main">
           <div className="hero-id">
-            <ClassIcon className={me.className} size={48} />
+            <Portrait snapshot={me} />
             <div>
               <div className="eyebrow">
                 {me.encounterName} · <span className={me.kill ? 'kill' : 'wipe'}>{me.kill ? 'Kill' : 'Wipe'}</span> · {mmss(me.fightSeconds)} · Compared with: {compareLabel(result.compareKey)}
@@ -286,4 +287,19 @@ function Row({ label, cells, icon }: { label: string; cells: string[]; icon?: st
       {cells.map((c, i) => <td key={i} className={c === OTHER_CLASS ? 'r muted small' : 'r'}>{c}</td>)}
     </tr>
   );
+}
+
+/** The character's in-game portrait when available, otherwise their class icon. */
+function Portrait({ snapshot }: { snapshot: PlayerSnapshot }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    setUrl(null);
+    loadPortrait(snapshot).then((u) => live && setUrl(u));
+    return () => {
+      live = false;
+    };
+  }, [snapshot.host, snapshot.reportCode, snapshot.name, snapshot.server]);
+  if (!url) return <ClassIcon className={snapshot.className} size={56} />;
+  return <img className={`portrait ${classCss(snapshot.className)}-border`} src={url} width={56} height={56} alt={`${snapshot.name}'s character portrait`} />;
 }

@@ -65,7 +65,7 @@ export function parseReportUrl(input: string): ParsedUrl {
 
 // ---------- Queries ----------
 
-export interface Actor { id: number; name: string; type: string; subType: string; petOwner: number | null }
+export interface Actor { id: number; name: string; type: string; subType: string; petOwner: number | null; server?: string | null }
 export interface Fight { id: number; encounterID: number; name: string; startTime: number; endTime: number; kill: boolean | null; size: number | null; difficulty: number | null }
 export interface ReportMeta {
   code: string;
@@ -80,37 +80,52 @@ export async function getReportMeta(host: string, code: string): Promise<ReportM
   const q = `query($code:String!){reportData{report(code:$code){
     code title startTime zone{id name}
     fights{id encounterID name startTime endTime kill size difficulty}
-    masterData{actors{id name type subType petOwner}}
+    masterData{actors{id name type subType petOwner server}}
   }}}`;
   const d = await gql<{ reportData: { report: ReportMeta | null } }>(host, q, { code });
   if (!d.reportData.report) throw new Error('Report not found (it may be private or archived).');
   return d.reportData.report;
 }
 
-export interface FightData { damage: any; rankings: any }
+export interface FightData { damage: any; rankings?: any; details?: any }
 
-export async function getFightData(host: string, code: string, fightId: number): Promise<FightData> {
-  const q = `query($code:String!,$fid:[Int]!){reportData{report(code:$code){
-    damage: table(dataType:DamageDone, fightIDs:$fid)
-    rankings(fightIDs:$fid, playerMetric:dps)
-  }}}`;
+/**
+ * Fight-wide tables, fetched once per fight. Rankings and player details are the slow parts,
+ * so they're optional (a top parse from another report only needs the damage table).
+ */
+export async function getFightData(host: string, code: string, fightId: number, opts: { rankings?: boolean } = { rankings: true }): Promise<FightData> {
+  const q = opts.rankings
+    ? `query($code:String!,$fid:[Int]!){reportData{report(code:$code){
+        damage: table(dataType:DamageDone, fightIDs:$fid)
+        rankings(fightIDs:$fid, playerMetric:dps)
+        details: playerDetails(fightIDs:$fid)
+      }}}`
+    : `query($code:String!,$fid:[Int]!){reportData{report(code:$code){
+        damage: table(dataType:DamageDone, fightIDs:$fid)
+      }}}`;
   const d = await gql<{ reportData: { report: FightData } }>(host, q, { code, fid: [fightId] });
   return d.reportData.report;
 }
 
-export interface PlayerTables { dmg: any; casts: any; buffs: any; taken: any; deaths: any; summary: any }
+export interface PlayerTables { dmg: any; casts: any; buffs: any; taken: any; deaths: any }
 
+/** One player's tables, split into two smaller queries that run at the same time. */
 export async function getPlayerTables(host: string, code: string, fightId: number, sourceId: number): Promise<PlayerTables> {
-  const q = `query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){
+  const vars = { code, fid: [fightId], sid: sourceId };
+  const q1 = `query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){
     dmg: table(dataType:DamageDone, fightIDs:$fid, sourceID:$sid)
     casts: table(dataType:Casts, fightIDs:$fid, sourceID:$sid)
+  }}}`;
+  const q2 = `query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){
     buffs: table(dataType:Buffs, fightIDs:$fid, sourceID:$sid)
     taken: table(dataType:DamageTaken, fightIDs:$fid, sourceID:$sid)
     deaths: table(dataType:Deaths, fightIDs:$fid, sourceID:$sid)
-    summary: table(dataType:Summary, fightIDs:$fid, sourceID:$sid)
   }}}`;
-  const d = await gql<{ reportData: { report: PlayerTables } }>(host, q, { code, fid: [fightId], sid: sourceId });
-  return d.reportData.report;
+  const [a, b] = await Promise.all([
+    gql<{ reportData: { report: any } }>(host, q1, vars),
+    gql<{ reportData: { report: any } }>(host, q2, vars),
+  ]);
+  return { ...a.reportData.report, ...b.reportData.report };
 }
 
 export interface CastEvent { timestamp: number; type: string; abilityGameID: number; sourceID: number; targetID?: number }
@@ -144,4 +159,14 @@ export async function getTopRankings(host: string, encounterId: number, classNam
   return list
     .filter((r) => r?.report?.code)
     .map((r) => ({ name: r.name, amount: r.amount, code: r.report.code, fightID: r.report.fightID }));
+}
+
+/** The report's region slug (e.g. "eu", "us"), for character portraits. Separate query so it can't break report loading. */
+export async function getReportRegion(host: string, code: string): Promise<string | null> {
+  try {
+    const d = await gql<any>(host, `query($code:String!){reportData{report(code:$code){region{slug}}}}`, { code });
+    return d.reportData?.report?.region?.slug?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
 }

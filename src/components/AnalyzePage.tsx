@@ -190,7 +190,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
               <li key={i} className={`progress-${p.state}`}>
                 <span className="progress-mark" aria-hidden="true" />
                 {p.label}
-                <span className="muted small">{p.state === 'loading' ? 'loading…' : p.state === 'done' ? 'done' : 'failed'}</span>
+                <span className="muted small">{p.state === 'loading' ? 'loading…' : `${p.state === 'done' ? 'done' : 'failed'}${p.seconds !== undefined ? ` in ${p.seconds}s` : ''}`}</span>
               </li>
             ))}
           </ul>

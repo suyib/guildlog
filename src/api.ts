@@ -3,6 +3,7 @@ import type {
   AnalysisResult,
   CompareChoice,
   Comparison,
+  FightPlayerRow,
   FightRef,
   HistoryRow,
   PlayerSnapshot,
@@ -28,76 +29,103 @@ export const loadReport = (url: string) => post<ReportSummary>('/api/report', { 
 export const loadHistory = () => call<HistoryRow[]>('/api/history');
 export const loadSaved = (id: string) => call<AnalysisResult>(`/api/history?id=${encodeURIComponent(id)}`);
 
-export interface Progress { label: string; state: 'loading' | 'done' | 'failed' }
+export interface Progress { label: string; state: 'loading' | 'done' | 'failed'; seconds?: number }
+
+const portraitCache = new Map<string, Promise<string | null>>();
+/** Character portrait URL from the Blizzard API (null when not set up or not found). */
+export function loadPortrait(p: { host: string; reportCode: string; name: string; server?: string | null }): Promise<string | null> {
+  if (!p.server) return Promise.resolve(null);
+  const key = `${p.host}|${p.reportCode}|${p.server}|${p.name}`;
+  if (!portraitCache.has(key)) {
+    const q = new URLSearchParams({ host: p.host, code: p.reportCode, name: p.name, server: p.server });
+    portraitCache.set(key, call<{ url: string | null }>(`/api/portrait?${q}`).then((r) => r.url).catch(() => null));
+  }
+  return portraitCache.get(key)!;
+}
 
 /**
- * Runs an analysis in small steps (each its own short request) so long fights don't time out:
- * your snapshot and the comparison targets load together, then each comparison loads in parallel,
- * then the server builds the findings and saves.
+ * Runs an analysis as several short requests so long fights don't time out:
+ *   1. the fight-wide table for everyone, once
+ *   2. your snapshot and each comparison's snapshot, all in parallel
+ *   3. the summary (findings + save)
  */
 export async function runAnalysis(
   p: { host: string; code: string; fight: FightRef; actor: ActorRef; compare: CompareChoice; chosen?: ActorRef },
   onProgress: (items: Progress[]) => void,
 ): Promise<AnalysisResult> {
-  const progress: Progress[] = [{ label: p.actor.name, state: 'loading' }, { label: 'Finding comparisons', state: 'loading' }];
+  const progress: Progress[] = [];
   const update = () => onProgress(progress.map((x) => ({ ...x })));
-  update();
+  const step = <T,>(label: string, work: Promise<T>): Promise<T> => {
+    const item: Progress = { label, state: 'loading' };
+    const started = performance.now();
+    const took = () => Math.round((performance.now() - started) / 100) / 10;
+    progress.push(item);
+    update();
+    return work.then(
+      (v) => { item.state = 'done'; item.seconds = took(); update(); return v; },
+      (e) => { item.state = 'failed'; item.seconds = took(); update(); throw e; },
+    );
+  };
 
   const notes: string[] = [];
-  const mePromise = post<PlayerSnapshot>('/api/snapshot', { host: p.host, code: p.code, fight: p.fight, actor: p.actor }).then(
-    (s) => { progress[0].state = 'done'; update(); return s; },
-    (e) => { progress[0].state = 'failed'; update(); throw e; },
-  );
+  const rows = await step('Reading the fight', post<FightPlayerRow[]>('/api/fight', { host: p.host, code: p.code, fightId: p.fight.id }));
+  const rowFor = (a: ActorRef) => rows.find((r) => r.id === a.id || r.name === a.name);
+  const myRow = rowFor(p.actor);
 
-  let targets: SnapshotTarget[] = [];
+  const snap = (t: { host: string; code: string; fight: FightRef; actor: ActorRef; row?: FightPlayerRow }) =>
+    post<PlayerSnapshot>('/api/snapshot', { host: t.host, code: t.code, fight: t.fight, actor: t.actor, row: t.row });
+
+  const mePromise = step(p.actor.name, snap({ host: p.host, code: p.code, fight: p.fight, actor: p.actor, row: myRow }));
+
+  // Who to compare with
+  const targets: SnapshotTarget[] = [];
   if (p.compare.kind === 'player' && p.chosen) {
-    targets = [{
+    targets.push({
       kind: 'chosen-player',
       label: `${p.chosen.name} (${p.chosen.className}, same raid)`,
-      host: p.host,
-      code: p.code,
-      fight: p.fight,
-      actor: p.chosen,
+      host: p.host, code: p.code, fight: p.fight, actor: p.chosen,
       sameClass: p.chosen.className === p.actor.className,
-    }];
-    progress[1].state = 'done';
-  } else {
-    try {
-      const t = await post<{ targets: SnapshotTarget[]; notes: string[] }>('/api/targets', { host: p.host, code: p.code, fight: p.fight, actor: p.actor, compare: p.compare });
-      targets = t.targets;
-      notes.push(...t.notes);
-      progress[1].state = 'done';
-    } catch (e) {
-      notes.push(`Couldn’t find comparisons: ${(e as Error).message}`);
-      progress[1].state = 'failed';
-    }
+      row: rowFor(p.chosen),
+    });
   }
-  update();
+  if (p.compare.kind === 'auto') {
+    rows
+      .filter((r) => r.className === p.actor.className && r.name !== p.actor.name)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 2)
+      .forEach((r) => targets.push({
+        kind: 'same-report',
+        label: `${r.name} (${r.className}, same raid)`,
+        host: p.host, code: p.code, fight: p.fight,
+        actor: { id: r.id, name: r.name, className: r.className },
+        sameClass: true,
+        row: r,
+      }));
+  }
 
-  const base = progress.length;
-  targets.forEach((t) => progress.push({ label: t.actor.name, state: 'loading' }));
-  update();
-
-  const settled = await Promise.allSettled(
-    targets.map((t, i) =>
-      post<PlayerSnapshot>('/api/snapshot', { host: t.host, code: t.code, fight: t.fight, actor: t.actor }).then(
-        (snapshot): Comparison => { progress[base + i].state = 'done'; update(); return { kind: t.kind, label: t.label, snapshot, sameClass: t.sameClass }; },
-        (e) => { progress[base + i].state = 'failed'; update(); throw e; },
-      ),
-    ),
+  const comparisonJobs: Promise<Comparison | null>[] = targets.map((t) =>
+    step(t.actor.name, snap(t)).then((snapshot) => ({ kind: t.kind, label: t.label, snapshot, sameClass: t.sameClass })),
   );
+
+  if (p.compare.kind === 'auto' || p.compare.kind === 'top') {
+    const me = { name: p.actor.name, className: myRow?.className ?? p.actor.className, specName: myRow?.specName ?? '' };
+    comparisonJobs.push(
+      step('Finding a top-ranked parse', post<{ target: SnapshotTarget | null }>('/api/top', { host: p.host, fight: p.fight, me })).then(async ({ target }) => {
+        if (!target) return null;
+        const snapshot = await step(target.actor.name, snap(target));
+        return { kind: target.kind, label: target.label, snapshot, sameClass: target.sameClass };
+      }),
+    );
+  }
+
+  const settled = await Promise.allSettled(comparisonJobs);
   const comparisons: Comparison[] = [];
-  settled.forEach((s, i) => {
-    if (s.status === 'fulfilled') comparisons.push(s.value);
-    else notes.push(`Couldn’t load ${targets[i].actor.name}: ${(s.reason as Error).message}`);
+  settled.forEach((s) => {
+    if (s.status === 'fulfilled' && s.value) comparisons.push(s.value);
+    else if (s.status === 'rejected') notes.push(`Couldn\u2019t load a comparison: ${(s.reason as Error).message}`);
   });
 
   const player = await mePromise;
   const compareKey = p.compare.kind === 'player' ? `p:${p.chosen?.name ?? ''}` : p.compare.kind;
-  progress.push({ label: 'Building summary', state: 'loading' });
-  update();
-  const result = await post<AnalysisResult>('/api/finish', { player, comparisons, compareKey, notes });
-  progress[progress.length - 1].state = 'done';
-  update();
-  return result;
+  return step('Building the summary', post<AnalysisResult>('/api/finish', { player, comparisons, compareKey, notes }));
 }

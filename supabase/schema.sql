@@ -25,3 +25,17 @@ create index if not exists analyses_player_encounter on public.analyses (player_
 
 -- Lock the table down: only the server (service role key) can read or write.
 alter table public.analyses enable row level security;
+
+-- Caches that make repeat analyses fast. Safe to clear at any time.
+create table if not exists public.snapshot_cache (
+  key text primary key,
+  created_at timestamptz not null default now(),
+  snapshot jsonb not null
+);
+create table if not exists public.top_cache (
+  key text primary key,
+  created_at timestamptz not null default now(),
+  target jsonb
+);
+alter table public.snapshot_cache enable row level security;
+alter table public.top_cache enable row level security;

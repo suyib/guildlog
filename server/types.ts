@@ -20,6 +20,8 @@ export interface CooldownUse { name: string; cooldownSec: number; uses: number; 
 export interface Gap { start: number; end: number; seconds: number }
 
 export interface PlayerSnapshot {
+  /** Realm name, used to look up the character portrait. */
+  server?: string | null;
   host: string;
   reportCode: string;
   fightId: number;
@@ -59,8 +61,22 @@ export type CompareChoice =
 export interface FightRef { id: number; encounterID: number; name: string; startTime: number; endTime: number; kill: boolean }
 export interface ActorRef { id: number; name: string; className: string }
 
+/** One player's fight-wide numbers, fetched once per fight for everyone (damage table + rankings + details). */
+export interface FightPlayerRow {
+  id: number;
+  name: string;
+  className: string;
+  specName: string;
+  icon: string;
+  total: number;
+  activeTime: number | null;
+  rankPercent: number | null;
+  itemLevel: number | null;
+  server: string | null;
+}
+
 /** A player whose snapshot the browser should fetch as a comparison. */
-export interface SnapshotTarget { kind: ComparisonKind; label: string; host: string; code: string; fight: FightRef; actor: ActorRef; sameClass: boolean }
+export interface SnapshotTarget { kind: ComparisonKind; label: string; host: string; code: string; fight: FightRef; actor: ActorRef; sameClass: boolean; row?: FightPlayerRow }
 
 export interface Comparison {
   kind: ComparisonKind;
@@ -92,7 +108,7 @@ export interface ReportSummary {
   code: string;
   title: string;
   fights: { id: number; name: string; encounterId: number; kill: boolean; seconds: number; startTime: number; endTime: number }[];
-  players: { id: number; name: string; className: string }[];
+  players: { id: number; name: string; className: string; server: string | null }[];
   suggestedFight?: number;
   suggestedPlayer?: number;
 }

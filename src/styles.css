@@ -199,3 +199,11 @@ tr.warn td { background: var(--gap) !important; }
 .progress-failed .progress-mark { background: var(--high); }
 @keyframes pulse { 50% { opacity: 0.3; } }
 @media (prefers-reduced-motion: reduce) { .progress-loading .progress-mark { animation: none; } }
+
+/* Character portrait */
+.portrait { width: 56px; height: 56px; border-radius: 4px; border: 2px solid var(--accent); object-fit: cover; flex: none; background: #111; }
+.cls-hunter-border { border-color: var(--hunter); } .cls-paladin-border { border-color: var(--paladin); } .cls-warrior-border { border-color: var(--warrior); }
+.cls-rogue-border { border-color: var(--rogue); } .cls-mage-border { border-color: var(--mage); } .cls-warlock-border { border-color: var(--warlock); }
+.cls-priest-border { border-color: var(--priest); } .cls-druid-border { border-color: var(--druid); } .cls-shaman-border { border-color: var(--shaman); }
+
+.brand .version { font-size: 11px; font-weight: 600; color: var(--muted); margin-left: 6px; }

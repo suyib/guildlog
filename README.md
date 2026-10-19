@@ -25,7 +25,8 @@ Every analysis is saved to Supabase, so it stays available after Warcraft Logs a
    - `SESSION_SECRET`: a long random string (e.g. `openssl rand -hex 32`)
    - `WCL_CLIENT_ID`, `WCL_CLIENT_SECRET`
    - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-4. **Domain**: in Vercel → Project → Domains, add your subdomain (e.g. `logs.suyin.uk`) and create the CNAME record it shows you.
+4. **Optional, character portraits**: create a client at https://develop.battle.net/access/clients and add `BLIZZARD_CLIENT_ID` and `BLIZZARD_CLIENT_SECRET` in Vercel. Without them the class icon is shown instead. If portraits don't appear, set `BLIZZARD_PROFILE_NAMESPACES` to the namespace your realms use (e.g. `profile-classicann`).
+5. **Domain**: in Vercel → Project → Domains, add your subdomain (e.g. `logs.suyin.uk`) and create the CNAME record it shows you.
 
 Changing `APP_PASSWORD` doesn't sign people out; changing `SESSION_SECRET` does.
 

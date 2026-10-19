@@ -20,6 +20,8 @@ export interface SnapshotInput {
   fightRow?: any;
   /** This player's row from report rankings (has rankPercent, class, spec). */
   rankingRow?: any;
+  /** From playerDetails (fetched once per fight). */
+  itemLevel?: number | null;
   tables: PlayerTables;
   casts: { events: CastEvent[]; abilities: Map<number, string> };
 }
@@ -130,7 +132,7 @@ export function buildSnapshot(input: SnapshotInput): PlayerSnapshot {
     total,
     parsePercent: input.rankingRow?.rankPercent ?? null,
     activePct: activeTime ? round((activeTime / fightMs) * 100) : null,
-    itemLevel: tables.summary?.data?.itemLevel ? round(num(tables.summary.data.itemLevel)) : null,
+    itemLevel: input.itemLevel ? round(input.itemLevel) : null,
     abilities,
     castsPerMinute,
     castCounts,
