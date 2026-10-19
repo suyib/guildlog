@@ -272,6 +272,11 @@ function DamageView({ result }: { result: AnalysisResult }) {
   const me = result.player;
   const topShare = Math.max(...me.abilities.map((a) => a.share), 0.0001);
   return (
+    <>
+    <section className="panel donut-wide">
+      <h2 className="panel-title">Share of damage</h2>
+      <DamageDonut abilities={me.abilities} total={me.total} />
+    </section>
     <section className="panel">
       <h2 className="panel-title">Damage done by ability</h2>
       <div className="scroll">
@@ -306,6 +311,7 @@ function DamageView({ result }: { result: AnalysisResult }) {
         </table>
       </div>
     </section>
+    </>
   );
 }
 

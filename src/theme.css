@@ -99,7 +99,8 @@ h2, h3 { margin: 0; }
 /* ---------- App layout: sidebar + content ---------- */
 .app { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); min-height: 100vh;
   background: linear-gradient(to right, rgba(0, 0, 0, 0.28) var(--sidebar-w), transparent var(--sidebar-w)); }
-.content { display: flex; flex-direction: column; gap: var(--space); padding: 24px 28px 48px; max-width: 1280px; width: 100%; min-width: 0; }
+/* Content is centered in the space right of the menu, and capped so lines stay readable on very wide screens */
+.content { display: flex; flex-direction: column; gap: var(--space); padding: 24px 32px 48px; max-width: 1360px; width: 100%; min-width: 0; margin-inline: auto; }
 .result { display: flex; flex-direction: column; gap: var(--space); }
 
 /* ---------- Sidebar ---------- */
@@ -378,6 +379,15 @@ progress.uptime-bar { height: 8px; color: var(--primary-light); }
 .donut-legend .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
 .donut-legend .lg-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .donut-legend .lg-pct { font-variant-numeric: tabular-nums; color: var(--ink-3); }
+
+/* Wide version on the Damage breakdown section: donut beside a two-column legend */
+.donut-wide .donut-wrap { flex-direction: row; align-items: center; gap: 32px; }
+.donut-wide .donut { max-width: 200px; flex: none; width: 200px; }
+.donut-wide .donut-legend { flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+@media (max-width: 640px) {
+  .donut-wide .donut-wrap { flex-direction: column; }
+  .donut-wide .donut-legend { grid-template-columns: 1fr; width: 100%; }
+}
 
 /* Slice colors: fill for the SVG slice, background for the legend swatch */
 .slot-1 { fill: var(--slot-1); background: var(--slot-1); }
