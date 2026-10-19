@@ -5,7 +5,7 @@
 //   4. finish   -> adds your previous kill, builds the findings and saves the result
 import { buildFindings, buildSnapshot } from './analysis.js';
 import { getCachedSnapshot, getCachedTop, previousKill, putCachedSnapshot, putCachedTop, saveAnalysis } from './db.js';
-import type { ActorRef, AnalysisResult, Comparison, FightPlayerRow, FightRef, PlayerSnapshot, ReportSummary, SnapshotTarget } from './types.js';
+import type { ActorRef, AnalysisResult, Comparison, Dashboard, FightPlayerRow, FightRef, PlayerSnapshot, ReportSummary, SnapshotTarget } from './types.js';
 import { type Actor, type Fight, getCastEvents, getFightData, getPlayerTables, getReportMeta, getTopRankings, parseReportUrl } from './wcl.js';
 
 export async function reportSummary(url: string): Promise<ReportSummary> {
@@ -22,6 +22,7 @@ export async function reportSummary(url: string): Promise<ReportSummary> {
     host: parsed.host,
     code: meta.code,
     title: meta.title,
+    startTime: meta.startTime,
     fights: encounters.map((f) => ({
       id: f.id,
       name: f.name,
@@ -146,7 +147,7 @@ async function findTopParse(host: string, fight: FightRef, me: { name: string; c
 }
 
 /** Step 4: add your previous kill (if wanted), build findings and save. */
-export async function finish(input: { player: PlayerSnapshot; comparisons: Comparison[]; compareKey: string; notes: string[] }): Promise<AnalysisResult> {
+export async function finish(input: { player: PlayerSnapshot; comparisons: Comparison[]; compareKey: string; notes: string[]; dashboard?: Dashboard }): Promise<AnalysisResult> {
   const { player, compareKey } = input;
   const comparisons = [...input.comparisons];
   const notes = [...input.notes];
@@ -165,7 +166,7 @@ export async function finish(input: { player: PlayerSnapshot; comparisons: Compa
   const order = { 'same-report': 0, 'chosen-player': 0, 'top-parse': 1, 'previous-kill': 2 } as const;
   comparisons.sort((a, b) => order[a.kind] - order[b.kind]);
 
-  const result: AnalysisResult = { player, comparisons, findings: buildFindings(player, comparisons), notes, compareKey };
+  const result: AnalysisResult = { player, comparisons, findings: buildFindings(player, comparisons), notes, compareKey, ...(input.dashboard ? { dashboard: input.dashboard } : {}) };
   try {
     const saved = await saveAnalysis(result);
     if (saved) {

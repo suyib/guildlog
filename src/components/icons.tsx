@@ -15,11 +15,11 @@ const CLASS_ICON: Record<string, string> = {
   Shaman: 'classicon_shaman',
 };
 
-const iconName = (file?: string) => (file ? file.replace(/\.(jpg|png|gif)$/i, '').toLowerCase() : '');
+const iconName = (file?: string | null) => (file ? file.replace(/\.(jpg|png|gif)$/i, '').toLowerCase() : '');
 
-export function GameIcon({ file, size = 18, alt = '' }: { file?: string; size?: number; alt?: string }) {
+export function GameIcon({ file, size = 18, alt = '' }: { file?: string | null; size?: number; alt?: string }) {
   const name = iconName(file);
-  if (!name || name === 'pet' || !/^[a-z0-9_-]+$/.test(name)) return <span className="icon icon-blank" style={{ width: size, height: size }} aria-hidden="true" />;
+  if (!name || name === 'pet' || !/^[a-z0-9_-]+$/.test(name)) return <BlankIcon size={size} />;
   return (
     <img
       className="icon"
@@ -33,6 +33,11 @@ export function GameIcon({ file, size = 18, alt = '' }: { file?: string; size?: 
       }}
     />
   );
+}
+
+/** Empty icon frame, sized with attributes so it needs no inline style. */
+export function BlankIcon({ size = 18 }: { size?: number }) {
+  return <svg className="icon icon-blank" width={size} height={size} aria-hidden="true" />;
 }
 
 export function ClassIcon({ className, size = 18 }: { className: string; size?: number }) {
@@ -65,6 +70,7 @@ export function compareLabel(key: string | undefined): string {
   if (!key || key === 'auto') return 'Auto';
   if (key === 'top') return 'Top-ranked parse';
   if (key === 'previous') return 'Previous kill';
+  if (key === 'none') return 'Nothing (just my stats)';
   if (key.startsWith('p:')) return `vs ${key.slice(2)}`;
   return key;
 }

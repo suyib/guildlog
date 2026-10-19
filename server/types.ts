@@ -55,7 +55,8 @@ export type CompareChoice =
   | { kind: 'auto' }
   | { kind: 'player'; playerId: number }
   | { kind: 'top' }
-  | { kind: 'previous' };
+  | { kind: 'previous' }
+  | { kind: 'none' };
 
 /** Just enough about a fight to fetch a player's data without re-reading the whole report. */
 export interface FightRef { id: number; encounterID: number; name: string; startTime: number; endTime: number; kill: boolean }
@@ -92,7 +93,33 @@ export interface Finding {
   detail: string;
 }
 
+export interface GearItem {
+  slot: number;
+  slotName: string;
+  id: number;
+  name: string | null;
+  icon: string | null;
+  itemLevel: number | null;
+  /** 0 poor … 5 legendary */
+  quality: number | null;
+  enchant: string | null;
+  enchantId: number | null;
+  /** Whether this slot normally takes a permanent enchant. */
+  enchantable: boolean;
+  gems: { id: number; icon: string | null; itemLevel: number | null }[];
+}
+
+/** Extra personal data shown when nothing is compared ("Just my stats"). */
+export interface Dashboard {
+  gear: GearItem[];
+  stats: { name: string; value: string }[];
+  /** DPS across the fight, seconds from the pull. */
+  dpsSeries: { t: number; dps: number }[];
+}
+
 export interface AnalysisResult {
+  /** Present for "Just my stats" analyses. */
+  dashboard?: Dashboard;
   id?: string;
   /** Which comparison was chosen: 'auto' | 'top' | 'previous' | 'p:<player name>'. */
   compareKey?: string;
@@ -107,6 +134,8 @@ export interface ReportSummary {
   host: string;
   code: string;
   title: string;
+  /** When the log started, ms since epoch. */
+  startTime?: number;
   fights: { id: number; name: string; encounterId: number; kill: boolean; seconds: number; startTime: number; endTime: number }[];
   players: { id: number; name: string; className: string; server: string | null }[];
   suggestedFight?: number;

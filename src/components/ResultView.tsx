@@ -4,6 +4,7 @@ import type { AnalysisResult, PlayerSnapshot } from '../../server/types';
 import { loadPortrait } from '../api';
 import { compact, mmss, n0, pct } from '../format';
 import { ClassIcon, GameIcon, SeverityDot, classCss, compareLabel, parseCss } from './icons';
+import Dashboard from './Dashboard';
 import Timeline from './Timeline';
 
 const OTHER_CLASS = 'other class';
@@ -43,6 +44,44 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
   const lust = (s: PlayerSnapshot) => s.buffs.find((b) => b.name === 'Bloodlust' || b.name === 'Heroism')?.uptimePct ?? null;
   const topShare = Math.max(...me.abilities.map((a) => a.share), 0.0001);
   const notSaved = notes.find((n) => n.startsWith('Not saved'));
+  const isDashboard = result.compareKey === 'none';
+
+  const abilityTable = (
+      <section className="panel">
+          <h3 className="panel-title">Damage done by ability</h3>
+          <div className="scroll">
+            <table className="grid">
+              <thead>
+                <tr><th>Name</th><th className="amount-col">Amount</th><th className="r">Casts</th><th className="r">Avg hit</th><th className="r">Crit %</th><th className="r">Miss %</th></tr>
+              </thead>
+              <tbody>
+                {me.abilities.map((a) => (
+                  <tr key={`${a.name}-${a.id}`}>
+                    <td>
+                      <span className="with-icon">
+                        <GameIcon file={a.isPet ? 'ability_hunter_pet_cat' : a.icon} />
+                        {a.name}
+                        {a.isPet && <span className="muted small">(pet)</span>}
+                      </span>
+                    </td>
+                    <td className="amount-col">
+                      <div className="amount">
+                        <span className="pct">{pct(a.share * 100, 2)}</span>
+                        <progress className={`bar ${classCss(me.className)}-bar`} max={1} value={a.share / topShare} aria-label={`${a.name} share`} />
+                        <span className="total">{compact(a.total)}</span>
+                      </div>
+                    </td>
+                    <td className="r">{a.casts || '–'}</td>
+                    <td className="r">{n0(a.avgHit)}</td>
+                    <td className="r">{pct(a.critPct, 1)}</td>
+                    <td className="r">{pct(a.missPct, 1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+  );
 
   return (
     <>
@@ -78,6 +117,10 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
         </div>
       </section>
 
+      {isDashboard ? (
+        <Dashboard result={result} />
+      ) : (
+        <>
       {crossClass.length > 0 && (
         <section className="panel warning-card">
           <strong>Different class:</strong> {crossClass.map((p) => p.s.name).join(', ')} {crossClass.length > 1 ? 'are' : 'is'} not a {me.className}.
@@ -202,40 +245,10 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
         </section>
       )}
 
-      <section className="panel">
-        <h3 className="panel-title">Damage done by ability</h3>
-        <div className="scroll">
-          <table className="grid">
-            <thead>
-              <tr><th>Name</th><th className="amount-col">Amount</th><th className="r">Casts</th><th className="r">Avg hit</th><th className="r">Crit %</th><th className="r">Miss %</th></tr>
-            </thead>
-            <tbody>
-              {me.abilities.map((a) => (
-                <tr key={`${a.name}-${a.id}`}>
-                  <td>
-                    <span className="with-icon">
-                      <GameIcon file={a.isPet ? 'ability_hunter_pet_cat' : a.icon} />
-                      {a.name}
-                      {a.isPet && <span className="muted small">(pet)</span>}
-                    </span>
-                  </td>
-                  <td className="amount-col">
-                    <div className="amount">
-                      <span className="pct">{pct(a.share * 100, 2)}</span>
-                      <span className="bar"><span className={`fill ${classCss(me.className)}-bg`} style={{ width: `${(a.share / topShare) * 100}%` }} /></span>
-                      <span className="total">{compact(a.total)}</span>
-                    </div>
-                  </td>
-                  <td className="r">{a.casts || '–'}</td>
-                  <td className="r">{n0(a.avgHit)}</td>
-                  <td className="r">{pct(a.critPct, 1)}</td>
-                  <td className="r">{pct(a.missPct, 1)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+        </>
+      )}
+
+      {abilityTable}
     </>
   );
 }
@@ -274,7 +287,7 @@ function Stat({ label, value, cls = '' }: { label: string; value: string; cls?: 
 function Uptime({ v }: { v: number }) {
   return (
     <span className="uptime">
-      <span className="bar"><span className="fill" style={{ width: `${Math.min(100, v)}%` }} /></span>
+      <progress className="bar uptime-bar" max={100} value={Math.min(100, v)} aria-hidden="true" />
       {pct(v)}
     </span>
   );

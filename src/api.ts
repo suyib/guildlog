@@ -3,6 +3,7 @@ import type {
   AnalysisResult,
   CompareChoice,
   Comparison,
+  Dashboard,
   FightPlayerRow,
   FightRef,
   HistoryRow,
@@ -76,6 +77,21 @@ export async function runAnalysis(
     post<PlayerSnapshot>('/api/snapshot', { host: t.host, code: t.code, fight: t.fight, actor: t.actor, row: t.row });
 
   const mePromise = step(p.actor.name, snap({ host: p.host, code: p.code, fight: p.fight, actor: p.actor, row: myRow }));
+
+  // "Just my stats": no comparisons, plus gear, stats and DPS over time
+  if (p.compare.kind === 'none') {
+    const fightSeconds = (p.fight.endTime - p.fight.startTime) / 1000;
+    const dps = myRow && fightSeconds > 0 ? myRow.total / fightSeconds : 0;
+    const dashboardPromise = step(
+      'Gear, stats and DPS over time',
+      post<Dashboard>('/api/dashboard', { host: p.host, code: p.code, fightId: p.fight.id, sourceId: p.actor.id, fightSeconds, dps }),
+    ).catch((e) => {
+      notes.push(`Couldn\u2019t load gear and stats: ${(e as Error).message}`);
+      return undefined;
+    });
+    const [player, dashboard] = await Promise.all([mePromise, dashboardPromise]);
+    return step('Building the summary', post<AnalysisResult>('/api/finish', { player, comparisons: [], compareKey: 'none', notes, dashboard }));
+  }
 
   // Who to compare with
   const targets: SnapshotTarget[] = [];

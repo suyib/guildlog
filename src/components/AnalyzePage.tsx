@@ -4,10 +4,11 @@ import { type Progress, loadReport, runAnalysis } from '../api';
 import { mmss } from '../format';
 import ResultView from './ResultView';
 
-// Dropdown values: "auto", "top", "previous", or "p:<playerId>"
+// Dropdown values: "auto", "top", "previous", "none", or "p:<playerId>"
 function toChoice(value: string): CompareChoice {
   if (value === 'top') return { kind: 'top' };
   if (value === 'previous') return { kind: 'previous' };
+  if (value === 'none') return { kind: 'none' };
   if (value.startsWith('p:')) return { kind: 'player', playerId: Number(value.slice(2)) };
   return { kind: 'auto' };
 }
@@ -15,7 +16,7 @@ function toChoice(value: string): CompareChoice {
 /** Turn a saved compare key back into a dropdown value, given the report's players. */
 function keyToValue(key: string | undefined, report: ReportSummary): string {
   if (!key || key === 'auto') return 'auto';
-  if (key === 'top' || key === 'previous') return key;
+  if (key === 'top' || key === 'previous' || key === 'none') return key;
   if (key.startsWith('p:')) {
     const p = report.players.find((x) => x.name === key.slice(2));
     return p ? `p:${p.id}` : 'auto';
@@ -117,8 +118,8 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
   return (
     <>
       <section className="panel">
-        <h1>{initial ? 'Shared analysis' : 'Analyze a fight'}</h1>
-        <p className="muted">
+        <h1>{initial ? 'Shared analysis' : 'Analyze a log'}</h1>
+        <p className="help">
           {initial
             ? 'Change the fight, player or who to compare with and click Analyze to make a new comparison. The shared one stays as it is.'
             : 'Paste a Warcraft Logs report link. Links that already include a fight and player (&fight=11&source=28) fill in the choices for you.'}
@@ -132,14 +133,17 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
             required
             aria-label="Warcraft Logs report link"
           />
-          <button type="submit" disabled={busy !== null}>{busy === 'report' ? 'Loading…' : 'Load report'}</button>
+          <button type="submit" disabled={busy !== null}>{busy === 'report' ? 'Loading…' : 'Load Report'}</button>
         </form>
 
         {report && (
           <div className="pickers">
-            <div className="muted small">{report.title}</div>
+            <div className="report-title">
+              {report.title}
+              {report.startTime ? <> • {new Date(report.startTime).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}</> : null}
+            </div>
             <label>
-              Fight
+              Encounter
               <select value={fightId} onChange={(e) => setFightId(Number(e.target.value))}>
                 <option value="" disabled>Choose a boss</option>
                 {report.fights.map((f) => (
@@ -157,11 +161,12 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
               </select>
             </label>
             <label>
-              Compare with
+              Compare
               <select value={compareWith} onChange={(e) => setCompareWith(e.target.value)}>
                 <option value="auto">Auto: best of my class, a top parse and my last kill</option>
                 <option value="top">Top-ranked parse of my spec</option>
                 <option value="previous">My previous kill of this boss</option>
+                <option value="none">No comparison: just my stats</option>
                 <optgroup label="Someone in this raid">
                   {report.players
                     .filter((p) => p.id !== playerId)

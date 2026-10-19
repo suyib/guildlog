@@ -198,3 +198,40 @@ export async function getReportRegion(host: string, code: string): Promise<strin
     return null;
   }
 }
+
+// ---------- Personal dashboard (no comparison) ----------
+
+export interface DashboardRaw { summary: any; combatant: any; graph: any }
+
+/**
+ * One player's gear, stats and damage-over-time. Each part is its own request with a short
+ * time limit, and any part that fails or is slow is simply left out of the dashboard.
+ */
+export async function getDashboardRaw(host: string, code: string, fightId: number, sourceId: number): Promise<DashboardRaw> {
+  const vars = { code, fid: [fightId], sid: sourceId };
+  const one = (field: string) =>
+    gql<{ reportData: { report: Record<string, any> } }>(
+      host,
+      `query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){ ${field} }}}`,
+      vars,
+      20_000,
+    )
+      .then((d) => d.reportData.report)
+      .catch(() => ({}) as Record<string, any>);
+  const [summary, details, graph] = await Promise.all([
+    one('summary: table(dataType:Summary, fightIDs:$fid, sourceID:$sid)'),
+    // playerDetails takes no sourceID, so this query has its own variables
+    gql<{ reportData: { report: Record<string, any> } }>(
+      host,
+      `query($code:String!,$fid:[Int]!){reportData{report(code:$code){ details: playerDetails(fightIDs:$fid, includeCombatantInfo:true) }}}`,
+      { code, fid: [fightId] },
+      20_000,
+    )
+      .then((d) => d.reportData.report)
+      .catch(() => ({}) as Record<string, any>),
+    one('graph: graph(dataType:DamageDone, fightIDs:$fid, sourceID:$sid)'),
+  ]);
+  const d = details.details?.data?.playerDetails ?? details.details?.playerDetails ?? {};
+  const mine = ['tanks', 'healers', 'dps'].flatMap((r) => (d[r] ?? []) as any[]).find((p) => p.id === sourceId);
+  return { summary: summary.summary, combatant: mine?.combatantInfo ?? null, graph: graph.graph };
+}
