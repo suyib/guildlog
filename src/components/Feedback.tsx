@@ -1,6 +1,7 @@
 // "What to work on" and "What worked well", side by side.
 import { buildStrengths } from '../../server/analysis';
 import type { AnalysisResult } from '../../server/types';
+import Glyph from './Glyph';
 import { SeverityDot } from './icons';
 
 export default function Feedback({ result }: { result: AnalysisResult }) {
@@ -9,9 +10,9 @@ export default function Feedback({ result }: { result: AnalysisResult }) {
   const strengths = result.strengths ?? buildStrengths(result.player, result.comparisons, result.dashboard?.gear);
 
   return (
-    <div className="dash-grid feedback">
+    <div className="grid-2 feedback">
       <section className="panel">
-        <h3 className="panel-title">What to work on</h3>
+        <h2 className="panel-title">What to work on</h2>
         {findings.length === 0 ? (
           <p className="muted">Nothing stood out. Nice work.</p>
         ) : (
@@ -36,16 +37,14 @@ export default function Feedback({ result }: { result: AnalysisResult }) {
       </section>
 
       <section className="panel">
-        <h3 className="panel-title">What worked well</h3>
+        <h2 className="panel-title">What worked well</h2>
         {strengths.length === 0 ? (
           <p className="muted">Nothing to single out on this pull yet. Keep logging and this fills in as your numbers improve.</p>
         ) : (
           <ul className="findings wins">
             {strengths.map((s, i) => (
               <li key={i}>
-                <svg className="check" viewBox="0 0 16 16" width="16" height="16" role="img" aria-label="Went well">
-                  <path d="M3.5 8.5l3 3 6-7" />
-                </svg>
+                <span className="win-mark"><Glyph name="check" size={14} label="Went well" /></span>
                 <div>
                   <strong>{s.title}</strong>
                   <p>{s.detail}</p>

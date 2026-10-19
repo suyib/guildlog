@@ -78,17 +78,18 @@ export async function runAnalysis(
 
   const mePromise = step(p.actor.name, snap({ host: p.host, code: p.code, fight: p.fight, actor: p.actor, row: myRow }));
 
-  // "Just my stats": no comparisons, plus gear, stats and DPS over time
+  // Gear, stats and DPS over time load alongside, for every kind of analysis
+  const fightSeconds = (p.fight.endTime - p.fight.startTime) / 1000;
+  const myDps = myRow && fightSeconds > 0 ? myRow.total / fightSeconds : 0;
+  const dashboardPromise = step(
+    'Gear, stats and DPS over time',
+    post<Dashboard>('/api/dashboard', { host: p.host, code: p.code, fightId: p.fight.id, sourceId: p.actor.id, fightSeconds, dps: myDps }),
+  ).catch((e) => {
+    notes.push(`Couldn\u2019t load gear and stats: ${(e as Error).message}`);
+    return undefined;
+  });
+
   if (p.compare.kind === 'none') {
-    const fightSeconds = (p.fight.endTime - p.fight.startTime) / 1000;
-    const dps = myRow && fightSeconds > 0 ? myRow.total / fightSeconds : 0;
-    const dashboardPromise = step(
-      'Gear, stats and DPS over time',
-      post<Dashboard>('/api/dashboard', { host: p.host, code: p.code, fightId: p.fight.id, sourceId: p.actor.id, fightSeconds, dps }),
-    ).catch((e) => {
-      notes.push(`Couldn\u2019t load gear and stats: ${(e as Error).message}`);
-      return undefined;
-    });
     const [player, dashboard] = await Promise.all([mePromise, dashboardPromise]);
     return step('Building the summary', post<AnalysisResult>('/api/finish', { player, comparisons: [], compareKey: 'none', notes, dashboard }));
   }
@@ -141,7 +142,7 @@ export async function runAnalysis(
     else if (s.status === 'rejected') notes.push(`Couldn\u2019t load a comparison: ${(s.reason as Error).message}`);
   });
 
-  const player = await mePromise;
+  const [player, dashboard] = await Promise.all([mePromise, dashboardPromise]);
   const compareKey = p.compare.kind === 'player' ? `p:${p.chosen?.name ?? ''}` : p.compare.kind;
-  return step('Building the summary', post<AnalysisResult>('/api/finish', { player, comparisons, compareKey, notes }));
+  return step('Building the summary', post<AnalysisResult>('/api/finish', { player, comparisons, compareKey, notes, dashboard }));
 }

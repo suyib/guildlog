@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import AnalyzePage from './components/AnalyzePage';
 import HistoryPage from './components/HistoryPage';
 import SavedPage from './components/SavedPage';
+import Sidebar from './components/Sidebar';
+import { NavProvider } from './nav';
 
 type Route = { page: 'analyze' } | { page: 'history' } | { page: 'saved'; id: string };
 
@@ -28,24 +30,15 @@ export default function App() {
   }, []);
 
   return (
-    <>
-      <header className="topbar">
-        <div className="shell topbar-inner">
-          <a href="/#/" className="brand"><img className="logo" src="/logo.png" width={55} height={55} alt="" />
-            <span className="brand-name">Guild <span>Logs</span></span>
-            <small className="version">v{__APP_VERSION__}</small>
-          </a>
-          <nav>
-            <a href="/#/" className={route.page === 'analyze' ? 'on' : ''}>Analyze</a>
-            <a href="/#/history" className={route.page === 'history' ? 'on' : ''}>History</a>
-          </nav>
-        </div>
-      </header>
-      <main className="shell">
-        {route.page === 'analyze' && <AnalyzePage />}
-        {route.page === 'history' && <HistoryPage />}
-        {route.page === 'saved' && <SavedPage id={route.id} />}
-      </main>
-    </>
+    <NavProvider>
+      <div className="app">
+        <Sidebar page={route.page} />
+        <main className="content">
+          {route.page === 'analyze' && <AnalyzePage />}
+          {route.page === 'history' && <HistoryPage />}
+          {route.page === 'saved' && <SavedPage id={route.id} />}
+        </main>
+      </div>
+    </NavProvider>
   );
 }

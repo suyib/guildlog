@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import type { AnalysisResult, CompareChoice, ReportSummary } from '../../server/types';
 import { type Progress, loadReport, runAnalysis } from '../api';
 import { mmss } from '../format';
+import { useNav } from '../nav';
+import Glyph from './Glyph';
 import ResultView from './ResultView';
 
 // Dropdown values: "auto", "top", "previous", "none", or "p:<playerId>"
@@ -39,6 +41,13 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
   const [progress, setProgress] = useState<Progress[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(initial ?? null);
+  const nav = useNav();
+  // Tell the sidebar which analysis is on screen, so it can list its sections.
+  useEffect(() => {
+    nav.setResult(result);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result]);
+  useEffect(() => () => nav.setResult(null), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const me = report?.players.find((p) => p.id === playerId);
   const chosen = compareWith.startsWith('p:') ? report?.players.find((p) => p.id === Number(compareWith.slice(2))) : undefined;
@@ -117,22 +126,25 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
 
   return (
     <>
-      <section className="panel">
-        <h1>{initial ? 'Shared analysis' : 'Analyze a log'}</h1>
-        <p className="help">
+      <section className="panel analyze-card">
+        <h2 className="panel-title">{initial ? 'Shared analysis' : 'Analyze a log'}</h2>
+        {!report && <p className="help">
           {initial
             ? 'Change the fight, player or who to compare with and click Analyze to make a new comparison. The shared one stays as it is.'
             : 'Paste a Warcraft Logs report link. Links that already include a fight and player (&fight=11&source=28) fill in the choices for you.'}
-        </p>
+        </p>}
         <form onSubmit={onLoad} className="row">
-          <input
+          <label className="input-icon">
+            <Glyph name="search" size={18} />
+            <input
             type="url"
             placeholder="https://fresh.warcraftlogs.com/reports/…"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             required
             aria-label="Warcraft Logs report link"
-          />
+            />
+          </label>
           <button type="submit" disabled={busy !== null}>{busy === 'report' ? 'Loading…' : 'Load Report'}</button>
         </form>
 
