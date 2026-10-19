@@ -91,6 +91,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
     if (!report || !f || !me) return;
     setError(null);
     setResult(null);
+    setProgress([]);
     setBusy('analysis');
     try {
       const res = await runAnalysis(
@@ -184,7 +185,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
           </div>
         )}
 
-        {busy === 'analysis' && progress.length > 0 && (
+        {(busy === 'analysis' || (error && !result)) && progress.length > 0 && (
           <ul className="progress">
             {progress.map((p, i) => (
               <li key={i} className={`progress-${p.state}`}>

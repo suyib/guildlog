@@ -63,7 +63,7 @@ export async function runAnalysis(
     update();
     return work.then(
       (v) => { item.state = 'done'; item.seconds = took(); update(); return v; },
-      (e) => { item.state = 'failed'; item.seconds = took(); update(); throw e; },
+      (e) => { item.state = 'failed'; item.seconds = took(); update(); throw new Error(`${label}: ${(e as Error).message}`); },
     );
   };
 

@@ -130,7 +130,7 @@ async function findTopParse(host: string, fight: FightRef, me: { name: string; c
   const ranks = await getTopRankings(host, fight.encounterID, me.className, me.specName);
   const pick = ranks.find((r) => r.name !== me.name);
   if (!pick) return null;
-  const tMeta = await getReportMeta(host, pick.code);
+  const tMeta = await getReportMeta(host, pick.code, 20_000);
   const tFight = tMeta.fights.find((f) => f.id === pick.fightID);
   const tActor = tMeta.masterData.actors.find((a) => a.name === pick.name && a.type === 'Player');
   if (!tFight || !tActor) return null;

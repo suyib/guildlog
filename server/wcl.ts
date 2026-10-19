@@ -19,6 +19,7 @@ async function getToken(): Promise<string> {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: 'grant_type=client_credentials',
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`Warcraft Logs auth failed (${res.status})`);
   const body = (await res.json()) as { access_token: string; expires_in: number };
@@ -26,14 +27,31 @@ async function getToken(): Promise<string> {
   return cachedToken.token;
 }
 
-export async function gql<T>(host: string, query: string, variables: Record<string, unknown>): Promise<T> {
+/** Thrown when Warcraft Logs doesn't answer in time, so callers can skip optional data. */
+export class WclTimeout extends Error {}
+
+/**
+ * One GraphQL request. Each request has its own time limit (default 25s) so a slow
+ * Warcraft Logs response fails with a clear message instead of running past Vercel's 60s limit.
+ */
+export async function gql<T>(host: string, query: string, variables: Record<string, unknown>, timeoutMs = 25_000): Promise<T> {
   if (!HOST_RE.test(host)) throw new Error('Not a Warcraft Logs host');
   const token = await getToken();
-  const res = await fetch(`https://${host}/api/v2/client`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ query, variables }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`https://${host}/api/v2/client`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (e) {
+    const name = (e as Error).name;
+    if (name === 'TimeoutError' || name === 'AbortError') {
+      throw new WclTimeout(`Warcraft Logs didn\u2019t answer within ${Math.round(timeoutMs / 1000)}s. It may be busy; try again in a minute.`);
+    }
+    throw e;
+  }
   if (!res.ok) throw new Error(`Warcraft Logs API error ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const body = (await res.json()) as { data?: T; errors?: { message: string }[] };
   if (body.errors?.length) throw new Error('Warcraft Logs: ' + body.errors.map((e) => e.message).join('; '));
@@ -76,13 +94,13 @@ export interface ReportMeta {
   masterData: { actors: Actor[] };
 }
 
-export async function getReportMeta(host: string, code: string): Promise<ReportMeta> {
+export async function getReportMeta(host: string, code: string, timeoutMs?: number): Promise<ReportMeta> {
   const q = `query($code:String!){reportData{report(code:$code){
     code title startTime zone{id name}
     fights{id encounterID name startTime endTime kill size difficulty}
     masterData{actors{id name type subType petOwner server}}
   }}}`;
-  const d = await gql<{ reportData: { report: ReportMeta | null } }>(host, q, { code });
+  const d = await gql<{ reportData: { report: ReportMeta | null } }>(host, q, { code }, timeoutMs);
   if (!d.reportData.report) throw new Error('Report not found (it may be private or archived).');
   return d.reportData.report;
 }
@@ -90,21 +108,28 @@ export async function getReportMeta(host: string, code: string): Promise<ReportM
 export interface FightData { damage: any; rankings?: any; details?: any }
 
 /**
- * Fight-wide tables, fetched once per fight. Rankings and player details are the slow parts,
- * so they're optional (a top parse from another report only needs the damage table).
+ * Fight-wide tables, fetched once per fight. The damage table is required. Rankings and
+ * player details (parse %, item level, realm) are often the slowest things Warcraft Logs
+ * computes, so they run as separate requests with a shorter time limit and are left out
+ * if they don't arrive in time.
  */
 export async function getFightData(host: string, code: string, fightId: number, opts: { rankings?: boolean } = { rankings: true }): Promise<FightData> {
-  const q = opts.rankings
-    ? `query($code:String!,$fid:[Int]!){reportData{report(code:$code){
-        damage: table(dataType:DamageDone, fightIDs:$fid)
-        rankings(fightIDs:$fid, playerMetric:dps)
-        details: playerDetails(fightIDs:$fid)
-      }}}`
-    : `query($code:String!,$fid:[Int]!){reportData{report(code:$code){
-        damage: table(dataType:DamageDone, fightIDs:$fid)
-      }}}`;
-  const d = await gql<{ reportData: { report: FightData } }>(host, q, { code, fid: [fightId] });
-  return d.reportData.report;
+  const vars = { code, fid: [fightId] };
+  const one = (field: string, timeoutMs: number) =>
+    gql<{ reportData: { report: Record<string, any> } }>(
+      host,
+      `query($code:String!,$fid:[Int]!){reportData{report(code:$code){ ${field} }}}`,
+      vars,
+      timeoutMs,
+    ).then((d) => d.reportData.report);
+  const optional = (field: string) => one(field, 15_000).catch(() => ({}) as Record<string, any>);
+
+  const [damage, rankings, details] = await Promise.all([
+    one('damage: table(dataType:DamageDone, fightIDs:$fid)', 40_000),
+    opts.rankings ? optional('rankings(fightIDs:$fid, playerMetric:dps)') : Promise.resolve({} as Record<string, any>),
+    opts.rankings ? optional('details: playerDetails(fightIDs:$fid)') : Promise.resolve({} as Record<string, any>),
+  ]);
+  return { damage: damage.damage, rankings: rankings.rankings, details: details.details };
 }
 
 export interface PlayerTables { dmg: any; casts: any; buffs: any; taken: any; deaths: any }
@@ -138,8 +163,11 @@ export async function getCastEvents(host: string, code: string, fight: Fight, so
   const events: CastEvent[] = [];
   let start: number | null = fight.startTime;
   let abilities = new Map<number, string>();
+  const deadline = Date.now() + 45_000; // all pages together must fit inside one 60s function
   for (let page = 0; start !== null && page < 10; page++) {
-    const d: any = await gql(host, q, { code, fid: [fight.id], sid: sourceId, st: start, et: fight.endTime });
+    const left = deadline - Date.now();
+    if (left < 3_000) throw new WclTimeout('Warcraft Logs was too slow sending the cast events for this player. Try again in a minute.');
+    const d: any = await gql(host, q, { code, fid: [fight.id], sid: sourceId, st: start, et: fight.endTime }, Math.min(25_000, left));
     const rep = d.reportData.report;
     if (page === 0) abilities = new Map((rep.masterData?.abilities ?? []).map((a: any) => [a.gameID, a.name]));
     events.push(...(rep.events?.data ?? []));
@@ -154,7 +182,7 @@ export async function getTopRankings(host: string, encounterId: number, classNam
   const q = `query($enc:Int!,$cls:String!,$spec:String!){worldData{encounter(id:$enc){
     characterRankings(className:$cls, specName:$spec, metric:dps)
   }}}`;
-  const d = await gql<{ worldData: { encounter: { characterRankings: any } | null } }>(host, q, { enc: encounterId, cls: className, spec: specName });
+  const d = await gql<{ worldData: { encounter: { characterRankings: any } | null } }>(host, q, { enc: encounterId, cls: className, spec: specName }, 20_000);
   const list: any[] = d.worldData.encounter?.characterRankings?.rankings ?? [];
   return list
     .filter((r) => r?.report?.code)

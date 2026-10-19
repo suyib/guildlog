@@ -12,6 +12,7 @@ async function rest(path: string, init: RequestInit = {}): Promise<any> {
   const c = cfg();
   if (!c) throw new Error('Supabase is not configured');
   const res = await fetch(`${c.url}/rest/v1/${path}`, {
+    signal: AbortSignal.timeout(8_000), // the database should never be what makes a step time out
     ...init,
     headers: {
       apikey: c.key,
