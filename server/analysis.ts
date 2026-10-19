@@ -1,6 +1,6 @@
 import { COOLDOWNS, GAP_SECONDS, IGNORE_FOR_GAPS } from './cooldowns.js';
 import { isGeneralBuff } from './buffs.js';
-import type { AbilityRow, BuffRow, Comparison, CooldownUse, Finding, Gap, PlayerSnapshot } from './types.js';
+import type { AbilityRow, BuffRow, Comparison, CooldownUse, Finding, Gap, GearItem, PlayerSnapshot, Strength } from './types.js';
 import type { Actor, CastEvent, Fight, PlayerTables } from './wcl.js';
 
 const num = (v: unknown): number => (typeof v === 'number' && isFinite(v) ? v : 0);
@@ -290,3 +290,81 @@ export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Fi
 }
 
 const pct0 = (v: number | undefined) => `${Math.round(v ?? 0)}%`;
+
+/**
+ * What went well, so the summary isn't only criticism. Uses your own numbers, plus the
+ * comparisons when there are any (class-specific points only against your own class).
+ */
+export function buildStrengths(me: PlayerSnapshot, comparisons: Comparison[], gear?: GearItem[]): Strength[] {
+  const out: (Strength & { weight: number })[] = [];
+  const ref = comparisons[0]?.snapshot;
+  const classRef = comparisons.find((c) => c.sameClass)?.snapshot;
+
+  // Parse
+  if (me.parsePercent !== null && me.parsePercent >= 75) {
+    out.push({ weight: 10, title: `Parsed ${Math.round(me.parsePercent)}`, detail: me.parsePercent >= 95 ? 'A top-tier performance for your spec on this boss.' : 'Better than most of your spec on this boss.' });
+  }
+
+  // DPS against the comparisons
+  const beaten = comparisons.filter((c) => c.kind !== 'previous-kill' && c.snapshot.dps > 0 && me.dps > c.snapshot.dps);
+  if (beaten.length) {
+    out.push({ weight: 9, title: `More DPS than ${beaten.map((c) => c.snapshot.name).join(' and ')}`, detail: beaten.map((c) => `${Math.round(me.dps).toLocaleString('en-US')} vs ${Math.round(c.snapshot.dps).toLocaleString('en-US')}`).join('; ') + '.' });
+  }
+  const prev = comparisons.find((c) => c.kind === 'previous-kill')?.snapshot;
+  if (prev && me.dps > prev.dps * 1.02) {
+    out.push({ weight: 9, title: 'Improved on your last kill', detail: `${Math.round(me.dps).toLocaleString('en-US')} DPS, up from ${Math.round(prev.dps).toLocaleString('en-US')} (${Math.round(((me.dps - prev.dps) / prev.dps) * 100)}% better).` });
+  }
+
+  // Cooldowns used every time they were ready
+  const fullCds = me.cooldowns.filter((c) => c.possible > 0 && c.uses >= c.possible);
+  if (fullCds.length) {
+    out.push({ weight: 8, title: fullCds.length === me.cooldowns.length ? 'Every cooldown used on time' : 'Cooldowns used on time', detail: fullCds.map((c) => `${c.name} (${c.times.map(mmss).join(', ')})`).join(', ') + '.' });
+  }
+
+  // Staying alive and active
+  if (me.deaths.length === 0 && (!ref || ref.deaths.length > 0)) {
+    out.push({ weight: ref && ref.deaths.length ? 8 : 5, title: 'Stayed alive the whole fight', detail: ref && ref.deaths.length ? `${ref.name} died; you kept doing damage to the end.` : 'No deaths, so no lost damage.' });
+  }
+  if (me.activePct !== null && (me.activePct >= 95 || (ref?.activePct && me.activePct >= ref.activePct + 2))) {
+    out.push({ weight: 7, title: `Active ${me.activePct}% of the fight`, detail: ref?.activePct ? `${ref.name}: ${ref.activePct}%. Little time lost to downtime.` : 'Almost no time spent not attacking.' });
+  }
+  const myGap = me.gaps.reduce((s, g) => s + g.seconds, 0);
+  if (me.gaps.length === 0) {
+    out.push({ weight: 6, title: 'No gaps over 4 seconds', detail: 'You kept casting from pull to kill.' });
+  } else if (ref && myGap + 3 < ref.gaps.reduce((s, g) => s + g.seconds, 0)) {
+    out.push({ weight: 5, title: 'Less downtime than ' + ref.name, detail: `${Math.round(myGap)}s with no casts vs ${Math.round(ref.gaps.reduce((s, g) => s + g.seconds, 0))}s.` });
+  }
+
+  // Key abilities cast more often than a same-class comparison
+  if (classRef) {
+    const better = classRef.abilities
+      .filter((a) => !a.isPet && a.casts > 0 && !IGNORE_FOR_GAPS.has(a.name))
+      .slice(0, 5)
+      .filter((a) => (classRef.castsPerMinute[a.name] ?? 0) > 0 && (me.castsPerMinute[a.name] ?? 0) >= (classRef.castsPerMinute[a.name] ?? 0) * 1.05);
+    if (better.length) {
+      out.push({ weight: 6, title: `More casts per minute than ${classRef.name}`, detail: better.map((a) => `${a.name} ${me.castsPerMinute[a.name]}/min vs ${classRef.castsPerMinute[a.name]}/min`).join('; ') + '.' });
+    }
+  }
+
+  // Consumables and buffs
+  const consumables = me.buffs.filter((b) => /Flask|Elixir|Well Fed|Scroll|Oil|Sharpening|Stone/i.test(b.name) && b.uptimePct >= 90).map((b) => b.name);
+  if (consumables.length) {
+    out.push({ weight: 4, title: 'Consumables up all fight', detail: consumables.slice(0, 5).join(', ') + '.' });
+  }
+
+  // Accuracy on your main abilities
+  const clean = me.abilities.filter((a) => !a.isPet && !IGNORE_FOR_GAPS.has(a.name) && (me.castCounts[a.name] ?? 0) >= 10 && a.missPct !== null && a.missPct === 0);
+  if (clean.length) {
+    out.push({ weight: 3, title: 'No misses on your main abilities', detail: clean.slice(0, 3).map((a) => a.name).join(', ') + ' never missed.' });
+  }
+
+  // Gear
+  if (gear?.length) {
+    const enchantable = gear.filter((g) => g.enchantable);
+    if (enchantable.length && enchantable.every((g) => g.enchant || g.enchantId)) {
+      out.push({ weight: 4, title: 'Fully enchanted', detail: `All ${enchantable.length} enchantable slots have an enchant.` });
+    }
+  }
+
+  return out.sort((a, b) => b.weight - a.weight).slice(0, 6).map(({ title, detail }) => ({ title, detail }));
+}

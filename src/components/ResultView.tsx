@@ -3,15 +3,16 @@ import { isGeneralBuff } from '../../server/buffs';
 import type { AnalysisResult, PlayerSnapshot } from '../../server/types';
 import { loadPortrait } from '../api';
 import { compact, mmss, n0, pct } from '../format';
-import { ClassIcon, GameIcon, SeverityDot, classCss, compareLabel, parseCss } from './icons';
+import { ClassIcon, GameIcon, classCss, compareLabel, parseCss } from './icons';
 import Dashboard from './Dashboard';
+import Feedback from './Feedback';
 import Timeline from './Timeline';
 
 const OTHER_CLASS = 'other class';
 const spaced = (s: string) => s.replace(/([a-z])([A-Z])/g, '$1 $2');
 
 export default function ResultView({ result }: { result: AnalysisResult }) {
-  const { player: me, comparisons, findings, notes } = result;
+  const { player: me, comparisons, notes } = result;
   const all: { label: string; s: PlayerSnapshot; me?: boolean; sameClass: boolean }[] = [
     { label: 'You', s: me, me: true, sameClass: true },
     ...comparisons.map((c) => ({ label: c.label, s: c.snapshot, sameClass: c.sameClass ?? c.snapshot.className === me.className })),
@@ -129,27 +130,7 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
         </section>
       )}
 
-      <section className="panel">
-        <h3 className="panel-title">What to work on</h3>
-        {findings.length === 0 && <p className="muted">Nothing stood out against the comparisons. Nice work.</p>}
-        <ul className="findings">
-          {findings.map((f, i) => (
-            <li key={i} className={`sev-${f.severity}`}>
-              <SeverityDot severity={f.severity} />
-              <div>
-                <strong>{f.title}</strong>
-                <p>{f.detail}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-        {findings.length > 0 && (
-          <p className="muted small legend">
-            <SeverityDot severity="high" /> biggest gain <SeverityDot severity="medium" /> worth fixing <SeverityDot severity="low" /> minor
-          </p>
-        )}
-        {notes.length > 0 && <p className="muted small">Notes: {notes.join(' · ')}</p>}
-      </section>
+      <Feedback result={result} />
 
       <section className="panel">
         <h3 className="panel-title">Side by side</h3>

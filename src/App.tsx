@@ -31,7 +31,10 @@ export default function App() {
     <>
       <header className="topbar">
         <div className="shell topbar-inner">
-          <a href="/#/" className="brand">Guild <span>Logs</span> <small className="version">v{__APP_VERSION__}</small></a>
+          <a href="/#/" className="brand"><img className="logo" src="/logo.png" width={55} height={55} alt="" />
+            <span className="brand-name">Guild <span>Logs</span></span>
+            <small className="version">v{__APP_VERSION__}</small>
+          </a>
           <nav>
             <a href="/#/" className={route.page === 'analyze' ? 'on' : ''}>Analyze</a>
             <a href="/#/history" className={route.page === 'history' ? 'on' : ''}>History</a>

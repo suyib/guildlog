@@ -3,7 +3,7 @@
 //   2. snapshot -> one player's own tables + casts (called for you and each comparison, in parallel)
 //   3. top      -> finds a top-ranked parse of your spec on this boss (optional)
 //   4. finish   -> adds your previous kill, builds the findings and saves the result
-import { buildFindings, buildSnapshot } from './analysis.js';
+import { buildFindings, buildSnapshot, buildStrengths } from './analysis.js';
 import { getCachedSnapshot, getCachedTop, previousKill, putCachedSnapshot, putCachedTop, saveAnalysis } from './db.js';
 import type { ActorRef, AnalysisResult, Comparison, Dashboard, FightPlayerRow, FightRef, PlayerSnapshot, ReportSummary, SnapshotTarget } from './types.js';
 import { type Actor, type Fight, getCastEvents, getFightData, getPlayerTables, getReportMeta, getTopRankings, parseReportUrl } from './wcl.js';
@@ -166,7 +166,7 @@ export async function finish(input: { player: PlayerSnapshot; comparisons: Compa
   const order = { 'same-report': 0, 'chosen-player': 0, 'top-parse': 1, 'previous-kill': 2 } as const;
   comparisons.sort((a, b) => order[a.kind] - order[b.kind]);
 
-  const result: AnalysisResult = { player, comparisons, findings: buildFindings(player, comparisons), notes, compareKey, ...(input.dashboard ? { dashboard: input.dashboard } : {}) };
+  const result: AnalysisResult = { player, comparisons, findings: buildFindings(player, comparisons), strengths: buildStrengths(player, comparisons, input.dashboard?.gear), notes, compareKey, ...(input.dashboard ? { dashboard: input.dashboard } : {}) };
   try {
     const saved = await saveAnalysis(result);
     if (saved) {

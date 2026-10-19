@@ -3,7 +3,7 @@
 // Unauthenticated page requests get a login form; API requests get 401.
 
 export const config = {
-  matcher: ['/((?!api/login|favicon.ico).*)'],
+  matcher: ['/((?!api/login|favicon.ico|logo.png).*)'],
 };
 
 const COOKIE_NAME = 'gl_session';

@@ -34,7 +34,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
   const [report, setReport] = useState<ReportSummary | null>(null);
   const [fightId, setFightId] = useState<number | ''>('');
   const [playerId, setPlayerId] = useState<number | ''>('');
-  const [compareWith, setCompareWith] = useState('auto');
+  const [compareWith, setCompareWith] = useState('none');
   const [busy, setBusy] = useState<'report' | 'analysis' | null>(null);
   const [progress, setProgress] = useState<Progress[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +78,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
       setReport(r);
       setFightId(r.suggestedFight ?? r.fights.at(-1)?.id ?? '');
       setPlayerId(r.suggestedPlayer ?? '');
-      setCompareWith('auto');
+      setCompareWith('none');
     } catch (err) {
       setError((err as Error).message);
       setReport(null);
@@ -163,10 +163,11 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
             <label>
               Compare
               <select value={compareWith} onChange={(e) => setCompareWith(e.target.value)}>
+                <option value="none">No comparison: just my stats</option>
                 <option value="auto">Auto: best of my class, a top parse and my last kill</option>
                 <option value="top">Top-ranked parse of my spec</option>
                 <option value="previous">My previous kill of this boss</option>
-                <option value="none">No comparison: just my stats</option>
+                
                 <optgroup label="Someone in this raid">
                   {report.players
                     .filter((p) => p.id !== playerId)

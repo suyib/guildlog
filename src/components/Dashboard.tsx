@@ -2,7 +2,9 @@
 import { useMemo, useState } from 'react';
 import type { AbilityRow, AnalysisResult, GearItem, PlayerSnapshot } from '../../server/types';
 import { compact, mmss, n0, pct } from '../format';
-import { BlankIcon, GameIcon, SeverityDot } from './icons';
+import { statTooltip } from '../statInfo';
+import Feedback from './Feedback';
+import { BlankIcon, GameIcon } from './icons';
 import Timeline from './Timeline';
 
 /** Damage breakdown slices. Their colors are .slot-1 … .slot-7 and .slot-other in theme.css. */
@@ -31,21 +33,9 @@ export default function Dashboard({ result }: { result: AnalysisResult }) {
           <Tile label="Deaths" value={String(me.deaths.length)} />
           <Tile label="Damage taken" value={compact(me.damageTaken.reduce((t, x) => t + x.total, 0))} />
         </div>
-        {result.findings.length > 0 && (
-          <ul className="findings dash-findings">
-            {result.findings.map((f, i) => (
-              <li key={i} className={`sev-${f.severity}`}>
-                <SeverityDot severity={f.severity} />
-                <div>
-                  <strong>{f.title}</strong>
-                  <p>{f.detail}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        {result.notes.length > 0 && <p className="muted small">Notes: {result.notes.join(' · ')}</p>}
       </section>
+
+      <Feedback result={result} />
 
       <div className="dash-grid">
         <section className="panel">
@@ -63,28 +53,34 @@ export default function Dashboard({ result }: { result: AnalysisResult }) {
         </section>
       </div>
 
-      <div className="dash-grid">
-        <section className="panel">
-          <h3 className="panel-title">Gear</h3>
-          {d && d.gear.length > 0 ? <GearTable gear={d.gear} /> : <p className="muted small">No gear data in this log.</p>}
-        </section>
-
-        <section className="panel">
-          <h3 className="panel-title">Stats at the pull</h3>
-          {d && d.stats.length > 0 ? (
+      <section className="panel">
+        <h3 className="panel-title">Stats at the pull</h3>
+        {d && d.stats.length > 0 ? (
+          <>
+            <p className="muted small">Hover or tap a stat to see what it does for a {me.className}.</p>
             <dl className="stat-list">
-              {d.stats.map((s) => (
-                <div key={s.name}>
-                  <dt>{s.name}</dt>
-                  <dd>{s.value}</dd>
-                </div>
-              ))}
+              {d.stats.map((s) => {
+                const tip = statTooltip(s.name, me.className);
+                const id = `stat-tip-${s.name.replace(/\W+/g, '-').toLowerCase()}`;
+                return (
+                  <div key={s.name} className={tip ? 'stat-item has-tip' : 'stat-item'} tabIndex={tip ? 0 : undefined} aria-describedby={tip ? id : undefined}>
+                    <dt>{s.name}</dt>
+                    <dd>{s.value}</dd>
+                    {tip && <span role="tooltip" id={id} className="stat-tip">{tip}</span>}
+                  </div>
+                );
+              })}
             </dl>
-          ) : (
-            <p className="muted small">No stats in this log. Warcraft Logs only records them when the logger saw you at the pull.</p>
-          )}
-        </section>
-      </div>
+          </>
+        ) : (
+          <p className="muted small">No stats in this log. Warcraft Logs only records them when the logger saw you at the pull.</p>
+        )}
+      </section>
+
+      <section className="panel">
+        <h3 className="panel-title">Gear</h3>
+        {d && d.gear.length > 0 ? <GearTable gear={d.gear} /> : <p className="muted small">No gear data in this log.</p>}
+      </section>
 
       <div className="dash-grid">
         <section className="panel">

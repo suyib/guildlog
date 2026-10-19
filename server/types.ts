@@ -87,6 +87,12 @@ export interface Comparison {
   sameClass: boolean;
 }
 
+/** Something that went well (the positive counterpart to a Finding). */
+export interface Strength {
+  title: string;
+  detail: string;
+}
+
 export interface Finding {
   severity: 'high' | 'medium' | 'low';
   title: string;
@@ -127,6 +133,8 @@ export interface AnalysisResult {
   player: PlayerSnapshot;
   comparisons: Comparison[];
   findings: Finding[];
+  /** What went well. Missing on analyses saved before v0.7.0. */
+  strengths?: Strength[];
   notes: string[]; // non-fatal problems (e.g. a comparison that couldn't be loaded)
 }
 
