@@ -1,0 +1,70 @@
+// Game icons. Warcraft Logs gives each ability and buff an icon file name (e.g. ability_hunter_steadyshot.jpg);
+// the images themselves come from Wowhead's public icon CDN, which uses the same names.
+
+const ICON_CDN = 'https://wow.zamimg.com/images/wow/icons';
+
+const CLASS_ICON: Record<string, string> = {
+  Hunter: 'classicon_hunter',
+  Paladin: 'classicon_paladin',
+  Warrior: 'classicon_warrior',
+  Rogue: 'classicon_rogue',
+  Mage: 'classicon_mage',
+  Warlock: 'classicon_warlock',
+  Priest: 'classicon_priest',
+  Druid: 'classicon_druid',
+  Shaman: 'classicon_shaman',
+};
+
+const iconName = (file?: string) => (file ? file.replace(/\.(jpg|png|gif)$/i, '').toLowerCase() : '');
+
+export function GameIcon({ file, size = 18, alt = '' }: { file?: string; size?: number; alt?: string }) {
+  const name = iconName(file);
+  if (!name || name === 'pet' || !/^[a-z0-9_-]+$/.test(name)) return <span className="icon icon-blank" style={{ width: size, height: size }} aria-hidden="true" />;
+  return (
+    <img
+      className="icon"
+      src={`${ICON_CDN}/${size > 36 ? 'large' : 'medium'}/${name}.jpg`}
+      width={size}
+      height={size}
+      alt={alt}
+      loading="lazy"
+      onError={(e) => {
+        (e.currentTarget as HTMLImageElement).style.visibility = 'hidden';
+      }}
+    />
+  );
+}
+
+export function ClassIcon({ className, size = 18 }: { className: string; size?: number }) {
+  return <GameIcon file={CLASS_ICON[className] ?? 'inv_misc_questionmark'} size={size} alt={className} />;
+}
+
+/** CSS class that colors a name in its WoW class color (see styles.css). */
+export const classCss = (className: string) => `cls-${(className || 'unknown').toLowerCase()}`;
+
+/** Warcraft Logs-style parse color bands. */
+export function parseCss(p: number | null | undefined): string {
+  if (p === null || p === undefined) return 'parse-none';
+  if (p >= 100) return 'parse-gold';
+  if (p >= 99) return 'parse-pink';
+  if (p >= 95) return 'parse-orange';
+  if (p >= 75) return 'parse-purple';
+  if (p >= 50) return 'parse-blue';
+  if (p >= 25) return 'parse-green';
+  return 'parse-gray';
+}
+
+/** Small colored dot showing a finding's priority. */
+export function SeverityDot({ severity }: { severity: 'high' | 'medium' | 'low' }) {
+  const label = { high: 'High priority', medium: 'Medium priority', low: 'Low priority' }[severity];
+  return <span className={`dot dot-${severity}`} role="img" aria-label={label} title={label} />;
+}
+
+/** Human label for a saved comparison choice. */
+export function compareLabel(key: string | undefined): string {
+  if (!key || key === 'auto') return 'Auto';
+  if (key === 'top') return 'Top-ranked parse';
+  if (key === 'previous') return 'Previous kill';
+  if (key.startsWith('p:')) return `vs ${key.slice(2)}`;
+  return key;
+}

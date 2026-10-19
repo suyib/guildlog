@@ -1,6 +1,6 @@
 import type { PlayerSnapshot } from '../../server/types';
 import { mmss } from '../format';
-import { classCss } from './emoji';
+import { classCss } from './icons';
 
 const LABEL_W = 150;
 const W = 760;

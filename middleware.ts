@@ -53,7 +53,7 @@ button{margin-top:12px;width:100%;padding:9px;border:0;border-radius:3px;backgro
 .err{color:#ff5c5c;font-size:13px;margin-top:10px}
 </style></head><body>
 <form method="post" action="/api/login">
-<h1>⚔️ Guild Logs</h1><p>Enter the guild password to continue.</p>
+<h1>Guild Logs</h1><p>Enter the guild password to continue.</p>
 <input type="hidden" name="next" value="${escapeAttr(next)}">
 <input type="password" name="password" autofocus required aria-label="Password">
 <button type="submit">Enter</button>

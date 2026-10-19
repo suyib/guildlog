@@ -17,7 +17,7 @@
   --warn-bg: rgba(255, 128, 0, 0.08);
   --warn-line: rgba(255, 128, 0, 0.5);
 
-  /* WoW class colours */
+  /* WoW class colors */
   --hunter: #aad372;
   --paladin: #f48cba;
   --warrior: #c69b6d;
@@ -88,7 +88,8 @@ button.ghost:hover { border-color: var(--accent); }
 .hero-main { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; }
 .eyebrow { font-size: 12px; color: var(--muted); }
 .spec { font-size: 15px; font-weight: 400; }
-.hero-links { display: flex; gap: 12px; align-items: center; font-size: 13px; }
+.hero-links { display: flex; gap: 12px; align-items: center; font-size: 13px; flex-wrap: wrap; }
+.not-saved { color: var(--medium); font-size: 12px; }
 .stats { display: flex; gap: 8px; }
 .stat { background: var(--bg-2); border: 1px solid var(--line); border-radius: 3px; padding: 8px 14px; min-width: 88px; text-align: center; }
 .stat .v { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -139,7 +140,7 @@ tr.warn td { background: var(--gap) !important; }
 .timeline .gap { fill: var(--gap); }
 .timeline .cd { fill: #ffd100; }
 
-/* Class colours: text, bar fills, SVG fills */
+/* Class colors: text, bar fills, SVG fills */
 .cls-hunter { color: var(--hunter); } .cls-hunter-bg { background: var(--hunter) !important; } .cls-hunter-fill { fill: var(--hunter) !important; }
 .cls-paladin { color: var(--paladin); } .cls-paladin-bg { background: var(--paladin) !important; } .cls-paladin-fill { fill: var(--paladin) !important; }
 .cls-warrior { color: var(--warrior); } .cls-warrior-bg { background: var(--warrior) !important; } .cls-warrior-fill { fill: var(--warrior) !important; }
@@ -150,8 +151,8 @@ tr.warn td { background: var(--gap) !important; }
 .cls-druid { color: var(--druid); } .cls-druid-bg { background: var(--druid) !important; } .cls-druid-fill { fill: var(--druid) !important; }
 .cls-shaman { color: var(--shaman); } .cls-shaman-bg { background: var(--shaman) !important; } .cls-shaman-fill { fill: var(--shaman) !important; }
 
-/* Parse colours (Warcraft Logs bands) */
-.parse-grey { color: #666666; }
+/* Parse colors (Warcraft Logs bands) */
+.parse-gray { color: #666666; }
 .parse-green { color: #1eff00; }
 .parse-blue { color: #0070ff; }
 .parse-purple { color: #a335ee; }
@@ -170,3 +171,31 @@ tr.warn td { background: var(--gap) !important; }
   .stat { min-width: 0; flex: 1; }
   .amount-col { min-width: 220px; }
 }
+
+/* Game icons */
+.icon { display: inline-block; flex: none; border-radius: 3px; border: 1px solid #000; box-shadow: 0 0 0 1px #3a3a40; vertical-align: middle; background: #111; object-fit: cover; }
+.icon-blank { background: #2a2a30; }
+.with-icon { display: inline-flex; align-items: center; gap: 8px; }
+.th-player { display: inline-flex; align-items: center; gap: 6px; }
+.hero-id { display: flex; gap: 14px; align-items: center; }
+.hero-id > .icon { border-color: var(--accent); }
+.kill { color: #1eff00; }
+.wipe { color: var(--high); }
+
+/* Priority dots */
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; margin-top: 5px; background: var(--low); }
+.dot-high { background: var(--high); }
+.dot-medium { background: var(--medium); }
+.legend .dot { margin: 0 4px 0 10px; vertical-align: -1px; }
+.legend .dot:first-child { margin-left: 0; }
+
+/* Analysis progress */
+.progress { list-style: none; margin: 14px 0 0; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 3px; display: grid; gap: 6px; font-size: 13px; }
+.progress li { display: flex; align-items: center; gap: 8px; }
+.progress .muted { margin-left: auto; }
+.progress-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.progress-loading .progress-mark { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+.progress-done .progress-mark { background: #1eff00; }
+.progress-failed .progress-mark { background: var(--high); }
+@keyframes pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .progress-loading .progress-mark { animation: none; } }

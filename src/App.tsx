@@ -31,10 +31,10 @@ export default function App() {
     <>
       <header className="topbar">
         <div className="shell topbar-inner">
-          <a href="/#/" className="brand">⚔️ <span>Guild</span> Logs</a>
+          <a href="/#/" className="brand"><span>Guild</span> Logs</a>
           <nav>
-            <a href="/#/" className={route.page === 'analyze' ? 'on' : ''}>🔍 Analyse</a>
-            <a href="/#/history" className={route.page === 'history' ? 'on' : ''}>📚 History</a>
+            <a href="/#/" className={route.page === 'analyze' ? 'on' : ''}>Analyze</a>
+            <a href="/#/history" className={route.page === 'history' ? 'on' : ''}>History</a>
           </nav>
         </div>
       </header>

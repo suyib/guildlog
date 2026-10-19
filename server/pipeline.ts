@@ -1,17 +1,11 @@
+// The analysis runs in three short steps so no single request hits Vercel's time limit:
+//   1. targets  -> who to compare with (needs the fight table and, for a top parse, the rankings)
+//   2. snapshot -> one player's numbers for one fight (called once for you and once per comparison)
+//   3. finish   -> adds your previous kill, builds the findings and saves the result
 import { buildFindings, buildSnapshot } from './analysis.js';
 import { previousKill, saveAnalysis } from './db.js';
-import type { AnalysisResult, CompareChoice, Comparison, PlayerSnapshot, ReportSummary } from './types.js';
-import {
-  type Actor,
-  type Fight,
-  type ReportMeta,
-  getCastEvents,
-  getFightData,
-  getPlayerTables,
-  getReportMeta,
-  getTopRankings,
-  parseReportUrl,
-} from './wcl.js';
+import type { ActorRef, AnalysisResult, CompareChoice, Comparison, FightRef, PlayerSnapshot, ReportSummary, SnapshotTarget } from './types.js';
+import { type Actor, type Fight, getCastEvents, getFightData, getPlayerTables, getReportMeta, getTopRankings, parseReportUrl } from './wcl.js';
 
 export async function reportSummary(url: string): Promise<ReportSummary> {
   const parsed = parseReportUrl(url);
@@ -27,7 +21,15 @@ export async function reportSummary(url: string): Promise<ReportSummary> {
     host: parsed.host,
     code: meta.code,
     title: meta.title,
-    fights: encounters.map((f) => ({ id: f.id, name: f.name, encounterId: f.encounterID, kill: !!f.kill, seconds: Math.round((f.endTime - f.startTime) / 1000) })),
+    fights: encounters.map((f) => ({
+      id: f.id,
+      name: f.name,
+      encounterId: f.encounterID,
+      kill: !!f.kill,
+      seconds: Math.round((f.endTime - f.startTime) / 1000),
+      startTime: f.startTime,
+      endTime: f.endTime,
+    })),
     players: players.map((p) => ({ id: p.id, name: p.name, className: p.subType })).sort((a, b) => a.name.localeCompare(b.name)),
     suggestedFight,
     suggestedPlayer: players.some((p) => p.id === parsed.source) ? parsed.source : undefined,
@@ -39,112 +41,104 @@ function rankingRows(rankings: any): any[] {
   return ['tanks', 'healers', 'dps'].flatMap((r) => roles[r]?.characters ?? []);
 }
 
-async function snapshotFor(host: string, code: string, meta: ReportMeta, fight: Fight, actor: Actor, fightData?: Awaited<ReturnType<typeof getFightData>>): Promise<PlayerSnapshot> {
-  const fd = fightData ?? (await getFightData(host, code, fight.id));
-  const [tables, casts] = await Promise.all([getPlayerTables(host, code, fight.id, actor.id), getCastEvents(host, code, fight, actor.id)]);
+const toFight = (f: FightRef): Fight => ({ ...f, size: null, difficulty: null });
+const toActor = (a: ActorRef): Actor => ({ id: a.id, name: a.name, type: 'Player', subType: a.className, petOwner: null });
+
+/** Step 2: one player's snapshot. All three Warcraft Logs queries run at the same time. */
+export async function snapshotOne(host: string, code: string, fightRef: FightRef, actorRef: ActorRef): Promise<PlayerSnapshot> {
+  const fight = toFight(fightRef);
+  const actor = toActor(actorRef);
+  const [fd, tables, casts] = await Promise.all([
+    getFightData(host, code, fight.id),
+    getPlayerTables(host, code, fight.id, actor.id),
+    getCastEvents(host, code, fight, actor.id),
+  ]);
   const fightRow = (fd.damage?.data?.entries ?? []).find((e: any) => e.id === actor.id || e.name === actor.name);
   const rankingRow = rankingRows(fd.rankings).find((r) => r.name === actor.name);
-  void meta;
   return buildSnapshot({ host, code, fight, actor, fightRow, rankingRow, tables, casts });
 }
 
-const COMPARISON_BUDGET_MS = 25_000;
-
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`${label} took too long, skipped`)), ms);
-    p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
-  });
-}
-
-export async function analyze(params: { host: string; code: string; fightId: number; playerId: number; compare?: CompareChoice }): Promise<AnalysisResult> {
-  const { host, code, fightId, playerId } = params;
-  const compare: CompareChoice = params.compare ?? { kind: 'auto' };
-  // Report metadata and fight-wide tables don't depend on each other, so fetch them together.
-  const [meta, fightData] = await Promise.all([getReportMeta(host, code), getFightData(host, code, fightId)]);
-  const fight = meta.fights.find((f) => f.id === fightId);
-  if (!fight || fight.encounterID <= 0) throw new Error('Pick a boss fight from this report.');
-  const actor = meta.masterData.actors.find((a) => a.id === playerId && a.type === 'Player');
-  if (!actor) throw new Error('That player isn\u2019t in this report.');
-
+/** Step 1: work out who to compare with. Player choices are resolved in the browser, so this handles auto and top. */
+export async function comparisonTargets(host: string, code: string, fight: FightRef, me: ActorRef, compare: CompareChoice): Promise<{ targets: SnapshotTarget[]; notes: string[] }> {
   const notes: string[] = [];
-  const comparisons: Comparison[] = [];
-  const myRank = rankingRows(fightData.rankings).find((r) => r.name === actor.name);
-  const myIcon: string = (fightData.damage?.data?.entries ?? []).find((e: any) => e.id === actor.id || e.name === actor.name)?.icon ?? '';
-  const className: string = myRank?.class ?? myIcon.split('-')[0] ?? actor.subType;
+  const targets: SnapshotTarget[] = [];
+  if (compare.kind === 'previous' || compare.kind === 'player') return { targets, notes };
+
+  const fd = await getFightData(host, code, fight.id);
+  const entries: any[] = fd.damage?.data?.entries ?? [];
+  const myRank = rankingRows(fd.rankings).find((r) => r.name === me.name);
+  const myIcon: string = entries.find((e) => e.id === me.id || e.name === me.name)?.icon ?? '';
+  const className: string = myRank?.class ?? myIcon.split('-')[0] ?? me.className;
   const specName: string = myRank?.spec ?? myIcon.split('-')[1] ?? '';
 
-  // Everything below runs in parallel: you, two raid-mates, a top parse, your previous kill.
-  const meTask = snapshotFor(host, code, meta, fight, actor, fightData);
-
-  const tasks: Promise<Comparison | null>[] = [];
-  const labels: string[] = [];
-
-  const raidMate = (other: Actor, kind: 'same-report' | 'chosen-player') => async (): Promise<Comparison> => ({
-    kind,
-    label: `${other.name} (${other.subType}, same raid)`,
-    snapshot: await snapshotFor(host, code, meta, fight, other, fightData),
-    sameClass: other.subType === actor.subType,
-  });
-
-  const topParse = async (): Promise<Comparison | null> => {
-    if (!specName) return null;
-    const ranks = await getTopRankings(host, fight.encounterID, className, specName);
-    const pick = ranks.find((r) => r.name !== actor.name);
-    if (!pick) return null;
-    const tMeta = await getReportMeta(host, pick.code);
-    const tFight = tMeta.fights.find((f) => f.id === pick.fightID);
-    const tActor = tMeta.masterData.actors.find((a) => a.name === pick.name && a.type === 'Player');
-    if (!tFight || !tActor) return null;
-    return { kind: 'top-parse', label: `${pick.name} (top ranked)`, snapshot: await snapshotFor(host, pick.code, tMeta, tFight, tActor), sameClass: true };
-  };
-
-  const previous = async (): Promise<Comparison | null> => {
-    const prev = await previousKill(actor.name, fight.encounterID, code);
-    return prev ? { kind: 'previous-kill', label: `Your kill on ${prev.createdAt.slice(0, 10)}`, snapshot: prev.snapshot, sameClass: true } : null;
-  };
-
-  if (compare.kind === 'player') {
-    const other = meta.masterData.actors.find((a) => a.id === compare.playerId && a.type === 'Player');
-    if (!other) throw new Error('The player you picked to compare with isn\u2019t in this report.');
-    if (other.id === actor.id) throw new Error('Pick someone other than yourself to compare with.');
-    tasks.push(raidMate(other, 'chosen-player')());
-    labels.push(other.name);
-  } else if (compare.kind === 'top') {
-    tasks.push(topParse());
-    labels.push('top-ranked parse');
-  } else if (compare.kind === 'previous') {
-    tasks.push(previous());
-    labels.push('previous kill');
-  } else {
-    // Auto: best two of your class in this raid, a top parse, and your last kill of this boss.
-    const sameClass = (fightData.damage?.data?.entries ?? [])
-      .filter((e: any) => e.type === actor.subType && e.name !== actor.name)
-      .sort((a: any, b: any) => (b.total ?? 0) - (a.total ?? 0))
-      .slice(0, 2);
-    for (const e of sameClass) {
-      const other = meta.masterData.actors.find((a) => a.id === e.id || a.name === e.name);
-      if (!other) continue;
-      tasks.push(raidMate(other, 'same-report')());
-      labels.push(other.name);
-    }
-    tasks.push(topParse(), previous());
-    labels.push('top-ranked parse', 'previous kill');
+  if (compare.kind === 'auto') {
+    entries
+      .filter((e) => e.type === me.className && e.name !== me.name)
+      .sort((a, b) => (b.total ?? 0) - (a.total ?? 0))
+      .slice(0, 2)
+      .forEach((e) => targets.push({
+        kind: 'same-report',
+        label: `${e.name} (${me.className}, same raid)`,
+        host,
+        code,
+        fight,
+        actor: { id: e.id, name: e.name, className: e.type },
+        sameClass: true,
+      }));
   }
 
-  const [player, settled] = await Promise.all([
-    meTask,
-    Promise.allSettled(tasks.map((t, i) => withTimeout<Comparison | null>(t, COMPARISON_BUDGET_MS, labels[i]))),
-  ]);
-  settled.forEach((s, i) => {
-    if (s.status === 'fulfilled' && s.value) comparisons.push(s.value);
-    else if (s.status === 'rejected') notes.push(`Couldn\u2019t load ${labels[i]}: ${(s.reason as Error)?.message ?? s.reason}`);
-  });
+  // Top-ranked parse of the same spec on this boss
+  try {
+    if (!specName) throw new Error('spec unknown');
+    const ranks = await getTopRankings(host, fight.encounterID, className, specName);
+    const pick = ranks.find((r) => r.name !== me.name);
+    if (pick) {
+      const tMeta = await getReportMeta(host, pick.code);
+      const tFight = tMeta.fights.find((f) => f.id === pick.fightID);
+      const tActor = tMeta.masterData.actors.find((a) => a.name === pick.name && a.type === 'Player');
+      if (tFight && tActor) {
+        targets.push({
+          kind: 'top-parse',
+          label: `${pick.name} (top ranked)`,
+          host,
+          code: pick.code,
+          fight: { id: tFight.id, encounterID: tFight.encounterID, name: tFight.name, startTime: tFight.startTime, endTime: tFight.endTime, kill: !!tFight.kill },
+          actor: { id: tActor.id, name: tActor.name, className: tActor.subType },
+          sameClass: tActor.subType === me.className,
+        });
+      }
+    }
+  } catch (e) {
+    notes.push(`Couldn’t find a top-ranked parse: ${(e as Error).message}`);
+  }
+  return { targets, notes };
+}
 
-  const compareKey =
-    compare.kind === 'player'
-      ? `p:${meta.masterData.actors.find((a) => a.id === compare.playerId)?.name ?? compare.playerId}`
-      : compare.kind;
+/** Step 3: add your previous kill (if wanted), build findings and save. */
+export async function finish(input: {
+  player: PlayerSnapshot;
+  comparisons: Comparison[];
+  compareKey: string;
+  notes: string[];
+}): Promise<AnalysisResult> {
+  const { player, compareKey } = input;
+  const comparisons = [...input.comparisons];
+  const notes = [...input.notes];
+
+  if (compareKey === 'auto' || compareKey === 'previous') {
+    try {
+      const prev = await previousKill(player.name, player.encounterId, player.reportCode);
+      if (prev) comparisons.push({ kind: 'previous-kill', label: `Your kill on ${prev.createdAt.slice(0, 10)}`, snapshot: prev.snapshot, sameClass: true });
+      else if (compareKey === 'previous') notes.push('No earlier saved kill of this boss to compare with yet.');
+    } catch (e) {
+      notes.push(`Couldn’t load previous kill: ${(e as Error).message}`);
+    }
+  }
+
+  // Same-report players first, so they are the main comparison
+  const order = { 'same-report': 0, 'chosen-player': 0, 'top-parse': 1, 'previous-kill': 2 } as const;
+  comparisons.sort((a, b) => order[a.kind] - order[b.kind]);
+
   const result: AnalysisResult = { player, comparisons, findings: buildFindings(player, comparisons), notes, compareKey };
   try {
     const saved = await saveAnalysis(result);

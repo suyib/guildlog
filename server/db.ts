@@ -2,8 +2,8 @@
 import type { AnalysisResult, HistoryRow, PlayerSnapshot } from './types.js';
 
 function cfg() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.SUPABASE_URL?.trim();
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim().replace(/^['"]|['"]$/g, '');
   if (!url || !key) return null;
   return { url: url.replace(/\/$/, ''), key };
 }
@@ -21,6 +21,9 @@ async function rest(path: string, init: RequestInit = {}): Promise<any> {
       ...(init.headers ?? {}),
     },
   });
+  if (res.status === 401) {
+    throw new Error('Supabase rejected the key. In Vercel, set SUPABASE_SERVICE_ROLE_KEY to the secret (sb_secret_…) or legacy service_role key from the same project as SUPABASE_URL, then redeploy.');
+  }
   if (!res.ok) throw new Error(`Supabase ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const text = await res.text();
   return text ? JSON.parse(text) : null;

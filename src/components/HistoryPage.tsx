@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { HistoryRow } from '../../server/types';
 import { loadHistory } from '../api';
 import { n0 } from '../format';
-import { classCss, classEmoji, compareLabel, parseCss } from './emoji';
+import { ClassIcon, classCss, compareLabel, parseCss } from './icons';
 
 export default function HistoryPage() {
   const [rows, setRows] = useState<HistoryRow[] | null>(null);
@@ -21,7 +21,7 @@ export default function HistoryPage() {
   return (
     <section className="panel">
       <div className="panel-head">
-        <h1>📚 Saved analyses</h1>
+        <h1>Saved analyses</h1>
         <input className="filter" placeholder="Filter by player, boss, class or comparison" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter" />
       </div>
       {error && <p className="error">{error}</p>}
@@ -38,7 +38,7 @@ export default function HistoryPage() {
                 <tr key={r.id} className="clickable" onClick={() => (window.location.href = `/a/${r.id}`)}>
                   <td className="muted">{r.created_at.slice(0, 10)}</td>
                   <td>
-                    <a href={`/a/${r.id}`} className={classCss(r.class_name)}>{classEmoji(r.class_name)} {r.player_name}</a>
+                    <a href={`/a/${r.id}`} className={`with-icon ${classCss(r.class_name)}`}><ClassIcon className={r.class_name} size={16} />{r.player_name}</a>
                   </td>
                   <td>{r.encounter_name}</td>
                   <td className="muted">{compareLabel(r.compare_key)}</td>

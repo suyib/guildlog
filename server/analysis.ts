@@ -36,6 +36,8 @@ export function buildSnapshot(input: SnapshotInput): PlayerSnapshot {
   const castTable: any[] = tables.casts?.data?.entries ?? [];
   const castCounts: Record<string, number> = {};
   for (const e of castTable) if (e?.name) castCounts[e.name] = num(e.total);
+  const castIcons = new Map<string, string>();
+  for (const e of castTable) if (e?.name && typeof e.abilityIcon === 'string') castIcons.set(e.name, e.abilityIcon);
 
   const abilities: AbilityRow[] = dmgEntries
     .map((e) => {
@@ -54,6 +56,7 @@ export function buildSnapshot(input: SnapshotInput): PlayerSnapshot {
         missPct: hits + misses ? round((misses / (hits + misses)) * 100) : null,
         avgHit: hits ? Math.round(num(e.total) / hits) : null,
         isPet,
+        icon: typeof e.abilityIcon === 'string' ? e.abilityIcon : undefined,
       };
     })
     .sort((a, b) => b.total - a.total);
@@ -66,6 +69,7 @@ export function buildSnapshot(input: SnapshotInput): PlayerSnapshot {
       id: num(a.guid),
       uptimePct: round(Math.min(100, (num(a.totalUptime) / buffTotal) * 100)),
       uses: num(a.totalUses),
+      icon: typeof a.abilityIcon === 'string' ? a.abilityIcon : undefined,
     }))
     .sort((a: BuffRow, b: BuffRow) => b.uptimePct - a.uptimePct);
 
@@ -84,7 +88,7 @@ export function buildSnapshot(input: SnapshotInput): PlayerSnapshot {
   }
   for (const [name, times] of byName) {
     const cd = COOLDOWNS[name];
-    cooldowns.push({ name, cooldownSec: cd, uses: times.length, possible: possibleUses(fightSeconds, cd), times });
+    cooldowns.push({ name, cooldownSec: cd, uses: times.length, possible: possibleUses(fightSeconds, cd), times, icon: castIcons.get(name) });
   }
 
   const active = timeline.filter((e) => !IGNORE_FOR_GAPS.has(e.name)).map((e) => e.t);
@@ -143,12 +147,16 @@ export function possibleUses(fightSeconds: number, cooldownSec: number): number 
   return Math.floor(fightSeconds / cooldownSec) + 1;
 }
 
+/** Seconds at the start of a pull that don't count as downtime (pre-pot, waiting for the tank). */
+const OPENER_GRACE = 6;
+
 export function findGaps(times: number[], fightSeconds: number): Gap[] {
   const pts = [0, ...times, fightSeconds];
   const gaps: Gap[] = [];
   for (let i = 1; i < pts.length; i++) {
-    const d = pts[i] - pts[i - 1];
-    if (d > GAP_SECONDS) gaps.push({ start: round(pts[i - 1]), end: round(pts[i]), seconds: round(d) });
+    const start = i === 1 ? Math.min(OPENER_GRACE, pts[i]) : pts[i - 1];
+    const d = pts[i] - start;
+    if (d > GAP_SECONDS) gaps.push({ start: round(start), end: round(pts[i]), seconds: round(d) });
   }
   return gaps;
 }
@@ -189,7 +197,10 @@ export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Fi
     for (const a of classRef.abilities.filter((x) => !x.isPet && x.casts > 0).slice(0, 5)) {
       const theirCpm = classRef.castsPerMinute[a.name] ?? 0;
       const myCpm = me.castsPerMinute[a.name] ?? 0;
-      if (theirCpm > 0 && myCpm < theirCpm * 0.85) {
+      // Ignore tiny differences: in a short fight one cast either way isn't meaningful.
+      const expected = (theirCpm * me.fightSeconds) / 60;
+      const mine = me.castCounts[a.name] ?? 0;
+      if (theirCpm > 0 && myCpm < theirCpm * 0.85 && expected - mine >= 2) {
         out.push({
           severity: myCpm < theirCpm * 0.7 ? 'high' : 'medium',
           title: `Fewer ${a.name} casts than ${classRef.name}`,
@@ -263,7 +274,8 @@ export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Fi
   }
 
   // 8. Misses on your main abilities (your own numbers)
-  for (const a of me.abilities.filter((x) => !x.isPet && x.casts >= 10 && (x.missPct ?? 0) >= 4).slice(0, 2)) {
+  // Only abilities you cast yourself (not auto attacks or pet abilities).
+  for (const a of me.abilities.filter((x) => !x.isPet && !IGNORE_FOR_GAPS.has(x.name) && (me.castCounts[x.name] ?? 0) >= 10 && (x.missPct ?? 0) >= 4).slice(0, 2)) {
     out.push({ severity: 'low', title: `${a.missPct}% misses on ${a.name}`, detail: 'Check whether you are at the hit cap for boss-level targets.' });
   }
 

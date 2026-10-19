@@ -11,7 +11,8 @@ Every analysis is saved to Supabase, so it stays available after Warcraft Logs a
 ## Stack
 
 - Vite + React front end, deployed on Vercel
-- Vercel Functions in `api/` call the Warcraft Logs v2 API (the client secret never reaches the browser)
+- Vercel Functions in `api/` call the Warcraft Logs v2 API (the client secret never reaches the browser). An analysis runs as several short requests (`/api/snapshot` per player, `/api/targets`, `/api/finish`) so long fights don't hit the function time limit.
+- Ability, buff and class icons load from Wowhead's icon CDN (wow.zamimg.com) using the icon names Warcraft Logs provides
 - Vercel Routing Middleware (`middleware.ts`) gates every page and API route behind the password
 - Supabase Postgres stores analyses (accessed only server-side with the service role key)
 

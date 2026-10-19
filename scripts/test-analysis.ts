@@ -53,7 +53,8 @@ assert.equal(possibleUses(177, 120), 2);
 assert.equal(me.parsePercent, 86);
 assert.equal(me.cooldowns.find((c) => c.name === 'Bestial Wrath')?.uses, 1);
 assert.ok(me.gaps.some((g) => g.start <= 130 && g.end >= 140), 'expected the 129-141s gap');
-assert.deepEqual(findGaps([5, 6, 20], 22), [{ start: 0, end: 5, seconds: 5 }, { start: 6, end: 20, seconds: 14 }]);
+assert.deepEqual(findGaps([5, 6, 20], 22), [{ start: 6, end: 20, seconds: 14 }]);
+assert.deepEqual(findGaps([12], 13), [{ start: 6, end: 12, seconds: 6 }]);
 
 const findings = buildFindings(me, [{ kind: 'same-report', label: 'Muddy (same raid)', snapshot: muddy, sameClass: true }]);
 for (const f of findings) console.log(`[${f.severity}] ${f.title}\n    ${f.detail}`);

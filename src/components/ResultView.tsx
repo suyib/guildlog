@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { isGeneralBuff } from '../../server/buffs';
 import type { AnalysisResult, PlayerSnapshot } from '../../server/types';
 import { compact, mmss, n0, pct } from '../format';
-import { SEVERITY_EMOJI, classCss, classEmoji, compareLabel, parseCss } from './emoji';
+import { ClassIcon, GameIcon, SeverityDot, classCss, compareLabel, parseCss } from './icons';
 import Timeline from './Timeline';
 
 const OTHER_CLASS = 'other class';
@@ -15,6 +15,14 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
     ...comparisons.map((c) => ({ label: c.label, s: c.snapshot, sameClass: c.sameClass ?? c.snapshot.className === me.className })),
   ];
   const crossClass = all.filter((p) => !p.sameClass);
+
+  // Icon lookup for any ability or buff name seen in any snapshot
+  const icons = new Map<string, string>();
+  for (const p of all) {
+    for (const a of p.s.abilities) if (a.icon) icons.set(a.name, a.icon);
+    for (const c of p.s.cooldowns) if (c.icon) icons.set(c.name, c.icon);
+    for (const b of p.s.buffs) if (b.icon) icons.set(b.name, b.icon);
+  }
 
   // Class-specific rows only come from players of your class
   const sameClassPlayers = all.filter((p) => p.sameClass);
@@ -33,46 +41,57 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
   const gapTotal = (s: PlayerSnapshot) => Math.round(s.gaps.reduce((t, g) => t + g.seconds, 0));
   const lust = (s: PlayerSnapshot) => s.buffs.find((b) => b.name === 'Bloodlust' || b.name === 'Heroism')?.uptimePct ?? null;
   const topShare = Math.max(...me.abilities.map((a) => a.share), 0.0001);
+  const notSaved = notes.find((n) => n.startsWith('Not saved'));
 
   return (
     <>
       <section className="panel hero">
         <div className="hero-main">
-          <div>
-            <div className="eyebrow">🐉 {me.encounterName} · {me.kill ? '✅ Kill' : '💀 Wipe'} · ⏱️ {mmss(me.fightSeconds)} · {compareLabel(result.compareKey)}</div>
-            <h2>
-              <span className={classCss(me.className)}>{classEmoji(me.className)} {me.name}</span>{' '}
-              <span className="muted spec">{spaced(me.specName)} {me.className}</span>
-            </h2>
-            <div className="hero-links">
-              <a href={reportLink} target="_blank" rel="noreferrer">Open on Warcraft Logs ↗</a>
-              {result.id && <ShareButton id={result.id} />}
+          <div className="hero-id">
+            <ClassIcon className={me.className} size={48} />
+            <div>
+              <div className="eyebrow">
+                {me.encounterName} · <span className={me.kill ? 'kill' : 'wipe'}>{me.kill ? 'Kill' : 'Wipe'}</span> · {mmss(me.fightSeconds)} · Compared with: {compareLabel(result.compareKey)}
+              </div>
+              <h2>
+                <span className={classCss(me.className)}>{me.name}</span> <span className="muted spec">{spaced(me.specName)} {me.className}</span>
+              </h2>
+              <div className="hero-links">
+                <a href={reportLink} target="_blank" rel="noreferrer">Open on Warcraft Logs ↗</a>
+                {result.id ? (
+                  <ShareButton id={result.id} />
+                ) : (
+                  <span className="not-saved" title={notSaved ?? 'Saving is not set up'}>
+                    Not saved, so there&rsquo;s no share link{notSaved ? ' (see the note below)' : ' (check the Supabase settings in Vercel)'}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="stats">
-            <Stat label="💥 DPS" value={n0(me.dps)} />
-            <Stat label="📊 Parse" value={me.parsePercent === null ? '–' : String(Math.round(me.parsePercent))} cls={parseCss(me.parsePercent)} />
-            <Stat label="🏃 Active" value={pct(me.activePct)} />
-            <Stat label="🛡️ iLvl" value={me.itemLevel ? String(me.itemLevel) : '–'} />
+            <Stat label="DPS" value={n0(me.dps)} />
+            <Stat label="Parse" value={me.parsePercent === null ? '–' : String(Math.round(me.parsePercent))} cls={parseCss(me.parsePercent)} />
+            <Stat label="Active" value={pct(me.activePct)} />
+            <Stat label="iLvl" value={me.itemLevel ? String(me.itemLevel) : '–'} />
           </div>
         </div>
       </section>
 
       {crossClass.length > 0 && (
         <section className="panel warning-card">
-          ⚠️ <strong>{crossClass.map((p) => p.s.name).join(', ')}</strong> {crossClass.length > 1 ? 'are' : 'is'} a different class.
-          Only general things are compared: DPS, parse, active time, item level, downtime, deaths, damage taken and shared buffs like Bloodlust.
+          <strong>Different class:</strong> {crossClass.map((p) => p.s.name).join(', ')} {crossClass.length > 1 ? 'are' : 'is'} not a {me.className}.
+          Only general stats are compared: DPS, parse, active time, item level, downtime, deaths, damage taken and shared buffs like Bloodlust.
           Rotation and cooldown comparisons are skipped.
         </section>
       )}
 
       <section className="panel">
-        <h3 className="panel-title">🎯 What to work on</h3>
-        {findings.length === 0 && <p className="muted">🎉 Nothing stood out against the comparisons. Nice work!</p>}
+        <h3 className="panel-title">What to work on</h3>
+        {findings.length === 0 && <p className="muted">Nothing stood out against the comparisons. Nice work.</p>}
         <ul className="findings">
           {findings.map((f, i) => (
             <li key={i} className={`sev-${f.severity}`}>
-              <span className="sev" aria-label={`${f.severity} priority`}>{SEVERITY_EMOJI[f.severity]}</span>
+              <SeverityDot severity={f.severity} />
               <div>
                 <strong>{f.title}</strong>
                 <p>{f.detail}</p>
@@ -80,12 +99,16 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
             </li>
           ))}
         </ul>
-        {findings.length > 0 && <p className="muted small legend">🔴 biggest gain · 🟠 worth fixing · ⚪ minor</p>}
-        {notes.length > 0 && <p className="muted small">ℹ️ {notes.join(' · ')}</p>}
+        {findings.length > 0 && (
+          <p className="muted small legend">
+            <SeverityDot severity="high" /> biggest gain <SeverityDot severity="medium" /> worth fixing <SeverityDot severity="low" /> minor
+          </p>
+        )}
+        {notes.length > 0 && <p className="muted small">Notes: {notes.join(' · ')}</p>}
       </section>
 
       <section className="panel">
-        <h3 className="panel-title">⚖️ Side by side</h3>
+        <h3 className="panel-title">Side by side</h3>
         {comparisons.length === 0 && <p className="muted small">No comparison could be loaded for this fight, so only your numbers are shown.</p>}
         <div className="scroll">
           <table className="grid">
@@ -94,40 +117,45 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
                 <th></th>
                 {all.map((p) => (
                   <th key={p.label} className="r">
-                    <span className={classCss(p.s.className)}>{classEmoji(p.s.className)} {p.me ? 'You' : p.label}</span>
-                    {!p.sameClass && <div className="tag">⚠️ {p.s.className}</div>}
+                    <span className="th-player">
+                      <ClassIcon className={p.s.className} size={16} />
+                      <span className={classCss(p.s.className)}>{p.me ? 'You' : p.label}</span>
+                    </span>
+                    {!p.sameClass && <div className="tag">Different class</div>}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              <tr className="group"><td colSpan={all.length + 1}>🌍 General</td></tr>
-              <Row label="💥 DPS" cells={all.map((p) => n0(p.s.dps))} />
+              <tr className="group"><td colSpan={all.length + 1}>General</td></tr>
+              <Row label="DPS" cells={all.map((p) => n0(p.s.dps))} />
               <tr>
-                <td>📊 Parse</td>
+                <td>Parse</td>
                 {all.map((p, i) => (
                   <td key={i} className={`r strong ${parseCss(p.s.parsePercent)}`}>{p.s.parsePercent === null ? '–' : Math.round(p.s.parsePercent)}</td>
                 ))}
               </tr>
-              <Row label="⏱️ Fight length" cells={all.map((p) => mmss(p.s.fightSeconds))} />
-              <Row label="🏃 Active time" cells={all.map((p) => pct(p.s.activePct))} />
-              <Row label="🛡️ Item level" cells={all.map((p) => (p.s.itemLevel ? String(p.s.itemLevel) : '–'))} />
-              <Row label="😴 Time with no casts" cells={all.map((p) => `${gapTotal(p.s)}s`)} />
-              <Row label="🥁 Bloodlust/Heroism uptime" cells={all.map((p) => pct(lust(p.s)))} />
-              <Row label="💀 Deaths" cells={all.map((p) => String(p.s.deaths.length))} />
-              {castNames.length > 0 && <tr className="group"><td colSpan={all.length + 1}>🔁 Casts per minute (same class only)</td></tr>}
+              <Row label="Fight length" cells={all.map((p) => mmss(p.s.fightSeconds))} />
+              <Row label="Active time" cells={all.map((p) => pct(p.s.activePct))} />
+              <Row label="Item level" cells={all.map((p) => (p.s.itemLevel ? String(p.s.itemLevel) : '–'))} />
+              <Row label="Time with no casts" cells={all.map((p) => `${gapTotal(p.s)}s`)} />
+              <Row label="Bloodlust/Heroism uptime" icon={icons.get('Bloodlust') ?? 'spell_nature_bloodlust'} cells={all.map((p) => pct(lust(p.s)))} />
+              <Row label="Deaths" cells={all.map((p) => String(p.s.deaths.length))} />
+              {castNames.length > 0 && <tr className="group"><td colSpan={all.length + 1}>Casts per minute (same class only)</td></tr>}
               {castNames.map((name) => (
                 <Row
                   key={name}
                   label={name}
+                  icon={icons.get(name)}
                   cells={all.map((p) => (!p.sameClass ? OTHER_CLASS : p.s.castsPerMinute[name] ? p.s.castsPerMinute[name].toFixed(1) : '–'))}
                 />
               ))}
-              {cdNames.length > 0 && <tr className="group"><td colSpan={all.length + 1}>⚡ Cooldown uses: used / possible (same class only)</td></tr>}
+              {cdNames.length > 0 && <tr className="group"><td colSpan={all.length + 1}>Cooldown uses: used / possible (same class only)</td></tr>}
               {cdNames.map((name) => (
                 <Row
                   key={name}
                   label={name}
+                  icon={icons.get(name)}
                   cells={all.map((p) => {
                     if (!p.sameClass) return OTHER_CLASS;
                     const c = p.s.cooldowns.find((x) => x.name === name);
@@ -141,15 +169,15 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
       </section>
 
       <section className="panel">
-        <h3 className="panel-title">⏳ Cast timeline</h3>
+        <h3 className="panel-title">Cast timeline</h3>
         <p className="muted small">Each tick is a cast (auto attacks excluded). Red bands are gaps over 4 seconds; yellow dots are major cooldowns.</p>
         <Timeline players={all.map((p) => ({ label: p.me ? 'You' : p.label, snapshot: p.s }))} />
       </section>
 
       {ref && buffNames.length > 0 && (
         <section className="panel">
-          <h3 className="panel-title">✨ Buff uptime vs {ref.name}</h3>
-          {!refSameClass && <p className="muted small">⚠️ Different class: their class-only buffs (stances, forms, auras) are hidden.</p>}
+          <h3 className="panel-title">Buff uptime vs {ref.name}</h3>
+          {!refSameClass && <p className="muted small">Different class: their class-only buffs (stances, forms, auras) are hidden.</p>}
           <div className="scroll">
             <table className="grid">
               <thead><tr><th>Buff</th><th className="r">You</th><th className="r">{ref.name}</th></tr></thead>
@@ -161,7 +189,7 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
                     const theirs = refBuffs.get(name) ?? 0;
                     return (
                       <tr key={name} className={theirs - mine >= 25 ? 'warn' : ''}>
-                        <td>{theirs - mine >= 25 ? '👀 ' : ''}{name}</td>
+                        <td><span className="with-icon"><GameIcon file={icons.get(name)} />{name}</span></td>
                         <td className="r"><Uptime v={mine} /></td>
                         <td className="r"><Uptime v={theirs} /></td>
                       </tr>
@@ -174,7 +202,7 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
       )}
 
       <section className="panel">
-        <h3 className="panel-title">💥 Damage done by ability</h3>
+        <h3 className="panel-title">Damage done by ability</h3>
         <div className="scroll">
           <table className="grid">
             <thead>
@@ -183,7 +211,13 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
             <tbody>
               {me.abilities.map((a) => (
                 <tr key={`${a.name}-${a.id}`}>
-                  <td>{a.isPet ? '🐾 ' : ''}{a.name}{a.isPet && <span className="muted small"> (pet)</span>}</td>
+                  <td>
+                    <span className="with-icon">
+                      <GameIcon file={a.isPet ? 'ability_hunter_pet_cat' : a.icon} />
+                      {a.name}
+                      {a.isPet && <span className="muted small">(pet)</span>}
+                    </span>
+                  </td>
                   <td className="amount-col">
                     <div className="amount">
                       <span className="pct">{pct(a.share * 100, 2)}</span>
@@ -222,7 +256,7 @@ function ShareButton({ id }: { id: string }) {
         setTimeout(() => setCopied(false), 2000);
       }}
     >
-      {copied ? '✅ Link copied' : '🔗 Copy share link'}
+      {copied ? 'Link copied' : 'Copy share link'}
     </button>
   );
 }
@@ -245,10 +279,10 @@ function Uptime({ v }: { v: number }) {
   );
 }
 
-function Row({ label, cells }: { label: string; cells: string[] }) {
+function Row({ label, cells, icon }: { label: string; cells: string[]; icon?: string }) {
   return (
     <tr>
-      <td>{label}</td>
+      <td>{icon ? <span className="with-icon"><GameIcon file={icon} />{label}</span> : label}</td>
       {cells.map((c, i) => <td key={i} className={c === OTHER_CLASS ? 'r muted small' : 'r'}>{c}</td>)}
     </tr>
   );

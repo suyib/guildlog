@@ -11,10 +11,12 @@ export interface AbilityRow {
   missPct: number | null; // 0..100
   avgHit: number | null;
   isPet: boolean;
+  /** Game icon file name from Warcraft Logs, e.g. ability_hunter_steadyshot.jpg */
+  icon?: string;
 }
 
-export interface BuffRow { name: string; id: number; uptimePct: number; uses: number }
-export interface CooldownUse { name: string; cooldownSec: number; uses: number; possible: number; times: number[] }
+export interface BuffRow { name: string; id: number; uptimePct: number; uses: number; icon?: string }
+export interface CooldownUse { name: string; cooldownSec: number; uses: number; possible: number; times: number[]; icon?: string }
 export interface Gap { start: number; end: number; seconds: number }
 
 export interface PlayerSnapshot {
@@ -53,6 +55,13 @@ export type CompareChoice =
   | { kind: 'top' }
   | { kind: 'previous' };
 
+/** Just enough about a fight to fetch a player's data without re-reading the whole report. */
+export interface FightRef { id: number; encounterID: number; name: string; startTime: number; endTime: number; kill: boolean }
+export interface ActorRef { id: number; name: string; className: string }
+
+/** A player whose snapshot the browser should fetch as a comparison. */
+export interface SnapshotTarget { kind: ComparisonKind; label: string; host: string; code: string; fight: FightRef; actor: ActorRef; sameClass: boolean }
+
 export interface Comparison {
   kind: ComparisonKind;
   label: string;
@@ -82,7 +91,7 @@ export interface ReportSummary {
   host: string;
   code: string;
   title: string;
-  fights: { id: number; name: string; encounterId: number; kill: boolean; seconds: number }[];
+  fights: { id: number; name: string; encounterId: number; kill: boolean; seconds: number; startTime: number; endTime: number }[];
   players: { id: number; name: string; className: string }[];
   suggestedFight?: number;
   suggestedPlayer?: number;
