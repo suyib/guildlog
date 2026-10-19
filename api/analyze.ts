@@ -1,7 +1,7 @@
 import { json, requireSession } from '../server/auth.js';
 import { analyze } from '../server/pipeline.js';
 
-export const config = { maxDuration: 60 };
+export const maxDuration = 60;
 
 export async function POST(req: Request): Promise<Response> {
   const denied = await requireSession(req);

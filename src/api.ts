@@ -7,6 +7,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error('Signed out');
   }
   const body = await res.json().catch(() => ({}));
+  if (res.status === 504) throw new Error('The analysis timed out. Try again; if it keeps happening, check the function logs in Vercel.');
   if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
   return body as T;
 }
