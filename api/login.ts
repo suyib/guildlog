@@ -1,4 +1,4 @@
-import { createSessionCookie, passwordMatches } from '../server/auth';
+import { createSessionCookie, passwordMatches } from '../server/auth.js';
 
 export async function POST(req: Request): Promise<Response> {
   const secret = process.env.SESSION_SECRET;

@@ -1,5 +1,5 @@
 // Minimal Supabase (PostgREST) access using the service role key. Server-side only.
-import type { AnalysisResult, HistoryRow, PlayerSnapshot } from './types';
+import type { AnalysisResult, HistoryRow, PlayerSnapshot } from './types.js';
 
 function cfg() {
   const url = process.env.SUPABASE_URL;
@@ -13,7 +13,13 @@ async function rest(path: string, init: RequestInit = {}): Promise<any> {
   if (!c) throw new Error('Supabase is not configured');
   const res = await fetch(`${c.url}/rest/v1/${path}`, {
     ...init,
-    headers: { apikey: c.key, Authorization: `Bearer ${c.key}`, 'Content-Type': 'application/json', ...(init.headers ?? {}) },
+    headers: {
+      apikey: c.key,
+      // Legacy service_role keys are JWTs and go in Authorization too; new sb_secret_ keys only need apikey.
+      ...(c.key.startsWith('sb_secret_') ? {} : { Authorization: `Bearer ${c.key}` }),
+      'Content-Type': 'application/json',
+      ...(init.headers ?? {}),
+    },
   });
   if (!res.ok) throw new Error(`Supabase ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const text = await res.text();

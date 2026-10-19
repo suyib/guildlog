@@ -1,12 +1,44 @@
 // Vercel Routing Middleware: gates the whole site behind one shared password.
+// Self-contained on purpose (no local imports) so it bundles cleanly for the middleware runtime.
 // Unauthenticated page requests get a login form; API requests get 401.
-import { isValidSession } from './server/auth';
 
 export const config = {
   matcher: ['/((?!api/login|favicon.ico).*)'],
 };
 
-const loginPage = (error = false) => `<!doctype html>
+const COOKIE_NAME = 'gl_session';
+
+async function hmacHex(secret: string, message: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
+  return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function readCookie(header: string | null, name: string): string | undefined {
+  if (!header) return undefined;
+  for (const part of header.split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k === name) return v.join('=');
+  }
+  return undefined;
+}
+
+async function hasValidSession(request: Request, secret: string | undefined): Promise<boolean> {
+  if (!secret) return false;
+  const value = readCookie(request.headers.get('cookie'), COOKIE_NAME);
+  if (!value) return false;
+  const [expStr, sig] = value.split('.');
+  const exp = Number(expStr);
+  if (!exp || !sig || exp < Date.now() / 1000) return false;
+  const expected = await hmacHex(secret, expStr);
+  if (expected.length !== sig.length) return false;
+  let diff = 0;
+  for (let i = 0; i < sig.length; i++) diff |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+
+const loginPage = (error: boolean) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Guild Logs</title>
 <style>
@@ -26,10 +58,14 @@ button{margin-top:12px;width:100%;padding:10px;border:0;border-radius:8px;backgr
 ${error ? '<div class="err">Wrong password, try again.</div>' : ''}
 </form></body></html>`;
 
-export default async function middleware(request: Request): Promise<Response | undefined> {
-  const secret = process.env.SESSION_SECRET;
+export default async function middleware(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  const ok = secret ? await isValidSession(request.headers.get('cookie'), secret) : false;
+  let ok = false;
+  try {
+    ok = await hasValidSession(request, process.env.SESSION_SECRET);
+  } catch {
+    ok = false;
+  }
   if (ok) return new Response(null, { headers: { 'x-middleware-next': '1' } });
 
   if (url.pathname.startsWith('/api/')) {

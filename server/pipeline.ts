@@ -1,6 +1,6 @@
-import { buildFindings, buildSnapshot } from './analysis';
-import { previousKill, saveAnalysis } from './db';
-import type { AnalysisResult, Comparison, PlayerSnapshot, ReportSummary } from './types';
+import { buildFindings, buildSnapshot } from './analysis.js';
+import { previousKill, saveAnalysis } from './db.js';
+import type { AnalysisResult, Comparison, PlayerSnapshot, ReportSummary } from './types.js';
 import {
   type Actor,
   type Fight,
@@ -11,7 +11,7 @@ import {
   getReportMeta,
   getTopRankings,
   parseReportUrl,
-} from './wcl';
+} from './wcl.js';
 
 export async function reportSummary(url: string): Promise<ReportSummary> {
   const parsed = parseReportUrl(url);

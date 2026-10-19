@@ -1,5 +1,5 @@
-import { json, requireSession } from '../server/auth';
-import { reportSummary } from '../server/pipeline';
+import { json, requireSession } from '../server/auth.js';
+import { reportSummary } from '../server/pipeline.js';
 
 export async function POST(req: Request): Promise<Response> {
   const denied = await requireSession(req);

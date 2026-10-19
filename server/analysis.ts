@@ -1,6 +1,6 @@
-import { COOLDOWNS, GAP_SECONDS, IGNORE_FOR_GAPS } from './cooldowns';
-import type { AbilityRow, BuffRow, Comparison, CooldownUse, Finding, Gap, PlayerSnapshot } from './types';
-import type { Actor, CastEvent, Fight, PlayerTables } from './wcl';
+import { COOLDOWNS, GAP_SECONDS, IGNORE_FOR_GAPS } from './cooldowns.js';
+import type { AbilityRow, BuffRow, Comparison, CooldownUse, Finding, Gap, PlayerSnapshot } from './types.js';
+import type { Actor, CastEvent, Fight, PlayerTables } from './wcl.js';
 
 const num = (v: unknown): number => (typeof v === 'number' && isFinite(v) ? v : 0);
 const round = (v: number, dp = 1) => Math.round(v * 10 ** dp) / 10 ** dp;

@@ -1,5 +1,5 @@
-import { json, requireSession } from '../server/auth';
-import { getAnalysis, listHistory } from '../server/db';
+import { json, requireSession } from '../server/auth.js';
+import { getAnalysis, listHistory } from '../server/db.js';
 
 export async function GET(req: Request): Promise<Response> {
   const denied = await requireSession(req);

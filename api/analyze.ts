@@ -1,5 +1,5 @@
-import { json, requireSession } from '../server/auth';
-import { analyze } from '../server/pipeline';
+import { json, requireSession } from '../server/auth.js';
+import { analyze } from '../server/pipeline.js';
 
 export const config = { maxDuration: 60 };
 
