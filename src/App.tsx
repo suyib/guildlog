@@ -23,10 +23,10 @@ export default function App() {
   return (
     <div className="shell">
       <header className="top">
-        <a href="#/" className="brand">Guild Logs</a>
+        <a href="#/" className="brand">⚔️ Guild Logs</a>
         <nav>
-          <a href="#/" className={route.page === 'analyze' ? 'on' : ''}>Analyse</a>
-          <a href="#/history" className={route.page === 'history' ? 'on' : ''}>History</a>
+          <a href="#/" className={route.page === 'analyze' ? 'on' : ''}>🔍 Analyse</a>
+          <a href="#/history" className={route.page === 'history' ? 'on' : ''}>📚 History</a>
         </nav>
       </header>
       <main>

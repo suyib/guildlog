@@ -1,4 +1,5 @@
 import { COOLDOWNS, GAP_SECONDS, IGNORE_FOR_GAPS } from './cooldowns.js';
+import { isGeneralBuff } from './buffs.js';
 import type { AbilityRow, BuffRow, Comparison, CooldownUse, Finding, Gap, PlayerSnapshot } from './types.js';
 import type { Actor, CastEvent, Fight, PlayerTables } from './wcl.js';
 
@@ -156,47 +157,49 @@ export function findGaps(times: number[], fightSeconds: number): Gap[] {
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
 
+
 export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Finding[] {
   const out: Finding[] = [];
-  const ref = comparisons[0]?.snapshot; // the main comparison (best same-report player, else top parse)
+  const main = comparisons[0];
+  const ref = main?.snapshot;
   const refName = ref?.name ?? '';
+  // Class-specific checks (cooldowns, cast rates) only use comparisons of your class.
+  const classRef = comparisons.find((c) => c.sameClass)?.snapshot;
 
-  // 1. Cooldowns: unused or under-used
-  const cdNames = new Set([...me.cooldowns.map((c) => c.name), ...comparisons.flatMap((c) => c.snapshot.cooldowns.map((x) => x.name))]);
+  // 1. Cooldowns: unused or under-used (your own numbers always; their numbers only if same class)
+  const cdNames = new Set([...me.cooldowns.map((c) => c.name), ...(classRef?.cooldowns.map((x) => x.name) ?? [])]);
   for (const name of cdNames) {
     const mine = me.cooldowns.find((c) => c.name === name);
-    const theirs = ref?.cooldowns.find((c) => c.name === name);
+    const theirs = classRef?.cooldowns.find((c) => c.name === name);
     const cd = COOLDOWNS[name];
     const possible = possibleUses(me.fightSeconds, cd);
     const uses = mine?.uses ?? 0;
     if (uses >= possible) continue;
-    if (!mine && !theirs) continue;
     const when = mine?.times.length ? ` (at ${mine.times.map(mmss).join(', ')})` : '';
-    const refPart = theirs ? ` ${refName} used it ${theirs.uses}× (${theirs.times.map(mmss).join(', ')}).` : '';
+    const refPart = theirs && classRef ? ` ${classRef.name} used it ${theirs.uses}× (${theirs.times.map(mmss).join(', ')}).` : '';
     out.push({
-      severity: possible - uses >= 1 && (theirs?.uses ?? 0) > uses ? 'high' : 'medium',
+      severity: (theirs?.uses ?? 0) > uses || uses === 0 ? 'high' : 'medium',
       title: `${name}: ${uses} of ${possible} possible uses`,
-      detail: `You used it ${uses}×${when} in a ${mmss(me.fightSeconds)} fight with a ${Math.round(cd / 60 * 10) / 10}-minute cooldown.${refPart} Use it early and again as soon as it's ready unless a big damage window is due within a few seconds.`,
+      detail: `You used it ${uses}×${when} in a ${mmss(me.fightSeconds)} fight with a ${Math.round((cd / 60) * 10) / 10}-minute cooldown.${refPart} Use it early and again as soon as it's ready unless a big damage window is due within a few seconds.`,
     });
   }
 
-  // 2. Fewer casts of key abilities than the comparison
-  if (ref) {
-    const keyAbilities = ref.abilities.filter((a) => !a.isPet && a.casts > 0).slice(0, 5);
-    for (const a of keyAbilities) {
-      const theirCpm = ref.castsPerMinute[a.name] ?? 0;
+  // 2. Fewer casts of key abilities (same class only)
+  if (classRef) {
+    for (const a of classRef.abilities.filter((x) => !x.isPet && x.casts > 0).slice(0, 5)) {
+      const theirCpm = classRef.castsPerMinute[a.name] ?? 0;
       const myCpm = me.castsPerMinute[a.name] ?? 0;
       if (theirCpm > 0 && myCpm < theirCpm * 0.85) {
         out.push({
           severity: myCpm < theirCpm * 0.7 ? 'high' : 'medium',
-          title: `Fewer ${a.name} casts than ${refName}`,
-          detail: `${me.castCounts[a.name] ?? 0} casts (${myCpm}/min) vs ${ref.castCounts[a.name] ?? 0} (${theirCpm}/min). It's ${Math.round(a.share * 100)}% of their damage.`,
+          title: `Fewer ${a.name} casts than ${classRef.name}`,
+          detail: `${me.castCounts[a.name] ?? 0} casts (${myCpm}/min) vs ${classRef.castCounts[a.name] ?? 0} (${theirCpm}/min). It's ${Math.round(a.share * 100)}% of their damage.`,
         });
       }
     }
   }
 
-  // 3. Downtime
+  // 3. Downtime (general)
   const gapTotal = me.gaps.reduce((s, g) => s + g.seconds, 0);
   if (me.gaps.length) {
     const worst = [...me.gaps].sort((a, b) => b.seconds - a.seconds).slice(0, 3);
@@ -205,19 +208,33 @@ export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Fi
       severity: gapTotal / me.fightSeconds > 0.08 ? 'high' : 'medium',
       title: `${Math.round(gapTotal)}s with no casts`,
       detail: `Longest gaps: ${worst.map((g) => `${mmss(g.start)}–${mmss(g.end)} (${Math.round(g.seconds)}s)`).join(', ')}.` +
-        (refGap !== null ? ` ${refName} had ${Math.round(refGap)}s. Check whether these were forced (movement, phase change) or avoidable.` : ''),
+        (refGap !== null ? ` ${refName} had ${Math.round(refGap)}s.` : '') + ' Check whether these were forced (movement, phase change) or avoidable.',
     });
   }
 
-  // 4. Buffs the comparison had that you didn't
+  // 4. Buffs they had that you didn't (cross-class: only buffs any class can get)
   if (ref) {
     const mine = new Map(me.buffs.map((b) => [b.name, b.uptimePct]));
-    const missing = ref.buffs.filter((b) => b.uptimePct >= 30 && (mine.get(b.name) ?? 0) < 5).slice(0, 8);
+    const missing = ref.buffs
+      .filter((b) => b.uptimePct >= 30 && (mine.get(b.name) ?? 0) < 5)
+      .filter((b) => main.sameClass || isGeneralBuff(b.name))
+      .slice(0, 8);
     if (missing.length) {
       out.push({
         severity: missing.length >= 2 ? 'high' : 'medium',
         title: `Buffs ${refName} had that you didn't`,
         detail: `${missing.map((b) => `${b.name} (${Math.round(b.uptimePct)}%)`).join(', ')}. These are usually consumables you can bring or party buffs from group placement; ask your raid leader about groups.`,
+      });
+    }
+    // Bloodlust/Heroism timing is worth calling out on its own
+    const lust = (s: PlayerSnapshot) => s.buffs.find((b) => b.name === 'Bloodlust' || b.name === 'Heroism');
+    const myLust = lust(me);
+    const theirLust = lust(ref);
+    if (theirLust && (!myLust || myLust.uptimePct + 5 < theirLust.uptimePct)) {
+      out.push({
+        severity: 'medium',
+        title: `${theirLust.name}: ${pct0(myLust?.uptimePct)} uptime vs ${pct0(theirLust.uptimePct)}`,
+        detail: 'You were outside its range or in another group when it went out. Stand with the raid when it’s called.',
       });
     }
   }
@@ -227,7 +244,7 @@ export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Fi
     out.push({ severity: 'high', title: `Died at ${mmss(d.seconds)}`, detail: `Killing blow: ${d.by}. Everything after this was lost damage.` });
   }
 
-  // 6. Avoidable damage taken (compared with the reference)
+  // 6. Avoidable damage taken (general)
   if (ref) {
     const theirs = new Map(ref.damageTaken.map((d) => [d.name, d.total]));
     const worse = me.damageTaken.filter((d) => d.total > 1000 && d.total > 2 * (theirs.get(d.name) ?? 0)).slice(0, 3);
@@ -240,20 +257,22 @@ export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Fi
     }
   }
 
-  // 7. Activity
+  // 7. Activity (general)
   if (me.activePct !== null && me.activePct < 95) {
     out.push({ severity: 'medium', title: `Active ${me.activePct}% of the fight`, detail: `${ref?.activePct ? `${refName}: ${ref.activePct}%. ` : ''}Time spent not attacking is the cheapest damage to win back.` });
   }
 
-  // 8. Misses on main abilities
+  // 8. Misses on your main abilities (your own numbers)
   for (const a of me.abilities.filter((x) => !x.isPet && x.casts >= 10 && (x.missPct ?? 0) >= 4).slice(0, 2)) {
     out.push({ severity: 'low', title: `${a.missPct}% misses on ${a.name}`, detail: 'Check whether you are at the hit cap for boss-level targets.' });
   }
 
-  // 9. Item level
+  // 9. Item level (general)
   if (ref && me.itemLevel && ref.itemLevel && ref.itemLevel - me.itemLevel >= 3) {
     out.push({ severity: 'low', title: `Item level ${me.itemLevel} vs ${ref.itemLevel}`, detail: 'Part of the gap is gear; focus on the points above first, since they cost nothing.' });
   }
 
   return out.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 }
+
+const pct0 = (v: number | undefined) => `${Math.round(v ?? 0)}%`;

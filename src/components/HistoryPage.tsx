@@ -19,7 +19,7 @@ export default function HistoryPage() {
 
   return (
     <section className="card">
-      <h1>Saved analyses</h1>
+      <h1>📚 Saved analyses</h1>
       <input placeholder="Filter by player, boss or class" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter" />
       {error && <p className="error">{error}</p>}
       {!rows && !error && <p className="muted">Loading…</p>}

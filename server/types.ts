@@ -44,9 +44,22 @@ export interface PlayerSnapshot {
   damageTaken: { name: string; total: number }[];
 }
 
-export type ComparisonKind = 'same-report' | 'top-parse' | 'previous-kill';
+export type ComparisonKind = 'same-report' | 'chosen-player' | 'top-parse' | 'previous-kill';
 
-export interface Comparison { kind: ComparisonKind; label: string; snapshot: PlayerSnapshot }
+/** What the user picked in the "Compare with" dropdown. */
+export type CompareChoice =
+  | { kind: 'auto' }
+  | { kind: 'player'; playerId: number }
+  | { kind: 'top' }
+  | { kind: 'previous' };
+
+export interface Comparison {
+  kind: ComparisonKind;
+  label: string;
+  snapshot: PlayerSnapshot;
+  /** False when the comparison is a different class: only general stats are compared. */
+  sameClass: boolean;
+}
 
 export interface Finding {
   severity: 'high' | 'medium' | 'low';

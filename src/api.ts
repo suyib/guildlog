@@ -1,4 +1,4 @@
-import type { AnalysisResult, HistoryRow, ReportSummary } from '../server/types';
+import type { AnalysisResult, CompareChoice, HistoryRow, ReportSummary } from '../server/types';
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } });
@@ -14,7 +14,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const loadReport = (url: string) => call<ReportSummary>('/api/report', { method: 'POST', body: JSON.stringify({ url }) });
 
-export const runAnalysis = (p: { host: string; code: string; fightId: number; playerId: number }) =>
+export const runAnalysis = (p: { host: string; code: string; fightId: number; playerId: number; compare: CompareChoice }) =>
   call<AnalysisResult>('/api/analyze', { method: 'POST', body: JSON.stringify(p) });
 
 export const loadHistory = () => call<HistoryRow[]>('/api/history');

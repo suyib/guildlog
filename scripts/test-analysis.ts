@@ -55,9 +55,16 @@ assert.equal(me.cooldowns.find((c) => c.name === 'Bestial Wrath')?.uses, 1);
 assert.ok(me.gaps.some((g) => g.start <= 130 && g.end >= 140), 'expected the 129-141s gap');
 assert.deepEqual(findGaps([5, 6, 20], 22), [{ start: 0, end: 5, seconds: 5 }, { start: 6, end: 20, seconds: 14 }]);
 
-const findings = buildFindings(me, [{ kind: 'same-report', label: 'Muddy (same raid)', snapshot: muddy }]);
+const findings = buildFindings(me, [{ kind: 'same-report', label: 'Muddy (same raid)', snapshot: muddy, sameClass: true }]);
 for (const f of findings) console.log(`[${f.severity}] ${f.title}\n    ${f.detail}`);
 assert.ok(findings.some((f) => f.title.startsWith('Bestial Wrath: 1 of 2')));
 assert.ok(findings.some((f) => f.title.includes('Fewer Steady Shot casts')));
 assert.ok(findings.some((f) => f.title.includes('Buffs Muddy had')));
+// Cross-class comparison: only general findings, no cast-rate or class buff comparisons
+const warrior = { ...muddy, name: 'Stabby', className: 'Warrior', buffs: [{ name: 'Battle Stance', id: 1, uptimePct: 100, uses: 1 }, { name: 'Leader of the Pack', id: 2, uptimePct: 80, uses: 1 }] };
+const cross = buildFindings(me, [{ kind: 'chosen-player', label: 'Stabby (Warrior, same raid)', snapshot: warrior, sameClass: false }]);
+assert.ok(!cross.some((f) => f.title.startsWith('Fewer')), 'no cast-rate findings across classes');
+const buffFinding = cross.find((f) => f.title.startsWith('Buffs'));
+assert.ok(buffFinding && !buffFinding.detail.includes('Battle Stance') && buffFinding.detail.includes('Leader of the Pack'));
+assert.ok(cross.some((f) => f.title.startsWith('Bestial Wrath: 1 of 2')), 'own cooldown use still checked');
 console.log('\nAll analysis checks passed.');
