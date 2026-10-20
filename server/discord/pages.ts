@@ -1,6 +1,6 @@
 // What the bot posts: the raid summary in the channel, and each person's own summaries by DM.
 import { BRAND, type Embed, type MessageBody, button, env, linkButton, row } from './api.js';
-import { raidFeedback } from '../raidFeedback.js';
+import { activeOver, raidFeedback } from '../raidFeedback.js';
 import type { RaidPoint } from '../types.js';
 import { type FightDigest, type PlayerDigest, type RaidDigest, playerFights } from './digest.js';
 
@@ -163,7 +163,7 @@ function headline(rows: Rows) {
   const worst = [...parsed].sort((a, b) => a.p.parse! - b.p.parse!)[0];
   const total = rows.reduce((t, r) => t + r.p.total, 0);
   const seconds = rows.reduce((t, r) => t + r.fight.seconds, 0) || 1;
-  const activeAvg = avg(rows.map((r) => r.p.activePct).filter((v): v is number => v !== null));
+  const activeAvg = activeOver(rows);
   const ilvl = [...rows].reverse().find((r) => r.p.itemLevel)?.p.itemLevel ?? null;
   return {
     parseAvg: avg(parsed.map((r) => r.p.parse!)),
@@ -259,7 +259,7 @@ function quickSummary(rows: Rows): { good: Point[]; work: Point[] } {
   else work.push({ title: `Died ${deaths.length}×`, detail: `${deaths.slice(0, 3).join(', ')}. The survival page has the details.` });
 
   // Activity
-  if (h.activeAvg !== null && h.activeAvg >= 95) good.push({ title: 'Always busy', detail: `Active ${h.activeAvg.toFixed(1)}% of the time on average; very little time spent not casting.` });
+  if (h.activeAvg !== null && h.activeAvg >= 95) good.push({ title: 'Always busy', detail: `Active ${h.activeAvg.toFixed(1)}% of the time (bosses you survived, weighted by length); very little time spent not casting.` });
   else if (h.activeAvg !== null && h.activeAvg < 90) work.push({ title: 'Time spent not casting', detail: `Active ${h.activeAvg.toFixed(1)}% of the time on average; aim for 95% or more. Pre-positioning and instant casts while moving help.` });
 
   // Cooldowns

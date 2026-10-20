@@ -5,7 +5,7 @@ import { POST } from '../api/discord';
 import { COMMANDS, handle, reminderMessage } from '../server/discord/commands';
 import type { RaidDigest } from '../server/discord/digest';
 import { personalPage, raidSummary } from '../server/discord/pages';
-import { raidFeedback } from '../server/raidFeedback';
+import { activeOver, raidFeedback } from '../server/raidFeedback';
 
 // Signed requests: Discord's PING gets a PONG, a bad signature is refused
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -81,6 +81,13 @@ const site = raidFeedback(digest.fights, { bloodlust: [] });
 assert.ok(site.work.every((p) => !p.who), 'no naming in what to work on');
 assert.deepEqual(site.good.find((p) => p.title.includes('strong'))!.who, ['Suy']);
 assert.ok(site.work.some((p) => p.title === 'No Bloodlust or Heroism'));
+// Active time: a 24-second kill (mostly run-in) and fights someone died in don't flag them as idle
+const shortFight = { ...digest.fights[0], seconds: 24, players: [{ ...player('Suy', 1500, 90), activePct: 70 }] };
+const longFight = { ...digest.fights[1], seconds: 300, players: [{ ...player('Suy', 1600, 80), activePct: 96 }] };
+const diedFight = { ...digest.fights[1], id: 9, seconds: 200, players: [{ ...player('Suy', 1600, 80), activePct: 50, deaths: [{ seconds: 100, by: 'Shatter' }] }] };
+assert.equal(activeOver([shortFight, longFight, diedFight].map((f) => ({ fight: f, p: f.players[0] }))), 96);
+assert.ok(!raidFeedback([shortFight, longFight, diedFight] as any).work.some((p) => p.title.includes('not attacking')));
+assert.equal(activeOver([{ fight: shortFight, p: shortFight.players[0] }] as any), null);
 // DM pages: headline numbers side by side, then bold-titled points, within Discord's limits
 const fieldsOf = (page: Parameters<typeof personalPage>[0]) => Object.fromEntries(personalPage(page, digest, 'suy', null)!.embeds![0].fields!.map((f) => [f.name, f.value]));
 assert.equal(fieldsOf('overview')['Average parse'], '85');

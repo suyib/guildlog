@@ -18,6 +18,21 @@ const mmss = (s: number) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.ro
 const compact = (v: number) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}m` : v >= 1e3 ? `${Math.round(v / 1e3)}k` : String(Math.round(v)));
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+/** Shorter fights are left out of active time: the run-in and first cast are a big share of a 30-second kill. */
+export const MIN_ACTIVE_SECONDS = 60;
+
+/**
+ * Active time across several fights, weighted by fight length. Fights the player died in are left
+ * out (dead time isn't idle time, and deaths are covered separately), as are fights under a minute.
+ * Null when nothing is left to go on.
+ */
+export function activeOver(rows: { fight: FightDigest; p: PlayerDigest }[]): number | null {
+  const usable = rows.filter((r) => r.p.activePct !== null && !r.p.deaths.length && r.fight.seconds > 0);
+  const pick = usable.filter((r) => r.fight.seconds >= MIN_ACTIVE_SECONDS);
+  const seconds = pick.reduce((t, r) => t + r.fight.seconds, 0);
+  return seconds ? pick.reduce((t, r) => t + r.p.activePct! * r.fight.seconds, 0) / seconds : null;
+}
+
 export function raidFeedback(fights: FightDigest[], opts: RaidFeedbackOptions = {}): RaidFeedback {
   const good: RaidPoint[] = [];
   const work: RaidPoint[] = [];
@@ -74,11 +89,13 @@ export function raidFeedback(fights: FightDigest[], opts: RaidFeedbackOptions = 
   }
 
   // ---- Staying busy ----
-  const active = rows.map(({ p }) => p.activePct).filter((v): v is number => v !== null);
-  const avgActive = active.length ? active.reduce((t, v) => t + v, 0) / active.length : null;
-  const idle = people((p) => p.role !== 'healer' && p.activePct !== null && p.activePct < 85);
+  const byPlayer = new Map<string, { fight: FightDigest; p: PlayerDigest }[]>();
+  for (const { f, p } of rows) if (p.role === 'dps') byPlayer.set(p.name, [...(byPlayer.get(p.name) ?? []), { fight: f, p }]);
+  const activity = [...byPlayer].map(([name, list]) => ({ name, pct: activeOver(list) })).filter((x): x is { name: string; pct: number } => x.pct !== null);
+  const avgActive = activity.length ? activity.reduce((t, x) => t + x.pct, 0) / activity.length : null;
+  const idle = activity.filter((x) => x.pct < 85).map((x) => x.name);
   if (avgActive !== null && avgActive >= 92 && !idle.length) good.push({ title: 'Everyone kept attacking', detail: `${avgActive.toFixed(0)}% average active time; very little standing around.` });
-  if (idle.length) work.push({ title: `${plural(idle.length, 'player')} spent a lot of time not attacking`, detail: 'More than 15% of the fight with nothing being cast. Often it’s movement; casting while moving or pre-positioning helps.' });
+  if (idle.length) work.push({ title: `${plural(idle.length, 'player')} spent a lot of time not attacking`, detail: 'More than 15% of their time on bosses with nothing being cast. Often it’s movement; casting while moving or pre-positioning helps.' });
 
   // ---- Cooldowns ----
   const withCds = rows.filter(({ p }) => p.cooldowns.length);
