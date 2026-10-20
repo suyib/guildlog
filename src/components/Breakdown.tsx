@@ -1,0 +1,202 @@
+// Whole-raid breakdown of one fight, shown when no player is chosen. Click a player to analyze them.
+import type { FightBreakdown } from '../../server/types';
+import { compact, mmss, n0, pct } from '../format';
+import Glyph from './Glyph';
+import { ClassIcon, GameIcon, classCss, parseCss } from './icons';
+
+type Player = FightBreakdown['players'][number];
+const spaced = (s: string) => s.replace(/([a-z])([A-Z])/g, '$1 $2');
+const ROLE_LABEL = { tank: 'Tanks', healer: 'Healers', dps: 'Damage' } as const;
+
+export default function Breakdown({ data, onPick }: { data: FightBreakdown; onPick: (playerId: number) => void }) {
+  const { fight, totals, players } = data;
+  const healers = [...players].filter((p) => p.healing > 0).sort((a, b) => b.hps - a.hps).slice(0, 12);
+  const topDps = Math.max(...players.map((p) => p.dps), 1);
+  const topHps = Math.max(...healers.map((p) => p.hps), 1);
+  const interrupts = players.filter((p) => p.interrupts > 0).sort((a, b) => b.interrupts - a.interrupts);
+  const dispels = players.filter((p) => p.dispels > 0).sort((a, b) => b.dispels - a.dispels);
+  const avoidable = players.filter((p) => p.role !== 'tank' && p.avoidable > 0).sort((a, b) => b.avoidable - a.avoidable).slice(0, 6);
+  const firstDeath = data.deaths[0];
+
+  return (
+    <div className="result">
+      <header className="fight-head">
+        <div className="fight-id">
+          <span className="kpi-icon big"><Glyph name="users" size={22} /></span>
+          <div>
+            <div className="eyebrow">
+              {fight.name} · <span className={fight.kill ? 'kill' : 'wipe'}>{fight.kill ? 'Kill' : 'Wipe'}</span> · {mmss(fight.seconds)} · {totals.raidSize} players
+            </div>
+            <h1>Whole raid</h1>
+          </div>
+        </div>
+        <span className="muted small">Click anyone to analyze their fight.</span>
+      </header>
+
+      <div className="kpis">
+        <Kpi glyph="bolt" label="Raid DPS" value={n0(totals.dps)} sub={`${compact(totals.damage)} damage`} />
+        <Kpi glyph="pulse" label="Raid HPS" value={n0(totals.hps)} sub={`${compact(totals.healing)} healing`} />
+        <Kpi glyph="alert" label="Deaths" value={String(totals.deaths)} sub={firstDeath ? `First: ${firstDeath.name} at ${mmss(firstDeath.seconds)}` : 'Nobody died'} />
+        <Kpi glyph="shield" label="Item level" value={totals.avgItemLevel ? totals.avgItemLevel.toFixed(1) : '–'} sub="Raid average" />
+      </div>
+
+      <div className="grid-2">
+        <section className="panel">
+          <h2 className="panel-title">Damage done</h2>
+          <ol className="meter">
+            {players.map((p, i) => (
+              <MeterRow key={p.id} rank={i + 1} p={p} value={p.dps} top={topDps} label={`${n0(p.dps)}`} onPick={onPick} />
+            ))}
+          </ol>
+        </section>
+        <section className="panel">
+          <h2 className="panel-title">Healing done</h2>
+          {healers.length === 0 ? (
+            <p className="muted small">No healing recorded.</p>
+          ) : (
+            <ol className="meter">
+              {healers.map((p, i) => (
+                <MeterRow
+                  key={p.id}
+                  rank={i + 1}
+                  p={p}
+                  value={p.hps}
+                  top={topHps}
+                  label={n0(p.hps)}
+                  extra={p.overhealPct !== null ? `${Math.round(p.overhealPct)}% overheal` : undefined}
+                  onPick={onPick}
+                  healing
+                />
+              ))}
+            </ol>
+          )}
+        </section>
+      </div>
+
+      <div className="grid-2-1">
+        <section className="panel">
+          <h2 className="panel-title">Damage taken by ability</h2>
+          <p className="muted small">&ldquo;Likely avoidable&rdquo; means it hit fewer than half of the non-tanks. Check the boss&rsquo;s mechanics before treating it as a mistake.</p>
+          <div className="scroll">
+            <table className="grid">
+              <thead><tr><th>Ability</th><th className="r">Damage</th><th className="r">Players hit</th><th></th></tr></thead>
+              <tbody>
+                {data.takenByAbility.map((a) => (
+                  <tr key={a.name}>
+                    <td><span className="with-icon"><GameIcon file={a.icon} />{a.name}</span></td>
+                    <td className="r">{compact(a.total)}</td>
+                    <td className="r muted">{a.playersHit} / {totals.raidSize}</td>
+                    <td>{a.avoidable && <span className="badge badge-warn">Likely avoidable</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="panel">
+          <h2 className="panel-title">Deaths</h2>
+          {data.deaths.length === 0 ? (
+            <p className="good-note"><Glyph name="check" size={16} />Nobody died</p>
+          ) : (
+            <ul className="event-list">
+              {data.deaths.map((d, i) => (
+                <li key={i}>
+                  <span className="ev-time">{mmss(d.seconds)}</span>
+                  <span className={classCss(d.className)}>{d.name}</span>
+                  <span className="muted">{d.by}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <h2 className="panel-title">Bloodlust</h2>
+          {data.bloodlust.length === 0 ? (
+            <p className="muted small">Not used, or not found in this log.</p>
+          ) : (
+            <ul className="event-list">
+              {data.bloodlust.map((b, i) => (
+                <li key={i}><span className="ev-time">{mmss(b.seconds)}</span>{b.name}<span className="muted">by {b.by}</span></li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      <div className="grid-2">
+        <section className="panel">
+          <h2 className="panel-title">Raid composition</h2>
+          {(['tank', 'healer', 'dps'] as const).map((role) => {
+            const group = players.filter((p) => p.role === role).sort((a, b) => a.className.localeCompare(b.className) || a.name.localeCompare(b.name));
+            if (!group.length) return null;
+            return (
+              <div key={role} className="comp-group">
+                <div className="comp-label">{ROLE_LABEL[role]} ({group.length})</div>
+                <div className="comp-list">
+                  {group.map((p) => (
+                    <button key={p.id} type="button" className="comp-chip" onClick={() => onPick(p.id)} title={`${spaced(p.specName)} ${p.className}${p.itemLevel ? `, item level ${p.itemLevel}` : ''}`}>
+                      <ClassIcon className={p.className} size={16} />
+                      <span className={classCss(p.className)}>{p.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </section>
+
+        <section className="panel">
+          <h2 className="panel-title">Utility and avoidable damage</h2>
+          <dl className="facts single">
+            <div><dt>Interrupts</dt><dd>{interrupts.length ? interrupts.slice(0, 4).map((p) => `${p.name} ${p.interrupts}`).join(', ') : 'None recorded'}</dd></div>
+            <div><dt>Dispels</dt><dd>{dispels.length ? dispels.slice(0, 4).map((p) => `${p.name} ${p.dispels}`).join(', ') : 'None recorded'}</dd></div>
+          </dl>
+          {avoidable.length > 0 && (
+            <>
+              <div className="comp-label">Most likely-avoidable damage taken (non-tanks)</div>
+              <ul className="event-list">
+                {avoidable.map((p) => (
+                  <li key={p.id}>
+                    <button type="button" className="link-button" onClick={() => onPick(p.id)}><span className={classCss(p.className)}>{p.name}</span></button>
+                    <span>{compact(p.avoidable)}</span>
+                    <span className="muted">{p.taken ? pct((p.avoidable / p.taken) * 100) : ''} of their damage taken</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Kpi({ glyph, label, value, sub }: { glyph: 'bolt' | 'pulse' | 'alert' | 'shield'; label: string; value: string; sub: string }) {
+  return (
+    <div className="kpi">
+      <div className="kpi-head"><span className="kpi-icon"><Glyph name={glyph} size={18} /></span>{label}</div>
+      <div className="kpi-value">{value}</div>
+      <div className="kpi-sub">{sub}</div>
+    </div>
+  );
+}
+
+function MeterRow({ rank, p, value, top, label, extra, onPick, healing = false }: {
+  rank: number; p: Player; value: number; top: number; label: string; extra?: string; onPick: (id: number) => void; healing?: boolean;
+}) {
+  const showParse = healing ? p.role === 'healer' : p.role !== 'healer';
+  return (
+    <li>
+      <button type="button" className="meter-row" onClick={() => onPick(p.id)} aria-label={`Analyze ${p.name}`}>
+        <span className="meter-rank">{rank}</span>
+        <ClassIcon className={p.className} size={18} />
+        <span className="meter-name">
+          <span className={classCss(p.className)}>{p.name}</span>
+          <span className="muted small">{extra ?? `${spaced(p.specName)}${p.deaths ? ` · died` : ''}`}</span>
+        </span>
+        <progress className={`bar ${classCss(p.className)}-bar`} max={1} value={value / top} aria-hidden="true" />
+        <span className="meter-value">{label}</span>
+        <span className={`meter-parse ${parseCss(showParse ? p.parse : null)}`}>{showParse && p.parse !== null ? Math.round(p.parse) : ''}</span>
+      </button>
+    </li>
+  );
+}

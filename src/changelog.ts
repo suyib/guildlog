@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.13.0',
+    date: '2026-10-20',
+    changes: [
+      'Whole-raid fight breakdown, the default when no player is chosen: raid DPS and HPS, damage and healing meters with parses, deaths, Bloodlust timing, damage taken by ability, composition, interrupts, dispels and avoidable damage.',
+      'Loading a report without a player in the link shows the breakdown straight away. Click anyone in it to analyze their fight.',
+    ],
+  },
+  {
     version: '0.12.2',
     date: '2026-10-20',
     changes: ['Bot: the database now guarantees each character can only be claimed by one person, even if two people claim it at the same moment.'],

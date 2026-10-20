@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { AnalysisResult, CompareChoice, ReportSummary } from '../../server/types';
-import { type Progress, loadReport, runAnalysis } from '../api';
+import type { AnalysisResult, CompareChoice, FightBreakdown, ReportSummary } from '../../server/types';
+import { type Progress, loadBreakdown, loadReport, runAnalysis } from '../api';
 import { mmss } from '../format';
 import { useNav } from '../nav';
 import Glyph from './Glyph';
+import Breakdown from './Breakdown';
 import ResultView from './ResultView';
 
 // Compare dropdown values: "none", "p:<playerId>" (someone in this fight) or "log" (someone in another log).
@@ -48,6 +49,10 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
   const [progress, setProgress] = useState<Progress[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(initial ?? null);
+  const [breakdown, setBreakdown] = useState<FightBreakdown | null>(null);
+  // Clicking a player in the breakdown picks them and analyzes their fight
+  const [pendingPick, setPendingPick] = useState(false);
+  const [autoBreakdown, setAutoBreakdown] = useState(false);
   const nav = useNav();
   // Tell the sidebar which analysis is on screen, so it can list its sections.
   useEffect(() => {
@@ -154,6 +159,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
   async function loadMain(link: string) {
     setError(null);
     setResult(null);
+    setBreakdown(null);
     setBusy('report');
     try {
       const r = await loadReport(link);
@@ -163,6 +169,8 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
       setCompareWith('none');
       setOther(null);
       setOtherUrl('');
+      // No player in the link: show the whole raid's breakdown straight away
+      if (!r.suggestedPlayer && r.fights.length) setAutoBreakdown(true);
     } catch (err) {
       setError((err as Error).message);
       setReport(null);
@@ -171,7 +179,44 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
     }
   }
 
+  useEffect(() => {
+    if (!pendingPick || playerId === '') return;
+    setPendingPick(false);
+    onAnalyze();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPick, playerId]);
+
+  useEffect(() => {
+    if (!autoBreakdown || !report || fightId === '' || busy) return;
+    setAutoBreakdown(false);
+    runBreakdown();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoBreakdown, report, fightId, busy]);
+
+  /** No player chosen: the whole-raid breakdown of the fight. */
+  async function runBreakdown() {
+    const f = report?.fights.find((x) => x.id === fightId);
+    if (!report || !f) return;
+    setError(null);
+    setResult(null);
+    setBreakdown(null);
+    setProgress([{ label: 'Reading the whole raid', state: 'loading' }]);
+    setBusy('analysis');
+    const started = performance.now();
+    try {
+      setBreakdown(await loadBreakdown({ host: report.host, code: report.code, fight: fightRef(f) }));
+      setProgress([]);
+    } catch (err) {
+      setProgress([{ label: 'Reading the whole raid', state: 'failed', seconds: Math.round((performance.now() - started) / 100) / 10 }]);
+      setError((err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function onAnalyze() {
+    if (playerId === '') return runBreakdown();
     const f = report?.fights.find((x) => x.id === fightId);
     if (!report || !f || !me) return;
     const of = other?.fights.find((x) => x.id === otherFightId);
@@ -182,6 +227,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
         : chosen ? { kind: 'player', playerId: chosen.id } : { kind: 'none' };
     setError(null);
     setResult(null);
+    setBreakdown(null);
     setProgress([]);
     setBusy('analysis');
     try {
@@ -247,8 +293,8 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
             </label>
             <label>
               Player
-              <select value={playerId} onChange={(e) => setPlayerId(Number(e.target.value))}>
-                <option value="" disabled>Choose a player</option>
+              <select value={playerId} onChange={(e) => setPlayerId(e.target.value === '' ? '' : Number(e.target.value))}>
+                <option value="">Whole raid (fight breakdown)</option>
                 {fightPlayers.map((p) => (
                   <option key={p.id} value={p.id}>{p.name} ({cls(p.className)})</option>
                 ))}
@@ -256,7 +302,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
             </label>
             <label>
               Compare
-              <select value={compareWith} onChange={(e) => setCompareWith(e.target.value)}>
+              <select value={compareWith} onChange={(e) => setCompareWith(e.target.value)} disabled={playerId === ''}>
                 <option value="none">No comparison: just my stats</option>
                 <optgroup label="Someone in this fight">
                   {fightPlayers
@@ -269,7 +315,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
                 <option value="log">Someone in another log…</option>
               </select>
             </label>
-            <button onClick={onAnalyze} disabled={busy !== null || fightId === '' || playerId === '' || (compareWith === 'log' && !otherMe)}>
+            <button onClick={onAnalyze} disabled={busy !== null || fightId === '' || (playerId !== '' && compareWith === 'log' && !otherMe)}>
               {busy === 'analysis' ? 'Analyzing…' : 'Analyze'}
             </button>
 
@@ -347,6 +393,16 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
         {error && <p className="error">{error}</p>}
       </section>
 
+      {breakdown && !result && (
+        <Breakdown
+          data={breakdown}
+          onPick={(id) => {
+            setPlayerId(id);
+            setCompareWith('none');
+            setPendingPick(true);
+          }}
+        />
+      )}
       {result && <ResultView result={result} />}
     </>
   );

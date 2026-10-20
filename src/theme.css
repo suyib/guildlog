@@ -279,6 +279,37 @@ button.secondary:hover:not(:disabled) { background: rgba(0, 124, 173, 0.18); }
 .kpi-sub.up { color: var(--win); }
 .kpi-sub.down { color: var(--high); }
 
+/* ---------- Whole-raid breakdown ---------- */
+.kpi-icon.big { width: 44px; height: 44px; border-radius: 12px; }
+.meter { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.meter-row {
+  display: grid; grid-template-columns: 22px 18px minmax(0, 1.1fr) minmax(60px, 1.4fr) 64px 28px; gap: 10px; align-items: center;
+  width: 100%; height: auto; padding: 6px 8px; border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink); font: 400 13px var(--font-sans); letter-spacing: 0.01em; text-align: left;
+}
+.meter-row:hover:not(:disabled) { background: var(--hover); }
+.meter-rank { font: 400 11px var(--font-mono); color: var(--ink-3); text-align: right; }
+.meter-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; font-weight: 600; }
+.meter-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meter-name .muted { font-weight: 400; }
+.meter-row progress.bar { height: 10px; }
+.meter-value { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.meter-parse { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+.event-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.event-list li { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ev-time { font: 700 12px var(--font-mono); color: var(--ink-2); min-width: 36px; }
+.comp-group { display: grid; gap: 6px; }
+.comp-label { font: 400 11px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.comp-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.comp-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px;
+  border-radius: var(--radius-pill); background: var(--raised); border: 0;
+  font: 600 13px var(--font-sans); letter-spacing: 0.01em;
+}
+.comp-chip:hover:not(:disabled) { background: var(--hover); }
+.link-button { height: auto; padding: 0; background: transparent; border: 0; font: inherit; font-weight: 600; }
+.link-button:hover:not(:disabled) { background: transparent; text-decoration: underline; }
+
 /* ---------- Cooldowns, facts, survival ---------- */
 .cd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .cd-list li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--raised); }

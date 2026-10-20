@@ -193,3 +193,33 @@ export interface HistoryRow {
   parse_percent: number | null;
   compare_key: string;
 }
+
+/** Whole-raid breakdown of one fight (no player chosen). */
+export interface FightBreakdown {
+  fight: { id: number; name: string; kill: boolean; seconds: number; encounterID: number };
+  totals: { damage: number; dps: number; healing: number; hps: number; taken: number; deaths: number; raidSize: number; avgItemLevel: number | null };
+  players: {
+    id: number;
+    name: string;
+    className: string;
+    specName: string;
+    role: 'tank' | 'healer' | 'dps';
+    total: number;
+    dps: number;
+    /** Damage parse, or healing parse for healers. */
+    parse: number | null;
+    itemLevel: number | null;
+    activePct: number | null;
+    healing: number;
+    hps: number;
+    overhealPct: number | null;
+    taken: number;
+    avoidable: number;
+    deaths: number;
+    interrupts: number;
+    dispels: number;
+  }[];
+  deaths: { seconds: number; name: string; className: string; by: string }[];
+  takenByAbility: { name: string; icon?: string; total: number; playersHit: number; avoidable: boolean }[];
+  bloodlust: { seconds: number; by: string; name: string }[];
+}

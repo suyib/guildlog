@@ -4,6 +4,7 @@ import type {
   CompareChoice,
   Comparison,
   Dashboard,
+  FightBreakdown,
   FightPlayerRow,
   FightRef,
   HistoryRow,
@@ -27,6 +28,8 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 const post = <T>(path: string, body: unknown) => call<T>(path, { method: 'POST', body: JSON.stringify(body) });
 
 export const loadReport = (url: string) => post<ReportSummary>('/api/report', { url });
+/** Whole-raid breakdown of one fight, for when no player is chosen. */
+export const loadBreakdown = (p: { host: string; code: string; fight: FightRef }) => post<FightBreakdown>('/api/fight', { ...p, breakdown: true });
 export const loadHistory = () => call<HistoryRow[]>('/api/history');
 export const loadSaved = (id: string) => call<AnalysisResult>(`/api/history?id=${encodeURIComponent(id)}`);
 
