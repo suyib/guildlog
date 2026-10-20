@@ -179,6 +179,37 @@ export async function getCastEvents(host: string, code: string, fight: Fight, so
   return { events: events.filter((e) => e.type === 'cast'), abilities };
 }
 
+/**
+ * Auto attacks (Auto Shot, Melee) as cast-like events, read from the player's damage events.
+ * Warcraft Logs doesn't always include auto attacks in a player's cast events, but every swing,
+ * hit or miss, shows up as a damage event. Optional: returns nothing if it's slow or fails.
+ */
+export async function getAutoAttackEvents(host: string, code: string, fight: Fight, sourceId: number, abilityId: number): Promise<CastEvent[]> {
+  const q = `query($code:String!,$fid:[Int]!,$sid:Int!,$ab:Float,$st:Float,$et:Float){reportData{report(code:$code){
+    events(dataType:DamageDone, fightIDs:$fid, sourceID:$sid, abilityID:$ab, startTime:$st, endTime:$et, limit:10000){data nextPageTimestamp}
+  }}}`;
+  const out: CastEvent[] = [];
+  let start: number | null = fight.startTime;
+  const deadline = Date.now() + 25_000;
+  try {
+    for (let page = 0; start !== null && page < 5; page++) {
+      const left = deadline - Date.now();
+      if (left < 3_000) break;
+      const d: any = await gql(host, q, { code, fid: [fight.id], sid: sourceId, ab: abilityId, st: start, et: fight.endTime }, Math.min(15_000, left));
+      for (const e of d.reportData.report.events?.data ?? []) {
+        // One swing can log more than one damage event; keep one per swing
+        if (e?.type === 'damage' && e.sourceID === sourceId && !(out.length && e.timestamp - out[out.length - 1].timestamp < 50)) {
+          out.push({ timestamp: e.timestamp, type: 'cast', abilityGameID: abilityId, sourceID: sourceId });
+        }
+      }
+      start = d.reportData.report.events?.nextPageTimestamp ?? null;
+    }
+  } catch {
+    return [];
+  }
+  return out;
+}
+
 /** The report's region slug (e.g. "eu", "us"), for character portraits. Separate query so it can't break report loading. */
 export async function getReportRegion(host: string, code: string): Promise<string | null> {
   try {

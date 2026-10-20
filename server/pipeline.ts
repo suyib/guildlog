@@ -5,7 +5,7 @@
 import { buildFindings, buildSnapshot, buildStrengths } from './analysis.js';
 import { getCachedSnapshot, putCachedSnapshot, saveAnalysis } from './db.js';
 import type { ActorRef, AnalysisResult, Comparison, Dashboard, FightPlayerRow, FightRef, PlayerSnapshot, ReportSummary } from './types.js';
-import { type Actor, type Fight, getCastEvents, getFightData, getPlayerTables, getReportMeta, parseReportUrl } from './wcl.js';
+import { type Actor, type Fight, getAutoAttackEvents, getCastEvents, getFightData, getPlayerTables, getReportMeta, parseReportUrl } from './wcl.js';
 
 export async function reportSummary(url: string): Promise<ReportSummary> {
   const parsed = parseReportUrl(url);
@@ -80,6 +80,13 @@ export async function fightRows(host: string, code: string, fightId: number, wit
     });
 }
 
+/** Each class's auto attack (ability ID and name in the log). Casters' wand shots aren't shown. */
+const AUTO_ATTACK: Record<string, { id: number; name: string } | null> = {
+  Hunter: { id: 75, name: 'Auto Shot' },
+  Mage: null, Priest: null, Warlock: null,
+  default: { id: 1, name: 'Melee' },
+};
+
 const toFight = (f: FightRef): Fight => ({ ...f, size: null, difficulty: null });
 const toActor = (a: ActorRef): Actor => ({ id: a.id, name: a.name, type: 'Player', subType: a.className, petOwner: null });
 
@@ -88,8 +95,8 @@ const toActor = (a: ActorRef): Actor => ({ id: a.id, name: a.name, type: 'Player
  * table isn't fetched again; without it only the damage table is fetched.
  */
 export async function snapshotOne(host: string, code: string, fightRef: FightRef, actorRef: ActorRef, row?: FightPlayerRow): Promise<PlayerSnapshot> {
-  // v4: snapshots now include auto attacks in the cast list; older cached ones are skipped
-  const cacheKey = `v4:${host}:${code}:${fightRef.id}:${fightRef.endTime}:${actorRef.id}`;
+  // v5: auto attacks are also read from damage events when the cast events leave them out
+  const cacheKey = `v5:${host}:${code}:${fightRef.id}:${fightRef.endTime}:${actorRef.id}`;
   const cached = await getCachedSnapshot(cacheKey);
   if (cached) return cached;
   const fresh = await buildFreshSnapshot(host, code, fightRef, actorRef, row);
@@ -100,11 +107,18 @@ export async function snapshotOne(host: string, code: string, fightRef: FightRef
 async function buildFreshSnapshot(host: string, code: string, fightRef: FightRef, actorRef: ActorRef, row?: FightPlayerRow): Promise<PlayerSnapshot> {
   const fight = toFight(fightRef);
   const actor = toActor(actorRef);
-  const [r, tables, casts] = await Promise.all([
+  const auto = AUTO_ATTACK[actorRef.className] ?? AUTO_ATTACK.default;
+  const [r, tables, casts, autos] = await Promise.all([
     row ? Promise.resolve(row) : fightRows(host, code, fight.id, false).then((rows) => rows.find((x) => x.id === actor.id || x.name === actor.name)),
     getPlayerTables(host, code, fight.id, actor.id),
     getCastEvents(host, code, fight, actor.id),
+    auto ? getAutoAttackEvents(host, code, fight, actor.id, auto.id) : Promise.resolve([]),
   ]);
+  // If the cast events left out auto attacks, add them from the damage events for the timeline
+  if (auto && autos.length && !casts.events.some((e) => casts.abilities.get(e.abilityGameID) === auto.name)) {
+    if (!casts.abilities.has(auto.id)) casts.abilities.set(auto.id, auto.name);
+    casts.events = [...casts.events, ...autos.map((e) => ({ ...e, abilityGameID: auto.id }))].sort((a, b) => a.timestamp - b.timestamp);
+  }
   const snapshot = buildSnapshot({
     host,
     code,

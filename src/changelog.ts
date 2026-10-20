@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.12.1',
+    date: '2026-10-20',
+    changes: [
+      'Cast timeline: auto attacks (Auto Shot, Melee) are read from damage events when Warcraft Logs leaves them out of the casts.',
+      'Bot: using /raidstart with a log that was used before reopens it, so /raidend works.',
+    ],
+  },
+  {
     version: '0.12.0',
     date: '2026-10-20',
     changes: [

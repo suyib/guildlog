@@ -67,11 +67,15 @@ export interface Raid {
   ended_at: string | null;
 }
 
+/**
+ * Starts (or restarts) a raid. A log that was used before is reopened: its start time is reset and
+ * any earlier end is cleared, so /raidend finds it again.
+ */
 export async function createRaid(r: { host: string; report_code: string; title: string | null; started_by: string; logger_id: string | null }): Promise<Raid> {
   const rows = await rest('bot_raids?on_conflict=report_code&select=*', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
-    body: JSON.stringify(r),
+    body: JSON.stringify({ ...r, started_at: new Date().toISOString(), ended_at: null }),
   });
   return rows[0];
 }
