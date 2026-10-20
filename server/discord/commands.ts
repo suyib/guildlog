@@ -450,7 +450,14 @@ async function claim(i: Interaction): Promise<Outcome> {
     if (existing && existing.discord_id === user.id) return { content: `You've already ${existing.status === 'approved' ? 'claimed' : 'asked to claim'} ${character}.` };
     if (existing) return { content: `${character} is already claimed by someone else. If it's yours, ask an officer to sort it out.` };
     if ((await claimsFor(user.id)).length >= 6) return { content: 'You can claim up to 6 characters. Use /unclaim to remove one first.' };
-    const c = await createClaim({ discord_id: user.id, discord_name: nameOf(user), character, realm });
+    let c: Claim;
+    try {
+      c = await createClaim({ discord_id: user.id, discord_name: nameOf(user), character, realm });
+    } catch (e) {
+      // The database refuses a second live claim on the same character (two people asking at once)
+      if (/409|duplicate|unique/i.test((e as Error).message)) return { content: `${character} is already claimed by someone else. If it's yours, ask an officer to sort it out.` };
+      throw e;
+    }
     const seen = await lastSeen(character).catch(() => null);
     const created = new Date(Number((BigInt(user.id) >> 22n) + 1420070400000n));
     await postToChannel(adminChannel, {

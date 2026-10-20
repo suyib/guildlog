@@ -52,6 +52,9 @@ create table if not exists public.bot_claims (
 );
 create index if not exists bot_claims_discord on public.bot_claims (discord_id);
 create index if not exists bot_claims_character on public.bot_claims (character_key);
+-- Hard guarantee: one live claim (waiting or approved) per character and realm, even if two people
+-- ask at the same moment. Rejected claims don't count, so the real owner can still claim it.
+create unique index if not exists bot_claims_one_owner on public.bot_claims (character_key, lower(coalesce(realm, ''))) where status <> 'rejected';
 
 -- Raids started with /raidstart (one row per Warcraft Logs report).
 create table if not exists public.bot_raids (

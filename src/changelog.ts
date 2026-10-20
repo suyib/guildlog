@@ -9,6 +9,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.12.2',
+    date: '2026-10-20',
+    changes: ['Bot: the database now guarantees each character can only be claimed by one person, even if two people claim it at the same moment.'],
+  },
+  {
     version: '0.12.1',
     date: '2026-10-20',
     changes: [
