@@ -14,6 +14,7 @@ export const CHANGELOG: Release[] = [
     changes: [
       'Fight breakdown: plain-language “What went well” and “What to work on” for the whole raid, without naming anyone in what to work on. Enchants stay in your own DM summary.',
       'Discord: the /raidend summary includes the same raid-wide highlights, without naming anyone.',
+      'Discord: every DM page now leads with headline numbers, then short \u201cWhat went well\u201d and \u201cWhat to work on\u201d points, with boss-by-boss detail and comparisons to others of your spec.',
     ],
   },
   {

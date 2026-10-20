@@ -81,18 +81,27 @@ const site = raidFeedback(digest.fights, { bloodlust: [] });
 assert.ok(site.work.every((p) => !p.who), 'no naming in what to work on');
 assert.deepEqual(site.good.find((p) => p.title.includes('strong'))!.who, ['Suy']);
 assert.ok(site.work.some((p) => p.title === 'No Bloodlust or Heroism'));
-const overview = personalPage('overview', digest, 'suy', null)!;
-assert.ok(overview.embeds![0].description!.includes('average parse **85**'));
-assert.ok(personalPage('gear', digest, 'Suy', 'Thunderstrike')!.embeds![0].description!.includes('no enchant on: head'));
+// DM pages: headline numbers side by side, then bold-titled points, within Discord's limits
+const fieldsOf = (page: Parameters<typeof personalPage>[0]) => Object.fromEntries(personalPage(page, digest, 'suy', null)!.embeds![0].fields!.map((f) => [f.name, f.value]));
+assert.equal(fieldsOf('overview')['Average parse'], '85');
+assert.ok(fieldsOf('overview')['Boss by boss'].includes('#1 of 1 in the raid'));
+assert.ok(fieldsOf('gear')['What to work on'].includes('No enchant on: head'));
+assert.equal(fieldsOf('gear')['Enchants'], '0 of 1');
+assert.ok(fieldsOf('rotation')['Cooldowns (all kills)'].includes('**Bestial Wrath**: 2 of 4 · room for 2 more'));
+assert.ok(fieldsOf('damage')['Top abilities (share of your damage)'].includes('**Steady Shot**'));
+assert.ok(fieldsOf('survival')['What went well'].includes('No deaths'));
+for (const page of ['summary', 'overview', 'damage', 'rotation', 'gear', 'survival'] as const) {
+  const e = personalPage(page, digest, 'suy', null)!.embeds![0];
+  assert.ok(e.fields!.length <= 25 && e.fields!.every((f) => f.value.length <= 1024 && f.value.length > 0), `${page} fits Discord`);
+}
 assert.equal(personalPage('overview', digest, 'Nobody', null), null);
 
 // Quick summary: the at-a-glance page with what went well and what to work on
 const quick = personalPage('summary', digest, 'Suy', null)!;
-const [goodField, workField] = quick.embeds![0].fields!;
-assert.equal(goodField.name, 'What went well');
-assert.ok(goodField.value.includes('No deaths'));
-assert.ok(workField.value.includes('Bestial Wrath 2/4'), 'under-used cooldowns are listed');
-assert.ok(workField.value.includes('No enchant on: head'));
+const quickFields = Object.fromEntries(quick.embeds![0].fields!.map((f) => [f.name, f.value]));
+assert.ok(quickFields['What went well'].includes('**No deaths**'));
+assert.ok(quickFields['What to work on'].includes('Bestial Wrath 2/4'), 'under-used cooldowns are listed');
+assert.ok(quickFields['What to work on'].includes('No enchant on: head'));
 // Six page buttons, split across two rows (Discord allows five per row)
 assert.equal(summary.components!.length, 2);
 
