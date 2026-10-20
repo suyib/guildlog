@@ -9,6 +9,23 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.11.0',
+    date: '2026-10-20',
+    changes: [
+      'Burning Crusade only: links from other Warcraft Logs sites are turned away, and the Mists of Pandaria cooldowns are gone.',
+      'Removed leftovers from old comparison options (top-ranked parse, previous kill, auto).',
+      'Database cleanup script (supabase/cleanup.sql) to clear out non-Burning Crusade data and old caches.',
+      'Game-specific content is marked in the code, ready to swap for WoW Forever.',
+    ],
+  },
+  {
+    version: '0.10.2',
+    date: '2026-10-20',
+    changes: [
+      'Cooldowns are tracked for Mists of Pandaria Classic logs (classic.warcraftlogs.com) as well as Burning Crusade, using each version\u2019s own cooldown times.',
+    ],
+  },
+  {
     version: '0.10.1',
     date: '2026-10-20',
     changes: [

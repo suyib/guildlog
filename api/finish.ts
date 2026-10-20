@@ -10,7 +10,7 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const b = (await req.json()) as { player?: PlayerSnapshot; comparisons?: Comparison[]; compareKey?: string; notes?: string[]; dashboard?: Dashboard };
     if (!b.player) return json({ error: 'Missing player data.' }, 400);
-    return json(await finish({ player: b.player, comparisons: b.comparisons ?? [], compareKey: b.compareKey ?? 'auto', notes: b.notes ?? [], dashboard: b.dashboard }));
+    return json(await finish({ player: b.player, comparisons: b.comparisons ?? [], compareKey: b.compareKey ?? 'none', notes: b.notes ?? [], dashboard: b.dashboard }));
   } catch (e) {
     return json({ error: (e as Error).message }, 400);
   }

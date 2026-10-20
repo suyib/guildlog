@@ -1,6 +1,6 @@
 // What each character stat does, shown as a tooltip on "Stats at the pull".
-// Rating numbers are for level 70 (Burning Crusade, fresh.warcraftlogs.com). Other versions have different
-// conversions, so for them the tooltip keeps only the sentences without numbers.
+// GAME CONTENT (Burning Crusade for now; replace with WoW Forever's values once they're known).
+// Rating numbers are for level 70.
 
 type ClassName = 'Hunter' | 'Rogue' | 'Warrior' | 'Paladin' | 'Shaman' | 'Druid' | 'Mage' | 'Warlock' | 'Priest';
 
@@ -81,15 +81,7 @@ const RATING: Record<string, (cls: string) => string> = {
 };
 
 /** Tooltip text for a stat, tailored to the class where it matters. Null when there's nothing useful to say. */
-export function statTooltip(stat: string, className: string, withLevel70Numbers = true): string | null {
+export function statTooltip(stat: string, className: string): string | null {
   const fn = RATING[stat] ?? RATING[stat.replace(/ Rating$/i, '')];
-  if (!fn) return null;
-  const text = fn(className);
-  if (withLevel70Numbers) return text;
-  // Drop sentences that quote level-70 conversions or caps
-  const kept = text
-    .split(/(?<=\.)\s+/)
-    .map((s) => s.replace(/\s*\((about|around) [^)]*\d[^)]*\)/gi, ''))
-    .filter((s) => !/\d/.test(s));
-  return kept.join(' ').trim() || null;
+  return fn ? fn(className) : null;
 }

@@ -2,7 +2,7 @@
 // fight (a handful of fight-wide queries, not one per player) and stored, so every "send me my
 // summary" button press afterwards is instant.
 import { possibleUses } from '../analysis.js';
-import { COOLDOWNS, IGNORE_FOR_GAPS } from '../cooldowns.js';
+import { IGNORE_FOR_GAPS, cooldownFor } from '../cooldowns.js';
 import { gearFrom, statsFrom, survivalFrom } from '../dashboard.js';
 import { detailRows, rankingRows } from '../pipeline.js';
 import type { GearItem } from '../types.js';
@@ -32,7 +32,11 @@ export interface PlayerDigest {
   stats?: { name: string; value: string }[];
 }
 
+/** Bump when what's stored per fight changes, so older stored fights are rebuilt. */
+export const DIGEST_VERSION = 2;
+
 export interface FightDigest {
+  v?: number;
   id: number;
   name: string;
   encounterID: number;
@@ -115,8 +119,8 @@ export async function buildFightDigest(host: string, code: string, fight: Fight)
         .slice(0, 10),
       casts: castList.slice(0, 12),
       cooldowns: castList
-        .filter((c) => COOLDOWNS[c.name])
-        .map((c) => ({ name: c.name, uses: c.count, possible: possibleUses(seconds, COOLDOWNS[c.name]) })),
+        .filter((c) => cooldownFor(c.name) !== undefined)
+        .map((c) => ({ name: c.name, uses: c.count, possible: possibleUses(seconds, cooldownFor(c.name)!) })),
       deaths: deathEntries
         .filter((x) => x.id === e.id || x.name === e.name)
         .map((x) => ({ seconds: Math.round((num(x.deathTime ?? x.timestamp) - fight.startTime) / 1000), by: x.killingBlow?.name ?? x.ability?.name ?? 'Unknown' })),
@@ -128,7 +132,7 @@ export async function buildFightDigest(host: string, code: string, fight: Fight)
     };
   });
 
-  return { id: fight.id, name: fight.name, encounterID: fight.encounterID, kill: !!fight.kill, startTime: fight.startTime, endTime: fight.endTime, seconds, players };
+  return { v: DIGEST_VERSION, id: fight.id, name: fight.name, encounterID: fight.encounterID, kill: !!fight.kill, startTime: fight.startTime, endTime: fight.endTime, seconds, players };
 }
 
 /**
@@ -139,7 +143,7 @@ export async function raidDigest(host: string, code: string, budgetMs = 40_000):
   const deadline = Date.now() + budgetMs;
   const [meta, stored] = await Promise.all([getReportMeta(host, code, 15_000), storedFights(code).catch(() => [])]);
   const kills = meta.fights.filter((f) => f.encounterID > 0 && f.kill);
-  const have = new Map(stored.map((s) => [s.fight_id, s.data as FightDigest]));
+  const have = new Map(stored.filter((s) => (s.data as FightDigest).v === DIGEST_VERSION).map((s) => [s.fight_id, s.data as FightDigest]));
   const missing = kills.filter((f) => !have.has(f.id));
 
   // Build missing fights three at a time until the budget runs out

@@ -1,8 +1,6 @@
-// Major cooldowns to audit, by cast name. Cooldown in seconds.
-// Edit this list as Forever's real values are confirmed from logs.
-// Names are matched against cast names in the log, so TBC/Classic-era and Forever names can live together.
-
-export const COOLDOWNS: Record<string, number> = {
+// GAME CONTENT (Burning Crusade for now; replace with WoW Forever's values once they're known).
+// Major cooldowns to audit, by cast name, with the cooldown in seconds.
+const TBC: Record<string, number> = {
   // Hunter
   'Bestial Wrath': 120,
   'Rapid Fire': 300,
@@ -33,6 +31,15 @@ export const COOLDOWNS: Record<string, number> = {
   'Badge of the Swarmguard': 180,
   'Jom Gabbar': 120,
 };
+
+/** Names compared without case or curly apostrophes ("Nature’s Vigil" = "Nature's Vigil"). */
+const key = (name: string) => name.toLowerCase().replace(/[\u2018\u2019]/g, "'").trim();
+const BY_NAME = new Map(Object.entries(TBC).map(([n, s]) => [key(n), s]));
+
+/** Cooldown in seconds for a cast, or undefined if it isn't a tracked cooldown. */
+export function cooldownFor(name: string): number | undefined {
+  return BY_NAME.get(key(name));
+}
 
 // Casts that don't count as "doing something" for gap detection.
 export const IGNORE_FOR_GAPS = new Set(['Auto Shot', 'Shoot', 'Melee', 'Auto Attack', 'Attack']);

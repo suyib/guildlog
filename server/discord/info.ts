@@ -1,3 +1,4 @@
+// GAME CONTENT (Burning Crusade for now; replace with WoW Forever's items once they're known).
 // /info content. Edit freely: this is plain data, shown as-is in Discord.
 // Links go to Wowhead searches; the bot doesn't copy Wowhead's pages (their terms don't allow scraping).
 import { BRAND, type MessageBody, linkButton, row } from './api.js';

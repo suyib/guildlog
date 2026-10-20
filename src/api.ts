@@ -119,35 +119,9 @@ export async function runAnalysis(
         .then((snapshot) => ({ kind: 'other-log' as const, label, snapshot, sameClass: snapshot.className === p.actor.className })),
     );
   }
-  if (p.compare.kind === 'auto') {
-    rows
-      .filter((r) => r.className === p.actor.className && r.name !== p.actor.name)
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 2)
-      .forEach((r) => targets.push({
-        kind: 'same-report',
-        label: `${r.name} (${r.className}, same raid)`,
-        host: p.host, code: p.code, fight: p.fight,
-        actor: { id: r.id, name: r.name, className: r.className },
-        sameClass: true,
-        row: r,
-      }));
-  }
-
   const comparisonJobs: Promise<Comparison | null>[] = [...comparisonJobsPre, ...targets.map((t) =>
     step(t.actor.name, snap(t)).then((snapshot) => ({ kind: t.kind, label: t.label, snapshot, sameClass: t.sameClass })),
   )];
-
-  if (p.compare.kind === 'auto' || p.compare.kind === 'top') {
-    const me = { name: p.actor.name, className: myRow?.className ?? p.actor.className, specName: myRow?.specName ?? '' };
-    comparisonJobs.push(
-      step('Finding a top-ranked parse', post<{ target: SnapshotTarget | null }>('/api/top', { host: p.host, fight: p.fight, me })).then(async ({ target }) => {
-        if (!target) return null;
-        const snapshot = await step(target.actor.name, snap(target));
-        return { kind: target.kind, label: target.label, snapshot, sameClass: target.sameClass };
-      }),
-    );
-  }
 
   const settled = await Promise.allSettled(comparisonJobs);
   const comparisons: Comparison[] = [];
@@ -159,7 +133,6 @@ export async function runAnalysis(
   const [player, dashboard] = await Promise.all([mePromise, dashboardPromise]);
   const compareKey =
     p.compare.kind === 'player' ? `p:${p.chosen?.name ?? ''}`
-    : p.compare.kind === 'log' ? `l:${p.compare.host}:${p.compare.code}:${p.compare.fight.id}:${p.compare.actor.name}`
-    : p.compare.kind;
+    : `l:${p.compare.host}:${p.compare.code}:${p.compare.fight.id}:${p.compare.actor.name}`;
   return step('Building the summary', post<AnalysisResult>('/api/finish', { player, comparisons, compareKey, notes, dashboard }));
 }

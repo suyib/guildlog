@@ -1,17 +1,18 @@
 # Guild Logs
 
-Paste a Warcraft Logs link, pick a boss and a player, and get a plain-English summary of what to work on, compared with:
+Paste a Warcraft Logs link, pick a boss and a player, and get a plain-English summary of what went well and what to work on, either on its own or compared with:
 
-- the best two players of the same class in the same raid,
-- a top-ranked parse of the same spec on that boss,
-- your own previous kill of that boss (from saved analyses).
+- anyone else in the same fight, or
+- someone in another log you load.
+
+The site is set up for one game version at a time (Burning Crusade logs from fresh.warcraftlogs.com for now; see "Game content" below).
 
 Every analysis is saved to Supabase, so it stays available after Warcraft Logs archives the report. The whole site sits behind one shared guild password.
 
 ## Stack
 
 - Vite + React front end, deployed on Vercel
-- Vercel Functions in `api/` call the Warcraft Logs v2 API (the client secret never reaches the browser). An analysis runs as several short requests (`/api/snapshot` per player, `/api/targets`, `/api/finish`) so long fights don't hit the function time limit.
+- Vercel Functions in `api/` call the Warcraft Logs v2 API (the client secret never reaches the browser). An analysis runs as several short requests (`/api/fight`, `/api/snapshot` per player, `/api/dashboard`, `/api/finish`) so long fights don't hit the function time limit.
 - Ability, buff and class icons load from Wowhead's icon CDN (wow.zamimg.com) using the icon names Warcraft Logs provides
 - Vercel Routing Middleware (`middleware.ts`) gates every page and API route behind the password
 - Supabase Postgres stores analyses (accessed only server-side with the service role key)
@@ -38,6 +39,18 @@ cp .env.example .env.local   # fill in values
 npx vercel dev               # runs the UI, API functions and middleware together
 npm test                     # offline checks of the analysis logic
 ```
+
+## Game content
+
+Everything specific to the game version is marked `GAME CONTENT` at the top of its file. To switch to WoW Forever, update:
+
+- `server/game.ts`: the version's name and which Warcraft Logs site(s) are accepted
+- `server/cooldowns.ts`: cooldowns to audit and their lengths
+- `server/buffs.ts`: buffs that any class can have (used for cross-class comparisons)
+- `src/statInfo.ts`: what each stat does, and the rating numbers
+- `server/discord/info.ts`: the bot's consumables lists
+
+Then run `supabase/cleanup.sql` with the new site name to clear out the old version's data.
 
 ## Discord bot
 

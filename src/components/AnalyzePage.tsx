@@ -121,7 +121,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
           setOtherUrl(link);
           loadOther(link, { fightId: Number(fid), name: name.join(':') });
         } else {
-          setCompareWith('none'); // older saved choices (auto, top parse, previous kill) aren't offered any more
+          setCompareWith('none');
         }
       })
       .catch((err) => {

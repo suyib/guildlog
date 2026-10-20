@@ -1,4 +1,4 @@
-import { COOLDOWNS, GAP_SECONDS, IGNORE_FOR_GAPS } from './cooldowns.js';
+import { GAP_SECONDS, IGNORE_FOR_GAPS, cooldownFor } from './cooldowns.js';
 import { isGeneralBuff } from './buffs.js';
 import type { AbilityRow, BuffRow, Comparison, CooldownUse, Finding, Gap, GearItem, PlayerSnapshot, Strength } from './types.js';
 import type { Actor, CastEvent, Fight, PlayerTables } from './wcl.js';
@@ -84,12 +84,12 @@ export function buildSnapshot(input: SnapshotInput): PlayerSnapshot {
   const cooldowns: CooldownUse[] = [];
   const byName = new Map<string, number[]>();
   for (const e of timeline) {
-    if (!(e.name in COOLDOWNS)) continue;
+    if (cooldownFor(e.name) === undefined) continue;
     if (!byName.has(e.name)) byName.set(e.name, []);
     byName.get(e.name)!.push(round(e.t));
   }
   for (const [name, times] of byName) {
-    const cd = COOLDOWNS[name];
+    const cd = cooldownFor(name)!;
     cooldowns.push({ name, cooldownSec: cd, uses: times.length, possible: possibleUses(fightSeconds, cd), times, icon: castIcons.get(name) });
   }
 
@@ -181,7 +181,8 @@ export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Fi
   for (const name of cdNames) {
     const mine = me.cooldowns.find((c) => c.name === name);
     const theirs = classRef?.cooldowns.find((c) => c.name === name);
-    const cd = COOLDOWNS[name];
+    const cd = mine?.cooldownSec ?? theirs?.cooldownSec ?? cooldownFor(name);
+    if (!cd) continue;
     const possible = possibleUses(me.fightSeconds, cd);
     const uses = mine?.uses ?? 0;
     if (uses >= possible) continue;
@@ -306,13 +307,9 @@ export function buildStrengths(me: PlayerSnapshot, comparisons: Comparison[], ge
   }
 
   // DPS against the comparisons
-  const beaten = comparisons.filter((c) => c.kind !== 'previous-kill' && c.snapshot.dps > 0 && me.dps > c.snapshot.dps);
+  const beaten = comparisons.filter((c) => c.snapshot.dps > 0 && me.dps > c.snapshot.dps);
   if (beaten.length) {
     out.push({ weight: 9, title: `More DPS than ${beaten.map((c) => c.snapshot.name).join(' and ')}`, detail: beaten.map((c) => `${Math.round(me.dps).toLocaleString('en-US')} vs ${Math.round(c.snapshot.dps).toLocaleString('en-US')}`).join('; ') + '.' });
-  }
-  const prev = comparisons.find((c) => c.kind === 'previous-kill')?.snapshot;
-  if (prev && me.dps > prev.dps * 1.02) {
-    out.push({ weight: 9, title: 'Improved on your last kill', detail: `${Math.round(me.dps).toLocaleString('en-US')} DPS, up from ${Math.round(prev.dps).toLocaleString('en-US')} (${Math.round(((me.dps - prev.dps) / prev.dps) * 100)}% better).` });
   }
 
   // Cooldowns used every time they were ready

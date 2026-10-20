@@ -253,11 +253,11 @@ export function GearTable({ gear }: { gear: GearItem[] }) {
 
 // ---------- Stats at the pull ----------
 
-export function StatsList({ stats, className, host }: { stats: Dashboard['stats']; className: string; host: string }) {
+export function StatsList({ stats, className }: { stats: Dashboard['stats']; className: string }) {
   return (
     <dl className="stat-list">
       {stats.map((s) => {
-        const tip = statTooltip(s.name, className, host.startsWith('fresh.'));
+        const tip = statTooltip(s.name, className);
         const id = `stat-tip-${s.name.replace(/\W+/g, '-').toLowerCase()}`;
         return (
           <div key={s.name} className={tip ? 'stat-item has-tip' : 'stat-item'} tabIndex={tip ? 0 : undefined} aria-describedby={tip ? id : undefined}>

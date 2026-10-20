@@ -49,7 +49,7 @@ export async function saveAnalysis(result: AnalysisResult): Promise<{ id: string
       spec_name: p.specName,
       dps: p.dps,
       parse_percent: p.parsePercent,
-      compare_key: result.compareKey ?? 'auto',
+      compare_key: result.compareKey ?? 'none',
       result,
     }),
   });
@@ -66,15 +66,6 @@ export async function getAnalysis(id: string): Promise<AnalysisResult | null> {
   const rows = await rest(`analyses?id=eq.${id}&select=id,created_at,result`);
   if (!rows?.[0]) return null;
   return { ...rows[0].result, id: rows[0].id, createdAt: rows[0].created_at };
-}
-
-/** The same character's most recent earlier analysis of the same boss, from another report. */
-export async function previousKill(playerName: string, encounterId: number, excludeCode: string): Promise<{ snapshot: PlayerSnapshot; createdAt: string } | null> {
-  if (!dbEnabled()) return null;
-  const q = `analyses?player_name=eq.${encodeURIComponent(playerName)}&encounter_id=eq.${encounterId}&report_code=neq.${encodeURIComponent(excludeCode)}&select=created_at,result&order=created_at.desc&limit=1`;
-  const rows = await rest(q);
-  if (!rows?.[0]) return null;
-  return { snapshot: rows[0].result.player, createdAt: rows[0].created_at };
 }
 
 // ---------- Caches (make repeat analyses fast) ----------
@@ -97,31 +88,6 @@ export async function putCachedSnapshot(key: string, snapshot: PlayerSnapshot): 
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify({ key, snapshot }),
-    });
-  } catch {
-    /* cache is optional */
-  }
-}
-
-/** Top-ranked parse lookups are slow and rankings change slowly, so reuse them for 12 hours. */
-export async function getCachedTop(key: string): Promise<unknown | undefined> {
-  if (!dbEnabled()) return undefined;
-  try {
-    const since = new Date(Date.now() - 12 * 3600_000).toISOString();
-    const rows = await rest(`top_cache?key=eq.${encodeURIComponent(key)}&created_at=gte.${since}&select=target`);
-    return rows?.[0] ? rows[0].target : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-export async function putCachedTop(key: string, target: unknown): Promise<void> {
-  if (!dbEnabled()) return;
-  try {
-    await rest('top_cache?on_conflict=key', {
-      method: 'POST',
-      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ key, target, created_at: new Date().toISOString() }),
     });
   } catch {
     /* cache is optional */

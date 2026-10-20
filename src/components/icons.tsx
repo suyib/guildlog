@@ -67,10 +67,7 @@ export function SeverityDot({ severity }: { severity: 'high' | 'medium' | 'low' 
 
 /** Human label for a saved comparison choice. */
 export function compareLabel(key: string | undefined): string {
-  if (!key || key === 'auto') return 'Auto';
-  if (key === 'top') return 'Top-ranked parse';
-  if (key === 'previous') return 'Previous kill';
-  if (key === 'none') return 'Nothing (just my stats)';
+  if (!key || key === 'none') return 'Nothing (just my stats)';
   if (key.startsWith('p:')) return `vs ${key.slice(2)}`;
   if (key.startsWith('l:')) return `vs ${key.split(':').slice(4).join(':')} (other log)`;
   return key;

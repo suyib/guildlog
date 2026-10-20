@@ -1,12 +1,11 @@
 // The analysis runs as several short requests so no single one hits Vercel's time limit:
 //   1. fight    -> the fight-wide table for everyone (damage, rankings, item levels), fetched ONCE
 //   2. snapshot -> one player's own tables + casts (called for you and each comparison, in parallel)
-//   3. top      -> finds a top-ranked parse of your spec on this boss (optional)
-//   4. finish   -> adds your previous kill, builds the findings and saves the result
+//   3. finish   -> builds the findings and saves the result
 import { buildFindings, buildSnapshot, buildStrengths } from './analysis.js';
-import { getCachedSnapshot, getCachedTop, previousKill, putCachedSnapshot, putCachedTop, saveAnalysis } from './db.js';
-import type { ActorRef, AnalysisResult, Comparison, Dashboard, FightPlayerRow, FightRef, PlayerSnapshot, ReportSummary, SnapshotTarget } from './types.js';
-import { type Actor, type Fight, getCastEvents, getFightData, getPlayerTables, getReportMeta, getTopRankings, parseReportUrl } from './wcl.js';
+import { getCachedSnapshot, putCachedSnapshot, saveAnalysis } from './db.js';
+import type { ActorRef, AnalysisResult, Comparison, Dashboard, FightPlayerRow, FightRef, PlayerSnapshot, ReportSummary } from './types.js';
+import { type Actor, type Fight, getCastEvents, getFightData, getPlayerTables, getReportMeta, parseReportUrl } from './wcl.js';
 
 export async function reportSummary(url: string): Promise<ReportSummary> {
   const parsed = parseReportUrl(url);
@@ -86,10 +85,11 @@ const toActor = (a: ActorRef): Actor => ({ id: a.id, name: a.name, type: 'Player
 
 /**
  * Step 2: one player's snapshot. Pass the player's fight row from step 1 so the fight-wide
- * table isn't fetched again; without it (a top parse from another report) only the damage table is fetched.
+ * table isn't fetched again; without it only the damage table is fetched.
  */
 export async function snapshotOne(host: string, code: string, fightRef: FightRef, actorRef: ActorRef, row?: FightPlayerRow): Promise<PlayerSnapshot> {
-  const cacheKey = `v1:${host}:${code}:${fightRef.id}:${fightRef.endTime}:${actorRef.id}`;
+  // v2: cooldowns are now tracked per game version, so snapshots cached before that are skipped
+  const cacheKey = `v2:${host}:${code}:${fightRef.id}:${fightRef.endTime}:${actorRef.id}`;
   const cached = await getCachedSnapshot(cacheKey);
   if (cached) return cached;
   const fresh = await buildFreshSnapshot(host, code, fightRef, actorRef, row);
@@ -120,37 +120,7 @@ async function buildFreshSnapshot(host: string, code: string, fightRef: FightRef
   return snapshot;
 }
 
-/** Step 3: a top-ranked parse of the same spec on this boss. */
-export async function topParseTarget(host: string, fight: FightRef, me: { name: string; className: string; specName: string }): Promise<SnapshotTarget | null> {
-  if (!me.specName) throw new Error('your spec is unknown for this fight');
-  const cacheKey = `v1:${host}:${fight.encounterID}:${me.className}:${me.specName}:${me.name}`;
-  const cached = await getCachedTop(cacheKey);
-  if (cached !== undefined) return cached as SnapshotTarget | null;
-  const target = await findTopParse(host, fight, me);
-  await putCachedTop(cacheKey, target);
-  return target;
-}
-
-async function findTopParse(host: string, fight: FightRef, me: { name: string; className: string; specName: string }): Promise<SnapshotTarget | null> {
-  const ranks = await getTopRankings(host, fight.encounterID, me.className, me.specName);
-  const pick = ranks.find((r) => r.name !== me.name);
-  if (!pick) return null;
-  const tMeta = await getReportMeta(host, pick.code, 20_000);
-  const tFight = tMeta.fights.find((f) => f.id === pick.fightID);
-  const tActor = tMeta.masterData.actors.find((a) => a.name === pick.name && a.type === 'Player');
-  if (!tFight || !tActor) return null;
-  return {
-    kind: 'top-parse',
-    label: `${pick.name} (top ranked)`,
-    host,
-    code: pick.code,
-    fight: { id: tFight.id, encounterID: tFight.encounterID, name: tFight.name, startTime: tFight.startTime, endTime: tFight.endTime, kill: !!tFight.kill },
-    actor: { id: tActor.id, name: tActor.name, className: tActor.subType },
-    sameClass: tActor.subType === me.className,
-  };
-}
-
-/** Step 4: add your previous kill (if wanted), build findings and save. */
+/** Step 3: build the findings and save. */
 export async function finish(input: { player: PlayerSnapshot; comparisons: Comparison[]; compareKey: string; notes: string[]; dashboard?: Dashboard }): Promise<AnalysisResult> {
   const { player, compareKey } = input;
   const notes = [...input.notes];
@@ -164,21 +134,7 @@ export async function finish(input: { player: PlayerSnapshot; comparisons: Compa
       notes.push(`${c.snapshot.name} did no damage in this fight, so they were left out.`);
       return false;
     })
-    .map((c) => (c.kind === 'previous-kill' ? c : { ...c, sameClass: sameSpec(c.snapshot) }));
-
-  if (compareKey === 'auto' || compareKey === 'previous') {
-    try {
-      const prev = await previousKill(player.name, player.encounterId, player.reportCode);
-      if (prev) comparisons.push({ kind: 'previous-kill', label: `Your kill on ${prev.createdAt.slice(0, 10)}`, snapshot: prev.snapshot, sameClass: true });
-      else if (compareKey === 'previous') notes.push('No earlier saved kill of this boss to compare with yet.');
-    } catch (e) {
-      notes.push(`Couldn’t load previous kill: ${(e as Error).message}`);
-    }
-  }
-
-  // Same-report players first, so they are the main comparison
-  const order = { 'same-report': 0, 'chosen-player': 0, 'other-log': 0, 'top-parse': 1, 'previous-kill': 2 } as const;
-  comparisons.sort((a, b) => order[a.kind] - order[b.kind]);
+    .map((c) => ({ ...c, sameClass: sameSpec(c.snapshot) }));
 
   const result: AnalysisResult = { player, comparisons, findings: buildFindings(player, comparisons), strengths: buildStrengths(player, comparisons, input.dashboard?.gear), notes, compareKey, ...(input.dashboard ? { dashboard: input.dashboard } : {}) };
   try {

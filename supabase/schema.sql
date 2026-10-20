@@ -12,13 +12,14 @@ create table if not exists public.analyses (
   spec_name text,
   dps numeric,
   parse_percent numeric,
-  compare_key text not null default 'auto',
+  compare_key text not null default 'none',
   result jsonb not null
 );
 
 -- One saved analysis per report + fight + player + comparison choice,
 -- so each comparison keeps its own shareable link.
-alter table public.analyses add column if not exists compare_key text not null default 'auto';
+alter table public.analyses add column if not exists compare_key text not null default 'none';
+alter table public.analyses alter column compare_key set default 'none';
 alter table public.analyses drop constraint if exists analyses_report_code_fight_id_player_name_key;
 create unique index if not exists analyses_unique_comparison on public.analyses (report_code, fight_id, player_name, compare_key);
 create index if not exists analyses_player_encounter on public.analyses (player_name, encounter_id, created_at desc);
@@ -32,13 +33,7 @@ create table if not exists public.snapshot_cache (
   created_at timestamptz not null default now(),
   snapshot jsonb not null
 );
-create table if not exists public.top_cache (
-  key text primary key,
-  created_at timestamptz not null default now(),
-  target jsonb
-);
 alter table public.snapshot_cache enable row level security;
-alter table public.top_cache enable row level security;
 
 -- ---------- Discord bot ----------
 

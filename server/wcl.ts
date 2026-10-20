@@ -2,6 +2,8 @@
 // Response shapes for `table(...)` and `rankings` are JSON scalars, so they are typed loosely
 // and read defensively in analysis.ts.
 
+import { GAME } from './game.js';
+
 const TOKEN_URL = 'https://www.warcraftlogs.com/oauth/token';
 const HOST_RE = /^([a-z0-9-]+\.)?warcraftlogs\.com$/i;
 
@@ -73,10 +75,11 @@ export function parseReportUrl(input: string): ParsedUrl {
   } catch {
     throw new Error('That doesn’t look like a link. Paste a full Warcraft Logs report URL.');
   }
-  if (!HOST_RE.test(url.hostname)) throw new Error('Only warcraftlogs.com links are supported.');
+  const host = url.hostname.toLowerCase();
+  if (!HOST_RE.test(host)) throw new Error('Only Warcraft Logs links are supported.');
+  if (!GAME.hosts.includes(host)) throw new Error(`This site is set up for ${GAME.name} logs only (${GAME.hosts.join(', ')}).`);
   const m = url.pathname.match(/\/reports\/([A-Za-z0-9]+)/);
   if (!m) throw new Error('Couldn’t find a report code in that link.');
-  const host = url.hostname.toLowerCase() === 'warcraftlogs.com' ? 'www.warcraftlogs.com' : url.hostname.toLowerCase();
   const source = url.searchParams.get('source');
   return { host, code: m[1], fight: url.searchParams.get('fight') ?? undefined, source: source ? Number(source) : undefined };
 }
@@ -174,19 +177,6 @@ export async function getCastEvents(host: string, code: string, fight: Fight, so
     start = rep.events?.nextPageTimestamp ?? null;
   }
   return { events: events.filter((e) => e.type === 'cast'), abilities };
-}
-
-export interface TopRanking { name: string; amount: number; code: string; fightID: number }
-
-export async function getTopRankings(host: string, encounterId: number, className: string, specName: string): Promise<TopRanking[]> {
-  const q = `query($enc:Int!,$cls:String!,$spec:String!){worldData{encounter(id:$enc){
-    characterRankings(className:$cls, specName:$spec, metric:dps)
-  }}}`;
-  const d = await gql<{ worldData: { encounter: { characterRankings: any } | null } }>(host, q, { enc: encounterId, cls: className, spec: specName }, 20_000);
-  const list: any[] = d.worldData.encounter?.characterRankings?.rankings ?? [];
-  return list
-    .filter((r) => r?.report?.code)
-    .map((r) => ({ name: r.name, amount: r.amount, code: r.report.code, fightID: r.report.fightID }));
 }
 
 /** The report's region slug (e.g. "eu", "us"), for character portraits. Separate query so it can't break report loading. */

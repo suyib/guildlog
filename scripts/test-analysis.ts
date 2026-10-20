@@ -4,6 +4,7 @@ import { buildFindings, buildSnapshot, findGaps, possibleUses } from '../server/
 import type { Fight, PlayerTables } from '../server/wcl';
 import { dpsSeriesFrom, survivalFrom } from '../server/dashboard';
 import { statTooltip } from '../src/statInfo';
+import { cooldownFor } from '../server/cooldowns';
 
 const fight: Fight = { id: 11, encounterID: 651, name: 'Magtheridon', startTime: 0, endTime: 177_000, kill: true, size: 25, difficulty: 3 };
 const abilities = new Map<number, string>([[1, 'Steady Shot'], [2, 'Bestial Wrath'], [3, 'Blood Fury'], [4, 'Auto Shot'], [5, 'Arcane Shot']]);
@@ -57,7 +58,7 @@ assert.ok(me.gaps.some((g) => g.start <= 130 && g.end >= 140), 'expected the 129
 assert.deepEqual(findGaps([5, 6, 20], 22), [{ start: 6, end: 20, seconds: 14 }]);
 assert.deepEqual(findGaps([12], 13), [{ start: 6, end: 12, seconds: 6 }]);
 
-const findings = buildFindings(me, [{ kind: 'same-report', label: 'Muddy (same raid)', snapshot: muddy, sameClass: true }]);
+const findings = buildFindings(me, [{ kind: 'chosen-player', label: 'Muddy (same raid)', snapshot: muddy, sameClass: true }]);
 for (const f of findings) console.log(`[${f.severity}] ${f.title}\n    ${f.detail}`);
 assert.ok(findings.some((f) => f.title.startsWith('Bestial Wrath: 1 of 2')));
 assert.ok(findings.some((f) => f.title.includes('Fewer Steady Shot casts')));
@@ -97,8 +98,11 @@ assert.equal(sv.compared, 8);
 const tank = survivalFrom(taken, 1, [1, 2], ids)!;
 assert.equal(tank.abilities.find((a) => a.name === 'Cleave')?.avoidable, false, 'tank-only damage is not avoidable');
 
-// Stat tooltips: level-70 numbers only on Fresh logs
-assert.ok(statTooltip('Hit', 'Hunter', true)!.includes('142'));
-assert.ok(!/\d/.test(statTooltip('Hit', 'Hunter', false)!));
+// Stat tooltips explain the stat for the class
+assert.ok(statTooltip('Hit', 'Hunter')!.includes('142'));
+
+// Cooldown names match regardless of case and curly apostrophes
+assert.equal(cooldownFor('bestial wrath'), 120);
+assert.equal(cooldownFor('Celestial Alignment'), undefined);
 
 console.log('\nAll analysis checks passed.');

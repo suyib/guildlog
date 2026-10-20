@@ -1,3 +1,4 @@
+// GAME CONTENT (Burning Crusade for now; replace with WoW Forever's buffs once they're known).
 // Buffs that any class can have, so they're fair to compare across classes.
 export const GENERAL_BUFF_HINTS = [
   'Bloodlust', 'Heroism', 'Power Infusion', 'Leader of the Pack', 'Unleashed Rage', 'Trueshot Aura', 'Battle Shout',

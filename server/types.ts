@@ -48,15 +48,13 @@ export interface PlayerSnapshot {
   damageTaken: { name: string; total: number }[];
 }
 
-export type ComparisonKind = 'same-report' | 'chosen-player' | 'other-log' | 'top-parse' | 'previous-kill';
+export type ComparisonKind = 'chosen-player' | 'other-log';
 
 /** What the user picked in the "Compare with" dropdown. */
 export type CompareChoice =
-  | { kind: 'auto' }
-  | { kind: 'player'; playerId: number }
-  | { kind: 'top' }
-  | { kind: 'previous' }
   | { kind: 'none' }
+  /** Someone in the same fight. */
+  | { kind: 'player'; playerId: number }
   /** Someone in a different report: you pick the log, fight and player. */
   | { kind: 'log'; host: string; code: string; fight: FightRef; actor: ActorRef };
 
@@ -153,7 +151,7 @@ export interface AnalysisResult {
   /** Present for "Just my stats" analyses. */
   dashboard?: Dashboard;
   id?: string;
-  /** Which comparison was chosen: 'auto' | 'top' | 'previous' | 'p:<player name>'. */
+  /** Which comparison was chosen: 'none', 'p:<player name>' or 'l:<host>:<code>:<fight>:<player name>'. */
   compareKey?: string;
   createdAt?: string;
   player: PlayerSnapshot;
