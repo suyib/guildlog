@@ -12,7 +12,7 @@ import { RAID_CHECKLIST, ROLE_CHOICES, type Role, consumablesMessage, lookupMess
 import { PAGES, type Page, pageButtons, personalPage, raidSummary, siteLink } from './pages.js';
 import {
   type Claim, approvedClaimsFor, claimOnCharacter, claimsFor, createClaim, createRaid, createReminder, decideClaim, endRaid, getClaim, lastSeen,
-  latestRaidStartedBy, raidByCode, recentRaids, removeClaim, storedFights,
+  latestOpenRaid, latestRaidStartedBy, raidByCode, recentRaids, removeClaim, storedFights,
 } from './store.js';
 import { parseWhen } from './time.js';
 
@@ -45,8 +45,7 @@ export const COMMANDS = [
     ],
   },
   {
-    name: 'raidend', description: 'Post the raid summary with buttons for personal summaries', ...contexts,
-    options: [{ type: STRING, name: 'link', description: 'Warcraft Logs link (default: the raid you started)' }],
+    name: 'raidend', description: 'End the raid you started with /raidstart and post its summary', ...contexts,
   },
   {
     name: 'raids', description: 'Your summaries for one of the last 5 raids, or any Warcraft Logs link', ...contexts,
@@ -264,27 +263,26 @@ async function raidStart(i: Interaction): Promise<Outcome> {
   });
 }
 
+/**
+ * Ends the raid this person started with /raidstart: the log comes from that raid, so no link is
+ * needed. Only the person who started it can end it.
+ */
 async function raidEnd(i: Interaction): Promise<Outcome> {
-  const link = opt(i.data?.options, 'link') as string | undefined;
   const me = userOf(i).id;
   return deferred(i, async () => {
-    let host: string, code: string;
-    if (link) {
-      ({ host, code } = parseReportUrl(link));
-    } else {
-      const r = await latestRaidStartedBy(me);
-      if (!r) return { content: 'I couldn’t find a raid you started. Add the Warcraft Logs link: `/raidend link:`' };
-      ({ host, report_code: code } = r);
+    const raid = await latestRaidStartedBy(me);
+    if (!raid) {
+      const open = await latestOpenRaid();
+      return open
+        ? { content: `Only <@${open.started_by}>, who started ${open.title ?? 'the current raid'}, can end it.` }
+        : { content: 'There\u2019s no raid in progress. Start one with `/raidstart` first.' };
     }
-    const raid = await raidByCode(code);
-    if (raid && raid.started_by !== me && !(await isOfficer(i))) return { content: 'Only the person who started this raid, or an officer, can end it.' };
     const channelId = env.raidChannel() || (i.guild_id ? i.channel_id! : '');
     if (!channelId) return { content: 'No raid channel is set up yet (DISCORD_RAID_CHANNEL_ID in Vercel).' };
-    const digest = await raidDigest(host, code, 40_000);
-    await postToChannel(channelId, raidSummary(digest, raid?.logger_id ?? null));
-    if (!raid) await createRaid({ host, report_code: code, title: digest.meta.title, started_by: me, logger_id: null }).catch(() => undefined);
-    await endRaid(code).catch(() => undefined);
-    return { content: `Summary posted in <#${channelId}>.` };
+    const digest = await raidDigest(raid.host, raid.report_code, 40_000);
+    await postToChannel(channelId, raidSummary(digest, raid.logger_id));
+    await endRaid(raid.report_code);
+    return { content: `Summary for ${raid.title ?? 'the raid'} posted in <#${channelId}>.` };
   });
 }
 

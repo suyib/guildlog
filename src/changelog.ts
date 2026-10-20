@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.12.0',
+    date: '2026-10-20',
+    changes: [
+      'Cast timeline in the style of Warcraft Logs: auto attacks shown, casts colored by ability, and a legend to hide or show each ability.',
+      'Cast timeline zooms with the scroll wheel, drags to move, and double-click resets.',
+      'Bot: /raidend no longer takes a link. It ends the raid you started with /raidstart, and only you can end it.',
+    ],
+  },
+  {
     version: '0.11.3',
     date: '2026-10-20',
     changes: ['Cast timeline: the hover tooltip follows the cursor and lists every cast and active Bloodlust or cooldown at that moment.'],

@@ -375,15 +375,36 @@ progress.uptime-bar { height: 8px; color: var(--primary-light); }
 .timeline .tick { fill: var(--ink-3); font: 11px var(--font-mono); }
 .timeline .name { fill: var(--ink-2); font-size: 13px; }
 .timeline .name.me { font-weight: 700; }
-.timeline .cast { stroke: rgba(245, 243, 245, 0.35); stroke-width: 1.2; }
-.timeline .cast.me { stroke: var(--primary-light); }
+.timeline { cursor: grab; touch-action: pan-y; user-select: none; }
+.timeline:active { cursor: grabbing; }
+.timeline .cast { stroke: var(--slot-other); stroke-width: 1.6; stroke-linecap: round; }
+.timeline .cast.auto { stroke: #e05d5d; stroke-width: 1.2; }
+.timeline .cast.slot-1 { stroke: var(--slot-1); } .timeline .cast.slot-2 { stroke: var(--slot-2); } .timeline .cast.slot-3 { stroke: var(--slot-3); }
+.timeline .cast.slot-4 { stroke: var(--slot-4); } .timeline .cast.slot-5 { stroke: var(--slot-5); } .timeline .cast.slot-6 { stroke: var(--slot-6); }
+.timeline .cast.slot-7 { stroke: var(--slot-7); }
+.timeline .baseline { stroke: var(--line); }
+
+/* Ability legend above the timeline (click to hide or show) */
+.tl-legend { display: flex; flex-wrap: wrap; gap: 6px; }
+.tl-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill); background: transparent;
+  color: var(--ink-2); font: 600 12px var(--font-sans); letter-spacing: 0.01em;
+}
+.tl-chip:hover:not(:disabled) { background: var(--hover); }
+.tl-chip.off { opacity: 0.4; }
+.tl-chip.off .swatch { background: transparent !important; outline: 1px solid var(--ink-3); }
+.tl-chip .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.tl-chip .tl-count { color: var(--ink-3); font-family: var(--font-mono); font-weight: 400; }
+.swatch.auto { background: #e05d5d; }
+.tl-help { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 34px; }
 .timeline .gap { fill: var(--gap-band); }
 .timeline .cd { fill: var(--cooldown); }
 .timeline .win-lust { fill: rgba(255, 128, 0, 0.18); }
 .timeline .win-cd { fill: rgba(255, 209, 0, 0.75); }
 .timeline .hover-line { stroke: var(--ink); stroke-width: 1; opacity: 0.6; }
 .timeline .row.on .name { fill: var(--ink); }
-.timeline-wrap { position: relative; }
+.timeline-wrap { position: relative; display: flex; flex-direction: column; gap: 10px; }
 /* Let the hover tooltip spill outside the timeline's box */
 .timeline { overflow: visible; }
 .timeline-tip rect { fill: #0f0d0b; stroke: var(--line); }

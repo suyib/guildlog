@@ -235,7 +235,7 @@ function Rotation({ result, all }: { result: AnalysisResult; all: Row[] }) {
     <>
       <section className="panel">
         <h2 className="panel-title">Cast timeline</h2>
-        <p className="muted small">Each tick is a cast (auto attacks excluded). Red bands are gaps over 4 seconds; yellow dots are major cooldowns. Hover a row to see what was cast and when Bloodlust (orange band) and your cooldowns (yellow bars) were up.</p>
+        <p className="muted small">Each bar is a cast, colored by ability; short red bars are auto attacks. Red bands are gaps over 4 seconds without a cast, and yellow dots are major cooldowns. Hover a row to see what was cast and when Bloodlust (orange band) and your cooldowns (yellow bars) were up.</p>
         <Timeline players={all.map((p) => ({ label: p.me ? 'You' : p.s.name, snapshot: p.s }))} />
       </section>
 

@@ -38,7 +38,7 @@ assert.match(bad.response.data.content, /doesn.t look like a character name/);
 // Command definitions stay within Discord's limits
 for (const c of COMMANDS) {
   assert.ok(/^[a-z]{1,32}$/.test(c.name) && c.description.length <= 100, `bad command ${c.name}`);
-  for (const o of c.options ?? []) assert.ok((o as any).description.length <= 100, `long option description on /${c.name} ${(o as any).name}`);
+  for (const o of (c as { options?: unknown[] }).options ?? []) assert.ok((o as any).description.length <= 100, `long option description on /${c.name} ${(o as any).name}`);
 }
 
 // Reminder message uses Discord timestamps so everyone sees their own local time

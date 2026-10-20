@@ -155,7 +155,7 @@ export function buildSnapshot(input: SnapshotInput): PlayerSnapshot {
     cooldowns,
     gaps,
     castSeconds: active.map((t) => round(t)),
-    casts: timeline.filter((e) => !IGNORE_FOR_GAPS.has(e.name)).map((e) => ({ t: round(e.t), name: e.name })),
+    casts: timeline.map((e) => ({ t: round(e.t, 2), name: e.name, ...(IGNORE_FOR_GAPS.has(e.name) ? { auto: true } : {}) })),
     windows,
     deaths,
     damageTaken,

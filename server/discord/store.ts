@@ -80,6 +80,11 @@ export async function latestRaidStartedBy(userId: string): Promise<Raid | null> 
   return (await rest(`bot_raids?started_by=eq.${q(userId)}&ended_at=is.null&order=started_at.desc&limit=1`))?.[0] ?? null;
 }
 
+/** The most recent raid that's been started but not ended, by anyone. */
+export async function latestOpenRaid(): Promise<Raid | null> {
+  return (await rest(`bot_raids?ended_at=is.null&order=started_at.desc&limit=1`))?.[0] ?? null;
+}
+
 export async function raidByCode(code: string): Promise<Raid | null> {
   return (await rest(`bot_raids?report_code=eq.${q(code)}&limit=1`))?.[0] ?? null;
 }
