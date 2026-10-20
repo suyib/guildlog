@@ -39,3 +39,59 @@ create table if not exists public.top_cache (
 );
 alter table public.snapshot_cache enable row level security;
 alter table public.top_cache enable row level security;
+
+-- ---------- Discord bot ----------
+
+-- Characters people have claimed. An officer approves each claim.
+create table if not exists public.bot_claims (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  discord_id text not null,
+  discord_name text not null,
+  character text not null,
+  character_key text not null,          -- lower-case name, for matching
+  realm text,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  decided_by text,
+  decided_at timestamptz
+);
+create index if not exists bot_claims_discord on public.bot_claims (discord_id);
+create index if not exists bot_claims_character on public.bot_claims (character_key);
+
+-- Raids started with /raidstart (one row per Warcraft Logs report).
+create table if not exists public.bot_raids (
+  id uuid primary key default gen_random_uuid(),
+  host text not null,
+  report_code text not null unique,
+  title text,
+  started_by text not null,
+  logger_id text,
+  started_at timestamptz not null default now(),
+  ended_at timestamptz
+);
+
+-- Everyone's numbers for one boss fight, built once so button clicks are instant.
+create table if not exists public.bot_raid_fights (
+  report_code text not null,
+  fight_id int not null,
+  created_at timestamptz not null default now(),
+  data jsonb not null,
+  primary key (report_code, fight_id)
+);
+
+-- Reminders posted by the scheduled job.
+create table if not exists public.bot_reminders (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  channel_id text not null,
+  created_by text not null,
+  send_at timestamptz not null,
+  payload jsonb not null,
+  sent boolean not null default false
+);
+create index if not exists bot_reminders_due on public.bot_reminders (sent, send_at);
+
+alter table public.bot_claims enable row level security;
+alter table public.bot_raids enable row level security;
+alter table public.bot_raid_fights enable row level security;
+alter table public.bot_reminders enable row level security;

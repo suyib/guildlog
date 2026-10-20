@@ -44,12 +44,12 @@ export async function reportSummary(url: string): Promise<ReportSummary> {
   };
 }
 
-function rankingRows(rankings: any): any[] {
+export function rankingRows(rankings: any): any[] {
   const roles = rankings?.data?.[0]?.roles ?? {};
   return ['tanks', 'healers', 'dps'].flatMap((r) => roles[r]?.characters ?? []);
 }
 
-function detailRows(details: any): any[] {
+export function detailRows(details: any): any[] {
   const d = details?.data?.playerDetails ?? details?.playerDetails ?? {};
   return ['tanks', 'healers', 'dps'].flatMap((r) => d[r] ?? []);
 }

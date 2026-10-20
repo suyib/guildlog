@@ -19,7 +19,7 @@ const STAT_ORDER = [
 
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-function gearFrom(raw: any[]): GearItem[] {
+export function gearFrom(raw: any[]): GearItem[] {
   return raw
     .map((g: any, i: number): GearItem | null => {
       const slot = typeof g?.slot === 'number' ? g.slot : i;
@@ -45,7 +45,7 @@ function gearFrom(raw: any[]): GearItem[] {
     .sort((a, b) => a.slot - b.slot);
 }
 
-function statsFrom(raw: Record<string, any> | null | undefined): Dashboard['stats'] {
+export function statsFrom(raw: Record<string, any> | null | undefined): Dashboard['stats'] {
   if (!raw || typeof raw !== 'object') return [];
   const rows = Object.entries(raw)
     .map(([name, v]) => {

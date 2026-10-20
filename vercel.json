@@ -2,6 +2,7 @@
   "functions": {
     "api/*.ts": { "maxDuration": 60 }
   },
+  "crons": [{ "path": "/api/cron", "schedule": "0 17 * * *" }],
   "rewrites": [
     { "source": "/a/:id", "destination": "/index.html" },
     { "source": "/terms", "destination": "/index.html" },

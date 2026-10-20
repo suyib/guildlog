@@ -18,7 +18,7 @@ Every analysis is saved to Supabase, so it stays available after Warcraft Logs a
 
 ## Setup
 
-1. **Warcraft Logs API client**: create one at https://www.warcraftlogs.com/api/clients (any name; redirect URL can be your site URL). Copy the client ID and secret.
+1. **Warcraft Logs API client**: create one at https://www.warcraftlogs.com/api/clients (any name; redirect URL: https://guildlog.uk). Copy the client ID and secret.
 2. **Supabase**: create a project, open the SQL editor and run `supabase/schema.sql`. Copy the project URL and the service role key (Settings → API).
 3. **Vercel**: import this repo, then add these environment variables (see `.env.example`):
    - `APP_PASSWORD`: the guild password
@@ -26,7 +26,7 @@ Every analysis is saved to Supabase, so it stays available after Warcraft Logs a
    - `WCL_CLIENT_ID`, `WCL_CLIENT_SECRET`
    - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 4. **Optional, character portraits**: create a client at https://develop.battle.net/access/clients and add `BLIZZARD_CLIENT_ID` and `BLIZZARD_CLIENT_SECRET` in Vercel. Without them the class icon is shown instead. If portraits don't appear, set `BLIZZARD_PROFILE_NAMESPACES` to the namespace your realms use (e.g. `profile-classicann`).
-5. **Domain**: in Vercel → Project → Domains, add your subdomain (e.g. `logs.suyin.uk`) and create the CNAME record it shows you.
+5. **Domain**: the live site is https://guildlog.uk. In Vercel → Project → Settings → Domains it's added with `www.guildlog.uk` and `guildlog-pi.vercel.app` redirecting to it. The app builds share links from whatever domain it's opened on, so no code changes are needed when the domain changes.
 
 Changing `APP_PASSWORD` doesn't sign people out; changing `SESSION_SECRET` does.
 
@@ -38,6 +38,18 @@ cp .env.example .env.local   # fill in values
 npx vercel dev               # runs the UI, API functions and middleware together
 npm test                     # offline checks of the analysis logic
 ```
+
+## Discord bot
+
+The bot runs on the same Vercel project (no extra server). Commands: `/raidstart`, `/raidend`, `/raids`, `/check`, `/claim`, `/unclaim`, `/remind`, `/info`. Character numbers are only ever sent by DM (or shown to the person who asked); channels only get raid-wide summaries.
+
+1. In the Discord developer portal, create the app and bot, then add the `DISCORD_*` values and `CRON_SECRET` to Vercel (see `.env.example`) and redeploy.
+2. Set **Interactions Endpoint URL** to `https://guildlog.uk/api/discord`.
+3. Invite the bot with the `bot` and `applications.commands` scopes (permissions: Send Messages, Embed Links, View Channels).
+4. Open `https://guildlog.uk/api/discord-register?key=YOUR_CRON_SECRET` to register the commands (again whenever they change).
+5. For reminders, have a free scheduler (e.g. cron-job.org) open `https://guildlog.uk/api/cron?key=YOUR_CRON_SECRET` every 5 minutes. Vercel also runs it once a day as a backup.
+
+Raid summaries are built once per boss kill (a few fight-wide Warcraft Logs queries) and stored in `bot_raid_fights`, so button presses are instant afterwards.
 
 ## Releases
 

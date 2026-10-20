@@ -137,11 +137,26 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
 
   async function onLoad(e: React.FormEvent) {
     e.preventDefault();
+    await loadMain(url);
+  }
+
+  // Links from the Discord bot open the site with ?log=<Warcraft Logs link> and load it straight away
+  useEffect(() => {
+    if (initial) return;
+    const log = new URLSearchParams(window.location.search).get('log');
+    if (!log) return;
+    setUrl(log);
+    history.replaceState(null, '', '/');
+    loadMain(log);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadMain(link: string) {
     setError(null);
     setResult(null);
     setBusy('report');
     try {
-      const r = await loadReport(url);
+      const r = await loadReport(link);
       setReport(r);
       setFightId(r.suggestedFight ?? r.fights.at(-1)?.id ?? '');
       setPlayerId(r.suggestedPlayer ?? '');

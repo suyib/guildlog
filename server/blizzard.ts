@@ -53,3 +53,22 @@ export async function characterPortrait(region: string, realm: string, name: str
   }
   return null;
 }
+
+/** Character level from the Blizzard profile API, or null if it can't be found. */
+export async function characterLevel(region: string, realm: string, name: string): Promise<number | null> {
+  const t = await getToken();
+  if (!t || !/^(us|eu|kr|tw)$/.test(region)) return null;
+  const configured = (process.env.BLIZZARD_PROFILE_NAMESPACES ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  for (const ns of configured.length ? configured : DEFAULT_NAMESPACES) {
+    try {
+      const url = `https://${region}.api.blizzard.com/profile/wow/character/${realmSlug(realm)}/${encodeURIComponent(name.toLowerCase())}?namespace=${ns}-${region}&locale=en_US`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${t}` }, signal: AbortSignal.timeout(4000) });
+      if (!res.ok) continue;
+      const body = (await res.json()) as { level?: number };
+      if (typeof body.level === 'number') return body.level;
+    } catch {
+      /* try the next namespace */
+    }
+  }
+  return null;
+}

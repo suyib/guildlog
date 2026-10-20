@@ -8,7 +8,7 @@ function cfg() {
   return { url: url.replace(/\/$/, ''), key };
 }
 
-async function rest(path: string, init: RequestInit = {}): Promise<any> {
+export async function rest(path: string, init: RequestInit = {}): Promise<any> {
   const c = cfg();
   if (!c) throw new Error('Supabase is not configured');
   const res = await fetch(`${c.url}/rest/v1/${path}`, {

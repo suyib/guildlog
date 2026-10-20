@@ -1,7 +1,7 @@
 // Terms of Service and Privacy Policy. Public pages (no guild password), so Discord and anyone
 // asked to use the bot can read them. Keep the "Last updated" date current when editing.
 
-const UPDATED = 'October 20, 2026';
+const UPDATED = 'October 21, 2026';
 const CONTACT = 'message Suyin on the guild Discord server';
 
 export default function LegalPage({ doc }: { doc: 'terms' | 'privacy' }) {
@@ -104,8 +104,9 @@ function Privacy() {
           numbers such as damage, casts, buffs, deaths, damage taken, gear and parse percentile. This comes from logs already uploaded to Warcraft Logs.
         </li>
         <li>
-          <strong>Discord links.</strong> If you use the bot, we store your Discord user ID and username, the characters you claim, and whether an officer
-          approved the claim.
+          <strong>Discord.</strong> If you use the bot, we store your Discord user ID and username, the characters you claim, and whether an officer
+          approved the claim. For raids and reminders we store who started the raid, who logged it, and who set each reminder. Your own numbers
+          are sent to you by direct message; only raid-wide summaries are posted in channels.
         </li>
         <li>
           <strong>A sign-in cookie.</strong> After you enter the guild password, a cookie named <code>gl_session</code> keeps you signed in for up to 30

@@ -9,6 +9,17 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.10.0',
+    date: '2026-10-21',
+    changes: [
+      'Discord bot: /raidstart, /raidend, /raids, /check, /claim, /unclaim, /remind and /info.',
+      'Raid summaries in the raid channel, with buttons that DM each person their own overview, rotation, damage, gear and survival.',
+      'Character claims approved by officers.',
+      'Links from the bot open the site with the log already loaded.',
+      'Privacy Policy updated for the bot.',
+    ],
+  },
+  {
     version: '0.9.2',
     date: '2026-10-20',
     changes: ['Terms of Service and Privacy Policy pages, linked in the menu and on the password page. Both open without the password.'],

@@ -1,0 +1,453 @@
+// Slash commands and button handlers for the Guild Logs bot.
+// Rule of thumb: anything about one person's character is sent by DM (or shown only to them);
+// only raid-wide information is posted in channels.
+import { characterLevel } from '../blizzard.js';
+import { rest } from '../db.js';
+import { getReportMeta, getReportRegion, parseReportUrl } from '../wcl.js';
+import {
+  BRAND, EPHEMERAL, type Embed, type MessageBody, button, editReply, env, linkButton, memberRoles, postToChannel, row, sendDm,
+} from './api.js';
+import { type RaidDigest, playerFights, raidDigest } from './digest.js';
+import { RAID_CHECKLIST, ROLE_CHOICES, type Role, consumablesMessage, lookupMessage } from './info.js';
+import { PAGES, type Page, pageButtons, personalPage, raidSummary, siteLink } from './pages.js';
+import {
+  type Claim, approvedClaimsFor, claimOnCharacter, claimsFor, createClaim, createRaid, createReminder, decideClaim, endRaid, getClaim, lastSeen,
+  latestRaidStartedBy, raidByCode, recentRaids, removeClaim, storedFights,
+} from './store.js';
+import { parseWhen } from './time.js';
+
+// ---------- Command definitions (sent to Discord by /api/discord-register) ----------
+
+const STRING = 3, INTEGER = 4, BOOLEAN = 5, USER = 6, ROLE = 8, SUB = 1;
+// Usable in the server and in DMs with the bot
+const contexts = { contexts: [0, 1], integration_types: [0] };
+
+export const COMMANDS = [
+  {
+    name: 'remind', description: 'Officers: schedule a raid reminder', ...contexts,
+    options: [
+      { type: STRING, name: 'message', description: 'What to say, e.g. "Gruul’s Lair tonight"', required: true, max_length: 300 },
+      { type: STRING, name: 'time', description: 'Gather time, e.g. 19:45 or 7:45pm (guild time)', required: true },
+      { type: STRING, name: 'day', description: 'today, tomorrow, friday, 24/10 or 2026-10-24 (default: next time it’s that time)' },
+      { type: STRING, name: 'place', description: 'Where to gather, e.g. "Outside Gruul’s Lair"', max_length: 100 },
+      { type: BOOLEAN, name: 'consumes', description: 'Add a "bring your consumables" checklist' },
+      { type: INTEGER, name: 'minutes_before', description: 'Post the reminder this many minutes before (default 15)', min_value: 0, max_value: 1440 },
+      { type: ROLE, name: 'ping', description: 'Role to mention' },
+    ],
+  },
+  {
+    name: 'raidstart', description: 'Officers: post the live log for tonight’s raid', ...contexts,
+    options: [
+      { type: STRING, name: 'link', description: 'Warcraft Logs live log link', required: true },
+      { type: USER, name: 'logger', description: 'Who is logging (default: you)' },
+      { type: STRING, name: 'note', description: 'Anything to add', max_length: 200 },
+    ],
+  },
+  {
+    name: 'raidend', description: 'Post the raid summary with buttons for personal summaries', ...contexts,
+    options: [{ type: STRING, name: 'link', description: 'Warcraft Logs link (default: the raid you started)' }],
+  },
+  {
+    name: 'raids', description: 'Your summaries for one of the last 5 raids, or any Warcraft Logs link', ...contexts,
+    options: [{ type: STRING, name: 'link', description: 'A Warcraft Logs report link' }],
+  },
+  {
+    name: 'check', description: 'Your character: class, spec, item level, stats and last raid (sent by DM)', ...contexts,
+    options: [{ type: STRING, name: 'character', description: 'Which of your claimed characters (default: all)' }],
+  },
+  {
+    name: 'claim', description: 'Claim your character so the bot can send you your summaries', ...contexts,
+    options: [
+      { type: STRING, name: 'character', description: 'Character name', required: true, max_length: 24 },
+      { type: STRING, name: 'realm', description: 'Realm (helps if the name is common)', max_length: 40 },
+    ],
+  },
+  {
+    name: 'unclaim', description: 'Remove one of your claimed characters', ...contexts,
+    options: [{ type: STRING, name: 'character', description: 'Character name', required: true }],
+  },
+  {
+    name: 'info', description: 'Raid consumables and quick lookups', ...contexts,
+    options: [
+      { type: SUB, name: 'consumables', description: 'Flasks, elixirs, food, potions and weapon buffs by role',
+        options: [{ type: STRING, name: 'role', description: 'Your role', required: true, choices: ROLE_CHOICES }] },
+      { type: SUB, name: 'lookup', description: 'Search Wowhead for an item, spell or anything else',
+        options: [{ type: STRING, name: 'search', description: 'What to look up', required: true, max_length: 100 }] },
+    ],
+  },
+];
+
+// ---------- Interaction plumbing ----------
+
+export interface Interaction {
+  type: number;
+  token: string;
+  guild_id?: string;
+  channel_id?: string;
+  member?: { user: DUser; roles: string[]; permissions?: string };
+  user?: DUser;
+  data?: { name?: string; custom_id?: string; options?: Opt[]; values?: string[] };
+  message?: { id: string; embeds?: Embed[] };
+}
+interface DUser { id: string; username: string; global_name?: string | null }
+interface Opt { name: string; type: number; value?: string | number | boolean; options?: Opt[] }
+
+/** What the endpoint should do: reply now, and optionally keep working afterwards. */
+export interface Outcome { response: unknown; after?: () => Promise<void> }
+
+const reply = (body: MessageBody, ephemeral = true): Outcome => ({ response: { type: 4, data: { ...body, flags: ephemeral ? EPHEMERAL : undefined } } });
+/** "Thinking…" now (only visible to the user), then replace it once the work is done. */
+const deferred = (i: Interaction, work: () => Promise<MessageBody>): Outcome => ({
+  response: { type: 5, data: { flags: EPHEMERAL } },
+  after: async () => {
+    let body: MessageBody;
+    try {
+      body = await work();
+    } catch (e) {
+      body = { content: `Something went wrong: ${(e as Error).message}` };
+    }
+    await editReply(i.token, body);
+  },
+});
+
+const userOf = (i: Interaction) => (i.member?.user ?? i.user)!;
+const nameOf = (u: DUser) => u.global_name || u.username;
+const opt = (opts: Opt[] | undefined, name: string) => opts?.find((o) => o.name === name)?.value;
+
+async function isOfficer(i: Interaction): Promise<boolean> {
+  const role = env.adminRole();
+  if (i.member) {
+    const perms = BigInt(i.member.permissions ?? '0');
+    if ((perms & 8n) === 8n || (perms & 32n) === 32n) return true; // Administrator or Manage Server
+    return !!role && i.member.roles.includes(role);
+  }
+  // Used in a DM: look the person up in the server
+  const roles = await memberRoles(userOf(i).id);
+  return !!role && !!roles?.includes(role);
+}
+
+const notOfficer = () => reply({ content: 'Only officers can use this.' });
+
+export async function handle(i: Interaction): Promise<Outcome> {
+  if (i.type === 2) {
+    switch (i.data?.name) {
+      case 'remind': return remind(i);
+      case 'raidstart': return raidStart(i);
+      case 'raidend': return raidEnd(i);
+      case 'raids': return raids(i);
+      case 'check': return check(i);
+      case 'claim': return claim(i);
+      case 'unclaim': return unclaim(i);
+      case 'info': return info(i);
+    }
+  }
+  if (i.type === 3) {
+    const id = i.data?.custom_id ?? '';
+    if (id.startsWith('raid:')) return raidButton(i, id);
+    if (id === 'raids:pick') return raidPicked(i);
+    if (id.startsWith('claim:')) return claimDecision(i, id);
+  }
+  return reply({ content: 'That command isn’t available.' });
+}
+
+// ---------- /remind ----------
+
+async function remind(i: Interaction): Promise<Outcome> {
+  if (!(await isOfficer(i))) return notOfficer();
+  const o = i.data?.options;
+  const message = String(opt(o, 'message'));
+  const when = parseWhen(String(opt(o, 'time')), opt(o, 'day') as string | undefined, env.timezone());
+  if (!when) return reply({ content: 'I couldn’t read that time. Try 19:45 or 7:45pm, and a day like tomorrow, friday or 24/10.' });
+  const lead = Number(opt(o, 'minutes_before') ?? 15);
+  const sendAt = new Date(when.getTime() - lead * 60_000);
+  if (sendAt.getTime() < Date.now() - 60_000) return reply({ content: 'That reminder would be in the past. Pick a later time or a smaller "minutes_before".' });
+  const channelId = i.guild_id ? i.channel_id! : env.raidChannel();
+  if (!channelId) return reply({ content: 'Use /remind in the channel the reminder should go to.' });
+  const payload = {
+    message,
+    place: (opt(o, 'place') as string | undefined) ?? null,
+    consumes: !!opt(o, 'consumes'),
+    gatherAt: when.toISOString(),
+    roleId: (opt(o, 'ping') as string | undefined) ?? null,
+    by: userOf(i).id,
+  };
+  return deferred(i, async () => {
+    await createReminder({ channel_id: channelId, created_by: userOf(i).id, send_at: sendAt.toISOString(), payload });
+    const unix = Math.floor(when.getTime() / 1000);
+    return { content: `Reminder set for <t:${Math.floor(sendAt.getTime() / 1000)}:F> in <#${channelId}>. Gather time: <t:${unix}:t> (<t:${unix}:R>).` };
+  });
+}
+
+/** The message posted when a reminder is due (used by /api/cron). */
+export function reminderMessage(p: { message: string; place: string | null; consumes: boolean; gatherAt: string; roleId: string | null }): MessageBody {
+  const unix = Math.floor(new Date(p.gatherAt).getTime() / 1000);
+  const fields = [{ name: 'Gather', value: `<t:${unix}:t> (<t:${unix}:R>)${p.place ? `\n${p.place}` : ''}` }];
+  if (p.consumes) fields.push({ name: 'Bring', value: RAID_CHECKLIST.map((x) => `• ${x}`).join('\n') + '\nNeed a list? Use `/info consumables`.' });
+  return {
+    content: p.roleId ? `<@&${p.roleId}>` : undefined,
+    embeds: [{ title: 'Raid reminder', description: p.message, color: BRAND, fields }],
+    allowed_mentions: { roles: p.roleId ? [p.roleId] : [] },
+  };
+}
+
+// ---------- /raidstart and /raidend ----------
+
+async function raidStart(i: Interaction): Promise<Outcome> {
+  if (!(await isOfficer(i))) return notOfficer();
+  const o = i.data?.options;
+  let parsed: ReturnType<typeof parseReportUrl>;
+  try {
+    parsed = parseReportUrl(String(opt(o, 'link')));
+  } catch (e) {
+    return reply({ content: (e as Error).message });
+  }
+  const channelId = env.raidChannel() || (i.guild_id ? i.channel_id : '');
+  if (!channelId) return reply({ content: 'No raid channel is set up yet (DISCORD_RAID_CHANNEL_ID in Vercel).' });
+  const logger = (opt(o, 'logger') as string | undefined) ?? userOf(i).id;
+  const note = opt(o, 'note') as string | undefined;
+  return deferred(i, async () => {
+    const title = await getReportMeta(parsed.host, parsed.code, 10_000).then((m) => m.title).catch(() => null);
+    await createRaid({ host: parsed.host, report_code: parsed.code, title, started_by: userOf(i).id, logger_id: logger });
+    const url = `https://${parsed.host}/reports/${parsed.code}`;
+    await postToChannel(channelId, {
+      content: `Raid starting. Live log by <@${logger}>.`,
+      embeds: [{ title: title ? `Live log: ${title}` : 'Live log', url, color: BRAND, description: note ?? 'Follow along on Warcraft Logs as the bosses come in.' }],
+      components: [row(linkButton('Open the live log', url))],
+      allowed_mentions: { users: [logger] },
+    });
+    return { content: `Posted in <#${channelId}>. When you're done, use /raidend to post the summary.` };
+  });
+}
+
+async function raidEnd(i: Interaction): Promise<Outcome> {
+  const link = opt(i.data?.options, 'link') as string | undefined;
+  const me = userOf(i).id;
+  return deferred(i, async () => {
+    let host: string, code: string;
+    if (link) {
+      ({ host, code } = parseReportUrl(link));
+    } else {
+      const r = await latestRaidStartedBy(me);
+      if (!r) return { content: 'I couldn’t find a raid you started. Add the Warcraft Logs link: `/raidend link:`' };
+      ({ host, report_code: code } = r);
+    }
+    const raid = await raidByCode(code);
+    if (raid && raid.started_by !== me && !(await isOfficer(i))) return { content: 'Only the person who started this raid, or an officer, can end it.' };
+    const channelId = env.raidChannel() || (i.guild_id ? i.channel_id! : '');
+    if (!channelId) return { content: 'No raid channel is set up yet (DISCORD_RAID_CHANNEL_ID in Vercel).' };
+    const digest = await raidDigest(host, code, 40_000);
+    await postToChannel(channelId, raidSummary(digest, raid?.logger_id ?? null));
+    if (!raid) await createRaid({ host, report_code: code, title: digest.meta.title, started_by: me, logger_id: null }).catch(() => undefined);
+    await endRaid(code).catch(() => undefined);
+    return { content: `Summary posted in <#${channelId}>.` };
+  });
+}
+
+// ---------- /raids and the page buttons ----------
+
+async function raids(i: Interaction): Promise<Outcome> {
+  const link = opt(i.data?.options, 'link') as string | undefined;
+  if (link) {
+    let parsed: ReturnType<typeof parseReportUrl>;
+    try {
+      parsed = parseReportUrl(link);
+    } catch (e) {
+      return reply({ content: (e as Error).message });
+    }
+    return reply({ content: 'Pick what you’d like to receive by DM:', components: pageButtons(`${parsed.host}:${parsed.code}`) });
+  }
+  return deferred(i, async () => {
+    const list = await recentRaids(5);
+    if (!list.length) return { content: 'No raids saved yet. Paste a Warcraft Logs link: `/raids link:`' };
+    return {
+      content: 'Pick a raid (latest first), then choose what you’d like by DM:',
+      components: [
+        row({
+          type: 3,
+          custom_id: 'raids:pick',
+          placeholder: 'Choose a raid',
+          options: list.map((r) => ({
+            label: (r.title ?? r.report_code).slice(0, 100),
+            description: new Date(r.started_at).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+            value: `${r.host}:${r.report_code}`,
+          })),
+        }),
+      ],
+    };
+  });
+}
+
+function raidPicked(i: Interaction): Outcome {
+  const value = i.data?.values?.[0] ?? '';
+  return { response: { type: 7, data: { content: 'Pick what you’d like to receive by DM:', components: pageButtons(value) } } };
+}
+
+async function raidButton(i: Interaction, id: string): Promise<Outcome> {
+  // raid:<page>:<host>:<code>  (older buttons: raid:<page>:<code>)
+  const parts = id.split(':');
+  const page = parts[1] as Page;
+  const code = parts.at(-1)!;
+  const hostPart = parts.length > 3 ? parts[2] : null;
+  const user = userOf(i);
+  return deferred(i, async () => {
+    const claims = await approvedClaimsFor(user.id);
+    if (!claims.length) return { content: 'Claim your character first with `/claim`, then try again.' };
+    const host = hostPart ?? (await raidByCode(code))?.host;
+    if (!host) return { content: 'I couldn’t find that raid any more.' };
+    const digest = await raidDigest(host, code, 40_000);
+    const label = PAGES.find((p) => p.id === page)?.label ?? 'summary';
+    const sent: string[] = [];
+    let dmFailed = false;
+    for (const c of claims) {
+      const body = personalPage(page, digest, c.character, c.realm);
+      if (!body) continue;
+      if (await sendDm(user.id, body)) sent.push(c.character);
+      else {
+        dmFailed = true;
+        return { ...body, content: 'Your DMs are closed, so here it is (only you can see this):' };
+      }
+    }
+    if (!sent.length && !dmFailed) {
+      return { content: `None of your characters (${claims.map((c) => c.character).join(', ')}) were in ${digest.meta.title}.` };
+    }
+    return { content: `Sent your ${label.toLowerCase()} for ${sent.join(', ')} to your DMs.` };
+  });
+}
+
+// ---------- /check ----------
+
+async function check(i: Interaction): Promise<Outcome> {
+  const wanted = (opt(i.data?.options, 'character') as string | undefined)?.toLowerCase();
+  const user = userOf(i);
+  return deferred(i, async () => {
+    const claims = (await approvedClaimsFor(user.id)).filter((c) => !wanted || c.character.toLowerCase() === wanted);
+    if (!claims.length) return { content: wanted ? `You haven’t claimed ${wanted} (or it’s waiting for an officer).` : 'Claim your character first with `/claim`.' };
+    const embeds: Embed[] = [];
+    for (const c of claims.slice(0, 5)) embeds.push(await characterCard(c));
+    const ok = await sendDm(user.id, { embeds });
+    return ok ? { content: 'Sent to your DMs.' } : { content: 'Your DMs are closed, so here it is (only you can see this):', embeds };
+  });
+}
+
+async function characterCard(c: Claim): Promise<Embed> {
+  // Latest raid this character appears in
+  for (const r of await recentRaids(10)) {
+    const fights = (await storedFights(r.report_code).catch(() => [])).map((f) => f.data as RaidDigest['fights'][number]);
+    const digest = { host: r.host, code: r.report_code, meta: { title: r.title ?? r.report_code, startTime: Date.parse(r.started_at) } as RaidDigest['meta'], fights, pending: 0 };
+    const rows = playerFights(digest as RaidDigest, c.character, c.realm);
+    if (!rows.length) continue;
+    const last = rows.at(-1)!.p;
+    const withGear = [...rows].reverse().find((x) => x.p.gear?.length)?.p;
+    const levels = withGear?.gear?.map((g) => g.itemLevel).filter((v): v is number => !!v) ?? [];
+    const parses = rows.map((x) => x.p.parse).filter((v): v is number => v !== null);
+    const region = await getReportRegion(r.host, r.report_code).catch(() => null);
+    const level = region && (c.realm || last.server) ? await characterLevel(region, (c.realm || last.server)!, c.character).catch(() => null) : null;
+    const fields = [
+      { name: 'Class', value: `${last.specName.replace(/([a-z])([A-Z])/g, '$1 $2')} ${last.className}`.trim() || '–', inline: true },
+      { name: 'Level', value: level ? String(level) : '–', inline: true },
+      { name: 'Item level', value: last.itemLevel ? String(last.itemLevel) : levels.length ? (levels.reduce((t, v) => t + v, 0) / levels.length).toFixed(1) : '–', inline: true },
+      { name: 'Last raid', value: `${r.title ?? r.report_code} (${new Date(r.started_at).toLocaleDateString('en-GB')})\n${rows.length} boss${rows.length > 1 ? 'es' : ''}${parses.length ? ` · average parse ${Math.round(parses.reduce((t, v) => t + v, 0) / parses.length)}` : ''}` },
+    ];
+    if (withGear?.stats?.length) fields.push({ name: 'Stats at the pull', value: withGear.stats.slice(0, 12).map((s) => `${s.name} ${s.value}`).join(' · ').slice(0, 1024) });
+    return { title: `${c.character}${c.realm ? ` · ${c.realm}` : ''}`, color: BRAND, fields, url: siteLink(r.host, r.report_code, rows.at(-1)!.fight.id, last.id) };
+  }
+  // Fall back to a saved analysis from the website
+  const a = (await rest(`analyses?player_name=ilike.${encodeURIComponent(c.character)}&select=created_at,encounter_name,result&order=created_at.desc&limit=1`).catch(() => null))?.[0];
+  if (a) {
+    const p = a.result.player;
+    return {
+      title: c.character, color: BRAND,
+      fields: [
+        { name: 'Class', value: `${String(p.specName).replace(/([a-z])([A-Z])/g, '$1 $2')} ${p.className}`, inline: true },
+        { name: 'Item level', value: p.itemLevel ? String(p.itemLevel) : '–', inline: true },
+        { name: 'Last analysis', value: `${a.encounter_name} on ${a.created_at.slice(0, 10)}${p.parsePercent !== null ? ` · parse ${Math.round(p.parsePercent)}` : ''}` },
+      ],
+    };
+  }
+  return { title: c.character, color: BRAND, description: 'No raids or analyses with this character yet. Once a raid is summarized with /raidend, this fills in.' };
+}
+
+// ---------- /claim, /unclaim and officer approval ----------
+
+async function claim(i: Interaction): Promise<Outcome> {
+  const o = i.data?.options;
+  const character = String(opt(o, 'character')).trim();
+  const realm = ((opt(o, 'realm') as string | undefined) ?? '').trim() || null;
+  const user = userOf(i);
+  if (!/^[\p{L}]{2,24}$/u.test(character)) return reply({ content: 'That doesn’t look like a character name (letters only, 2 to 24 characters).' });
+  return deferred(i, async () => {
+    const adminChannel = env.adminChannel();
+    if (!adminChannel) return { content: 'Claims aren’t set up yet (DISCORD_ADMIN_CHANNEL_ID in Vercel).' };
+    const existing = await claimOnCharacter(character, realm);
+    if (existing && existing.discord_id === user.id) return { content: `You've already ${existing.status === 'approved' ? 'claimed' : 'asked to claim'} ${character}.` };
+    if (existing) return { content: `${character} is already claimed by someone else. If it's yours, ask an officer to sort it out.` };
+    if ((await claimsFor(user.id)).length >= 6) return { content: 'You can claim up to 6 characters. Use /unclaim to remove one first.' };
+    const c = await createClaim({ discord_id: user.id, discord_name: nameOf(user), character, realm });
+    const seen = await lastSeen(character).catch(() => null);
+    const created = new Date(Number((BigInt(user.id) >> 22n) + 1420070400000n));
+    await postToChannel(adminChannel, {
+      embeds: [{
+        title: `Claim request: ${character}${realm ? ` (${realm})` : ''}`,
+        color: BRAND,
+        fields: [
+          { name: 'Discord user', value: `<@${user.id}> (${user.username})`, inline: true },
+          { name: 'Discord account made', value: created.toLocaleDateString('en-GB'), inline: true },
+          { name: 'Seen in our logs', value: seen ?? 'Not yet', inline: true },
+        ],
+        footer: { text: 'Approve only if you know this is their character.' },
+      }],
+      components: [row(button('Approve', `claim:approve:${c.id}`, 3), button('Reject', `claim:reject:${c.id}`, 4))],
+      allowed_mentions: { users: [] },
+    });
+    return { content: `Thanks! An officer will confirm that ${character} is yours. You'll get a DM when it's approved.` };
+  });
+}
+
+async function unclaim(i: Interaction): Promise<Outcome> {
+  const character = String(opt(i.data?.options, 'character')).trim();
+  const user = userOf(i);
+  return deferred(i, async () => {
+    await removeClaim(user.id, character);
+    return { content: `Removed ${character} from your characters.` };
+  });
+}
+
+async function claimDecision(i: Interaction, id: string): Promise<Outcome> {
+  if (!(await isOfficer(i))) return reply({ content: 'Only officers can approve or reject claims.' });
+  const [, decision, claimId] = id.split(':');
+  const c = await getClaim(claimId);
+  if (!c) return { response: { type: 7, data: { content: 'This claim no longer exists.', components: [] } } };
+  const officer = userOf(i);
+  if (decision === 'approve') {
+    const other = await claimOnCharacter(c.character, c.realm);
+    if (other && other.id !== c.id && other.status === 'approved') return reply({ content: `${c.character} is already claimed by <@${other.discord_id}>. Reject this one, or ask them to /unclaim.` });
+  }
+  const status = decision === 'approve' ? 'approved' : 'rejected';
+  return {
+    response: {
+      type: 7,
+      data: {
+        embeds: (i.message?.embeds ?? []).map((e) => ({ ...e, footer: { text: `${status === 'approved' ? 'Approved' : 'Rejected'} by ${nameOf(officer)}` } })),
+        components: [],
+      },
+    },
+    after: async () => {
+      await decideClaim(c.id, status, officer.id);
+      await sendDm(c.discord_id, {
+        content: status === 'approved'
+          ? `Your claim on **${c.character}** was approved. After a raid, use the buttons on the summary (or \`/raids\`) to get your numbers by DM, and \`/check\` any time.`
+          : `Your claim on **${c.character}** wasn't approved. If that's a mistake, message an officer.`,
+      });
+    },
+  };
+}
+
+// ---------- /info ----------
+
+function info(i: Interaction): Outcome {
+  const sub = i.data?.options?.[0];
+  if (sub?.name === 'consumables') return reply(consumablesMessage(String(opt(sub.options, 'role')) as Role));
+  if (sub?.name === 'lookup') return reply(lookupMessage(String(opt(sub.options, 'search'))));
+  return reply({ content: 'Try `/info consumables` or `/info lookup`.' });
+}
+
