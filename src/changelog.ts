@@ -9,6 +9,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.9.2',
+    date: '2026-10-20',
+    changes: ['Terms of Service and Privacy Policy pages, linked in the menu and on the password page. Both open without the password.'],
+  },
+  {
     version: '0.9.1',
     date: '2026-10-20',
     changes: ['Changelog page, linked next to the version number in the menu.'],

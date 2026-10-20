@@ -56,6 +56,8 @@ export default function Sidebar({ page }: { page: 'analyze' | 'history' | 'chang
 
       <div className="side-version">
         v{__APP_VERSION__} <a href="/#/changelog" className="changelog-link">Changelog</a>
+        <a href="/terms" className="changelog-link">Terms</a>
+        <a href="/privacy" className="changelog-link">Privacy</a>
       </div>
     </aside>
   );

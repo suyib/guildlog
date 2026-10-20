@@ -6,6 +6,10 @@ export const config = {
   matcher: ['/((?!api/login|favicon.ico|logo.png).*)'],
 };
 
+// Open without the password: the Terms and Privacy pages (Discord links to them) and the built
+// app files those pages need. The app bundle holds no secrets; every API route stays protected.
+const isPublic = (path: string) => path === '/terms' || path === '/privacy' || path.startsWith('/assets/');
+
 const COOKIE_NAME = 'gl_session';
 
 async function hmacHex(secret: string, message: string): Promise<string> {
@@ -51,6 +55,7 @@ h1{font-size:18px;margin:0 0 4px;letter-spacing:.02em}p{color:var(--muted);margi
 input{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--line);border-radius:3px;background:#121215;color:var(--ink);font-size:15px}
 button{margin-top:12px;width:100%;padding:9px;border:0;border-radius:3px;background:var(--accent);color:#111;font-weight:700;font-size:15px;cursor:pointer}
 .err{color:#ff5c5c;font-size:13px;margin-top:10px}
+.legal{margin-top:16px;font-size:12px;color:var(--muted);text-align:center}.legal a{color:var(--muted)}
 </style></head><body>
 <form method="post" action="/api/login">
 <h1>Guild Logs</h1><p>Enter the guild password to continue.</p>
@@ -58,10 +63,12 @@ button{margin-top:12px;width:100%;padding:9px;border:0;border-radius:3px;backgro
 <input type="password" name="password" autofocus required aria-label="Password">
 <button type="submit">Enter</button>
 ${error ? '<div class="err">Wrong password, try again.</div>' : ''}
+<div class="legal"><a href="/terms">Terms of Service</a> · <a href="/privacy">Privacy Policy</a></div>
 </form></body></html>`;
 
 export default async function middleware(request: Request): Promise<Response> {
   const url = new URL(request.url);
+  if (isPublic(url.pathname)) return new Response(null, { headers: { 'x-middleware-next': '1' } });
   let ok = false;
   try {
     ok = await hasValidSession(request, process.env.SESSION_SECRET);

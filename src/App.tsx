@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import AnalyzePage from './components/AnalyzePage';
 import ChangelogPage from './components/ChangelogPage';
 import HistoryPage from './components/HistoryPage';
+import LegalPage from './components/LegalPage';
 import SavedPage from './components/SavedPage';
 import Sidebar from './components/Sidebar';
 import { NavProvider } from './nav';
@@ -30,6 +31,10 @@ export default function App() {
       window.removeEventListener('popstate', onChange);
     };
   }, []);
+
+  // Terms and Privacy are public pages with their own simple layout
+  const legal = window.location.pathname.replace(/\/$/, '');
+  if (legal === '/terms' || legal === '/privacy') return <LegalPage doc={legal === '/terms' ? 'terms' : 'privacy'} />;
 
   return (
     <NavProvider>
