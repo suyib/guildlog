@@ -14,7 +14,7 @@ const SNAP = 1.5;
 interface Row { label: string; snapshot: PlayerSnapshot }
 
 export default function Timeline({ players }: { players: Row[] }) {
-  const [hover, setHover] = useState<{ row: number; t: number } | null>(null);
+  const [hover, setHover] = useState<{ row: number; t: number; cursor: number } | null>(null);
   const maxSec = Math.max(...players.map((p) => p.snapshot.fightSeconds), 1);
   const x = (s: number) => LABEL_W + (s / maxSec) * (W - LABEL_W - 16);
   const step = maxSec > 300 ? 60 : 30;
@@ -26,7 +26,8 @@ export default function Timeline({ players }: { players: Row[] }) {
     const box = svg.getBoundingClientRect();
     const px = ((e.clientX - box.left) / box.width) * W;
     const t = ((px - LABEL_W) / (W - LABEL_W - 16)) * maxSec;
-    setHover({ row, t: Math.max(0, Math.min(maxSec, t)) });
+    const clamped = Math.max(0, Math.min(maxSec, t));
+    setHover({ row, t: clamped, cursor: clamped });
   }
 
   const hovered = hover ? players[hover.row] : null;
@@ -78,27 +79,43 @@ export default function Timeline({ players }: { players: Row[] }) {
             </g>
           );
         })}
+        {/* Drawn last so it sits on top; the SVG lets it spill outside its box (see .timeline in theme.css) */}
+        {hover && readout && <Tip x={x(hover.cursor)} rowTop={24 + hover.row * ROW_H} who={players.length > 1 ? hovered!.label : null} info={readout} />}
       </svg>
-      <p className="timeline-readout" aria-live="polite">
-        {readout ? (
-          <>
-            <span className="tr-time">{mmss(readout.t)}</span>
-            {players.length > 1 && <span className="tr-who">{hovered!.label}</span>}
-            <span className="tr-cast">{readout.casts.length ? readout.casts.join(', ') : 'No cast here'}</span>
-            {readout.active.map((w) => (
-              <span key={w.name} className={w.kind === 'lust' ? 'tr-chip lust' : 'tr-chip cd'}>{w.name} ({mmss(w.start)}–{mmss(w.end)})</span>
-            ))}
-          </>
-        ) : (
-          <span className="muted">Hover the timeline to see each cast, and when Bloodlust and big cooldowns were up.</span>
-        )}
+      {/* Same information for screen readers */}
+      <p className="sr-only" aria-live="polite">
+        {readout ? `${mmss(readout.t)}: ${readout.casts.join(', ') || readout.empty}. ${readout.active.map((w) => `${w.name} up`).join(', ')}` : ''}
       </p>
     </div>
   );
 }
 
 /** What was cast near this moment, and which windows were active. */
-function describe(p: Row, t: number): { t: number; casts: string[]; active: BuffWindow[] } {
+interface Info { t: number; casts: string[]; active: BuffWindow[]; empty: string }
+
+/** Tooltip next to the cursor: time, what was cast, and any Bloodlust or cooldown windows up at that moment. */
+function Tip({ x, rowTop, who, info }: { x: number; rowTop: number; who: string | null; info: Info }) {
+  const lines: { text: string; cls: string }[] = [{ text: who ? `${mmss(info.t)} · ${who}` : mmss(info.t), cls: 'tip-time' }];
+  if (info.casts.length) for (const c of info.casts) lines.push({ text: c, cls: 'tip-cast' });
+  else lines.push({ text: info.empty, cls: 'tip-empty' });
+  for (const w of info.active) lines.push({ text: `${w.name}  ${mmss(w.start)}–${mmss(w.end)}`, cls: w.kind === 'lust' ? 'tip-lust' : 'tip-cd' });
+  const lineH = 15;
+  const w = Math.max(90, ...lines.map((l) => l.text.length * 6.4)) + 18;
+  const h = 10 + lines.length * lineH;
+  const left = x + 12 + w > W ? x - 12 - w : x + 12;
+  // Centered on the row, beside the cursor, so it covers as little of the page around it as possible
+  const top = rowTop + (ROW_H - 6) / 2 - h / 2;
+  return (
+    <g className="timeline-tip" transform={`translate(${left.toFixed(1)},${top.toFixed(1)})`} pointerEvents="none">
+      <rect width={w} height={h} rx={6} />
+      {lines.map((l, i) => (
+        <text key={i} x={9} y={17 + i * lineH} className={l.cls}>{l.text}</text>
+      ))}
+    </g>
+  );
+}
+
+function describe(p: Row, t: number): Info {
   const casts = p.snapshot.casts;
   let names: string[] = [];
   let at = t;
@@ -117,5 +134,6 @@ function describe(p: Row, t: number): { t: number; casts: string[]; active: Buff
     }
   }
   const active = (p.snapshot.windows ?? []).filter((w) => at >= w.start && at <= w.end);
-  return { t: at, casts: Array.from(new Set(names)), active };
+  const inGap = p.snapshot.gaps.some((g) => t >= g.start && t <= g.end);
+  return { t: at, casts: Array.from(new Set(names)).slice(0, 5), active, empty: inGap ? 'No casts (gap)' : 'No cast within 1.5s' };
 }

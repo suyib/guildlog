@@ -9,6 +9,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.11.3',
+    date: '2026-10-20',
+    changes: ['Cast timeline: the hover tooltip follows the cursor and lists every cast and active Bloodlust or cooldown at that moment.'],
+  },
+  {
     version: '0.11.2',
     date: '2026-10-20',
     changes: ['Cast timeline: hover to see what was cast at that moment, and when Bloodlust and your big cooldowns were up.'],

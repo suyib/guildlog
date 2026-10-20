@@ -383,14 +383,17 @@ progress.uptime-bar { height: 8px; color: var(--primary-light); }
 .timeline .win-cd { fill: rgba(255, 209, 0, 0.75); }
 .timeline .hover-line { stroke: var(--ink); stroke-width: 1; opacity: 0.6; }
 .timeline .row.on .name { fill: var(--ink); }
-.timeline-wrap { display: flex; flex-direction: column; gap: 8px; }
-.timeline-readout { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 26px; margin: 0; font-size: 13px; }
-.timeline-readout .tr-time { font: 700 12px var(--font-mono); color: var(--ink-2); }
-.timeline-readout .tr-who { color: var(--ink-3); }
-.timeline-readout .tr-cast { font-weight: 700; }
-.tr-chip { padding: 2px 8px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 600; }
-.tr-chip.lust { background: rgba(255, 128, 0, 0.18); color: #ffb066; }
-.tr-chip.cd { background: rgba(255, 209, 0, 0.14); color: var(--cooldown); }
+.timeline-wrap { position: relative; }
+/* Let the hover tooltip spill outside the timeline's box */
+.timeline { overflow: visible; }
+.timeline-tip rect { fill: #0f0d0b; stroke: var(--line); }
+.timeline-tip text { font-size: 11px; }
+.timeline-tip .tip-time { fill: var(--ink-3); font-family: var(--font-mono); }
+.timeline-tip .tip-cast { fill: var(--ink); font-weight: 700; }
+.timeline-tip .tip-empty { fill: var(--ink-3); font-style: italic; }
+.timeline-tip .tip-lust { fill: #ffb066; font-weight: 600; }
+.timeline-tip .tip-cd { fill: var(--cooldown); font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* ---------- Charts ---------- */
 .chart-wrap { display: flex; flex-direction: column; gap: 8px; }
