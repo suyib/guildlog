@@ -1,5 +1,7 @@
 // What the bot posts: the raid summary in the channel, and each person's own summaries by DM.
 import { BRAND, type Embed, type MessageBody, button, env, linkButton, row } from './api.js';
+import { raidFeedback } from '../raidFeedback.js';
+import type { RaidPoint } from '../types.js';
 import { type FightDigest, type PlayerDigest, type RaidDigest, playerFights } from './digest.js';
 
 export type Page = 'summary' | 'overview' | 'damage' | 'rotation' | 'gear' | 'survival';
@@ -55,6 +57,19 @@ export function raidSummary(digest: RaidDigest, loggerId: string | null): Messag
       : `**${name}**: not killed (${tries.length} attempt${tries.length > 1 ? 's' : ''})`;
   });
 
+  // Raid-wide only: no names, so nobody is singled out in the channel
+  const feedback = raidFeedback(digest.fights, {
+    skipKills: true,
+    wipes: encounterIds
+      .map((id) => ({ boss: bosses.find((f) => f.encounterID === id)!.name, count: bosses.filter((f) => f.encounterID === id && !f.kill).length }))
+      .filter((w) => w.count > 0),
+  });
+  const points = (list: RaidPoint[]) => clip(list.slice(0, 4).map((p) => `• **${p.title}**: ${p.detail}`).join('\n'));
+  const feedbackFields = [
+    ...(feedback.good.length ? [{ name: 'What went well', value: points(feedback.good) }] : []),
+    ...(feedback.work.length ? [{ name: 'What to work on', value: points(feedback.work) }] : []),
+  ];
+
   const embed: Embed = {
     title: `Raid summary: ${meta.title}`,
     url: `https://${digest.host}/reports/${digest.code}`,
@@ -66,6 +81,7 @@ export function raidSummary(digest: RaidDigest, loggerId: string | null): Messag
       { name: 'Wipes', value: String(wipes), inline: true },
       { name: 'Raiders', value: raidSize ? String(raidSize) : '–', inline: true },
       { name: 'Deaths on kills', value: String(deaths), inline: true },
+      ...feedbackFields,
     ],
     footer: { text: 'Click a button below to get your own numbers by DM' },
     timestamp: new Date(meta.startTime).toISOString(),

@@ -6,6 +6,7 @@ import { type FightDigest, DIGEST_VERSION, buildFightDigest } from './discord/di
 import { storeFight, storedFights } from './discord/store.js';
 import { dbEnabled } from './db.js';
 import { rankingRows } from './pipeline.js';
+import { raidFeedback } from './raidFeedback.js';
 import type { FightBreakdown, FightRef } from './types.js';
 import { type Fight, gql } from './wcl.js';
 
@@ -50,7 +51,7 @@ export async function fightBreakdown(host: string, code: string, ref: FightRef):
     return built;
   })();
 
-  const [digest, heal, utility, lust, graph] = await Promise.all([
+  const [digest, heal, utility, lust, graph, perSecond] = await Promise.all([
     digestPromise,
     optional(report(host, code, ref.id, 'healing: table(dataType:Healing, fightIDs:$fid) taken: table(dataType:DamageTaken, fightIDs:$fid)', 25_000)),
     optional(report(host, code, ref.id, 'interrupts: table(dataType:Interrupts, fightIDs:$fid) dispels: table(dataType:Dispels, fightIDs:$fid) hpsRanks: rankings(fightIDs:$fid, playerMetric:hps)', 20_000)),
@@ -62,6 +63,7 @@ export async function fightBreakdown(host: string, code: string, ref: FightRef):
       ',$filter:String',
     )),
     optional(report(host, code, ref.id, 'graph: graph(dataType:DamageDone, fightIDs:$fid)', 20_000)),
+    raidDamagePerSecond(host, code, ref).catch(() => null),
   ]);
 
   const seconds = (ref.endTime - ref.startTime) / 1000 || 1;
@@ -153,7 +155,8 @@ export async function fightBreakdown(host: string, code: string, ref: FightRef):
     .map((e) => ({ seconds: Math.round((num(e.timestamp) - ref.startTime) / 100) / 10, by: actorName.get(e.sourceID) ?? 'Unknown', name: e.abilityGameID === 32182 ? 'Heroism' : 'Bloodlust' }));
 
   const totalDamage = players.reduce((t, p) => t + p.total, 0);
-  const dpsSeries = seriesOverTime(graph.graph, ref.startTime, seconds, totalDamage / seconds);
+  // Prefer the raid's own damage events; fall back to Warcraft Logs' graph if they couldn't all be read in time
+  const dpsSeries = perSecond ? smoothed(perSecond, totalDamage / seconds) : seriesOverTime(graph.graph, ref.startTime, seconds, totalDamage / seconds);
   const totalHealing = players.reduce((t, p) => t + p.healing, 0);
   const ilvls = players.map((p) => p.itemLevel).filter((v): v is number => !!v);
 
@@ -174,6 +177,7 @@ export async function fightBreakdown(host: string, code: string, ref: FightRef):
     takenByAbility,
     bloodlust,
     dpsSeries,
+    feedback: raidFeedback([digest], { bloodlust: bloodlust.map((b) => b.seconds) }),
   };
 }
 
@@ -223,4 +227,43 @@ export function seriesOverTime(graph: any, fightStart: number, seconds: number, 
   if (!(mean > 0)) return [];
   const scale = avgDps > 0 ? avgDps / mean : 1;
   return smooth.map((v, i) => ({ t: i, dps: Math.round(v * scale) }));
+}
+
+/**
+ * The raid's damage per second, from every damage event in the fight (players and pets).
+ * Returns null if the events can't all be read in time, since a partial line would be misleading.
+ */
+async function raidDamagePerSecond(host: string, code: string, ref: FightRef): Promise<number[] | null> {
+  const q = `query($code:String!,$fid:[Int]!,$st:Float,$et:Float){reportData{report(code:$code){
+    events(dataType:DamageDone, fightIDs:$fid, startTime:$st, endTime:$et, limit:10000){data nextPageTimestamp}
+  }}}`;
+  const secs = Math.max(1, Math.ceil((ref.endTime - ref.startTime) / 1000));
+  const b = new Array<number>(secs).fill(0);
+  let st: number | null = ref.startTime;
+  const deadline = Date.now() + 40_000;
+  for (let page = 0; st !== null; page++) {
+    const left = deadline - Date.now();
+    if (left < 3_000 || page >= 20) return null;
+    const d: any = await gql(host, q, { code, fid: [ref.id], st, et: ref.endTime }, Math.min(20_000, left));
+    for (const e of d.reportData.report.events?.data ?? []) {
+      if (e?.type !== 'damage') continue;
+      const i = Math.floor((num(e.timestamp) - ref.startTime) / 1000);
+      if (i >= 0 && i < secs) b[i] += num(e.amount) + num(e.absorbed);
+    }
+    st = d.reportData.report.events?.nextPageTimestamp ?? null;
+  }
+  return b.some((v) => v > 0) ? b : null;
+}
+
+/** 5-second smoothing, scaled so the average matches the raid's real DPS. */
+function smoothed(perSecond: number[], avgDps: number): { t: number; dps: number }[] {
+  const n = perSecond.length;
+  const sm = perSecond.map((_, i) => {
+    const a = Math.max(0, i - 2);
+    const z = Math.min(n, i + 3);
+    return perSecond.slice(a, z).reduce((t, v) => t + v, 0) / (z - a);
+  });
+  const mean = sm.reduce((t, v) => t + v, 0) / n;
+  const scale = mean > 0 && avgDps > 0 ? avgDps / mean : 1;
+  return sm.map((v, i) => ({ t: i, dps: Math.round(v * scale) }));
 }

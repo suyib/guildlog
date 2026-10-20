@@ -3,7 +3,7 @@ import type { FightBreakdown } from '../../server/types';
 import { compact, mmss, n0, pct } from '../format';
 import { DpsChart } from './charts';
 import Glyph from './Glyph';
-import { ClassIcon, GameIcon, classCss, parseCss } from './icons';
+import { ClassIcon, GameIcon, SeverityDot, classCss, parseCss } from './icons';
 
 type Player = FightBreakdown['players'][number];
 const spaced = (s: string) => s.replace(/([a-z])([A-Z])/g, '$1 $2');
@@ -43,6 +43,48 @@ export default function Breakdown({ data, onPick }: { data: FightBreakdown; onPi
         <Kpi glyph="alert" label="Deaths" value={String(totals.deaths)} sub={firstDeath ? `First: ${firstDeath.name} at ${mmss(firstDeath.seconds)}` : 'Nobody died'} />
         <Kpi glyph="shield" label="Item level" value={totals.avgItemLevel ? totals.avgItemLevel.toFixed(1) : '–'} sub="Raid average" />
       </div>
+
+      {data.feedback && (
+        <div className="grid-2 feedback">
+          <section className="panel">
+            <h2 className="panel-title">What went well</h2>
+            {data.feedback.good.length === 0 ? (
+              <p className="muted">Nothing to single out on this pull yet.</p>
+            ) : (
+              <ul className="findings wins">
+                {data.feedback.good.map((f, i) => (
+                  <li key={i}>
+                    <span className="win-mark"><Glyph name="check" size={14} label="Went well" /></span>
+                    <div>
+                      <strong>{f.title}</strong>
+                      <p>{f.detail}</p>
+                      {f.who && f.who.length > 0 && <p className="muted small">{f.who.join(', ')}</p>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="panel">
+            <h2 className="panel-title">What to work on</h2>
+            {data.feedback.work.length === 0 ? (
+              <p className="muted">Nothing stood out. Nice work.</p>
+            ) : (
+              <ul className="findings">
+                {data.feedback.work.map((f, i) => (
+                  <li key={i} className="sev-medium">
+                    <SeverityDot severity="medium" />
+                    <div>
+                      <strong>{f.title}</strong>
+                      <p>{f.detail}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      )}
 
       <section className="panel">
         <h2 className="panel-title">Raid DPS over the fight</h2>

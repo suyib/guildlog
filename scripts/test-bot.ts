@@ -5,6 +5,7 @@ import { POST } from '../api/discord';
 import { COMMANDS, handle, reminderMessage } from '../server/discord/commands';
 import type { RaidDigest } from '../server/discord/digest';
 import { personalPage, raidSummary } from '../server/discord/pages';
+import { raidFeedback } from '../server/raidFeedback';
 
 // Signed requests: Discord's PING gets a PONG, a bad signature is refused
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -70,6 +71,16 @@ const digest = {
 const summary = raidSummary(digest, '42');
 assert.ok(summary.embeds![0].description!.includes('Gruul**: killed in 5:00 (1 wipe)'));
 assert.ok(!JSON.stringify(summary.embeds).includes('Suy'), 'no player names in the channel summary');
+// Raid-wide highlights in plain language
+const fields = Object.fromEntries(summary.embeds![0].fields!.map((f) => [f.name, f.value]));
+assert.ok(fields['What went well'].includes('Nobody died'));
+assert.ok(fields['What to work on'].includes('1 wipe along the way'));
+assert.ok(!fields['What to work on'].includes('enchant'), 'enchants stay in the DMs');
+// The site's version names nobody in what to work on, only in what went well
+const site = raidFeedback(digest.fights, { bloodlust: [] });
+assert.ok(site.work.every((p) => !p.who), 'no naming in what to work on');
+assert.deepEqual(site.good.find((p) => p.title.includes('strong'))!.who, ['Suy']);
+assert.ok(site.work.some((p) => p.title === 'No Bloodlust or Heroism'));
 const overview = personalPage('overview', digest, 'suy', null)!;
 assert.ok(overview.embeds![0].description!.includes('average parse **85**'));
 assert.ok(personalPage('gear', digest, 'Suy', 'Thunderstrike')!.embeds![0].description!.includes('no enchant on: head'));

@@ -9,6 +9,19 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.14.0',
+    date: '2026-10-20',
+    changes: [
+      'Fight breakdown: plain-language “What went well” and “What to work on” for the whole raid, without naming anyone in what to work on. Enchants stay in your own DM summary.',
+      'Discord: the /raidend summary includes the same raid-wide highlights, without naming anyone.',
+    ],
+  },
+  {
+    version: '0.13.2',
+    date: '2026-10-20',
+    changes: ['Fight breakdown: raid DPS over the fight is built from the raid\u2019s damage events, with Warcraft Logs\u2019 graph as a backup.'],
+  },
+  {
     version: '0.13.1',
     date: '2026-10-20',
     changes: [

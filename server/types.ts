@@ -224,4 +224,15 @@ export interface FightBreakdown {
   bloodlust: { seconds: number; by: string; name: string }[];
   /** Raid DPS across the fight, seconds from the pull (empty if Warcraft Logs didn't return a graph). */
   dpsSeries: { t: number; dps: number }[];
+  /** Plain-language "what went well / what to work on" for the whole raid. */
+  feedback: RaidFeedback;
 }
+
+export interface RaidPoint {
+  title: string;
+  detail: string;
+  /** Who earned it (praise only). Shown on the site; left out of Discord channel posts. */
+  who?: string[];
+}
+
+export interface RaidFeedback { good: RaidPoint[]; work: RaidPoint[] }
