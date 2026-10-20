@@ -33,7 +33,7 @@ export interface PlayerDigest {
 }
 
 /** Bump when what's stored per fight changes, so older stored fights are rebuilt. */
-export const DIGEST_VERSION = 2;
+export const DIGEST_VERSION = 3; // 3: everyone in the fight is included (not only those in the damage table), with roles
 
 export interface FightDigest {
   v?: number;
@@ -54,6 +54,14 @@ export interface RaidDigest {
   fights: FightDigest[];
   /** Boss kills not summarized yet (Warcraft Logs was slow); pressing the button again picks them up. */
   pending: number;
+}
+
+/** Last resort when Warcraft Logs doesn't say: guess the role from the spec name. */
+function roleFromSpec(spec: string | undefined): PlayerDigest['role'] {
+  const s = (spec ?? '').toLowerCase();
+  if (/protection|guardian|blood|brewmaster/.test(s)) return 'tank';
+  if (/holy|restoration|discipline|mistweaver/.test(s)) return 'healer';
+  return 'dps';
 }
 
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
@@ -82,12 +90,29 @@ export async function buildFightDigest(host: string, code: string, fight: Fight)
   const roleOf = new Map<number, PlayerDigest['role']>();
   const d = details.details?.data?.playerDetails ?? details.details?.playerDetails ?? {};
   for (const [key, role] of [['tanks', 'tank'], ['healers', 'healer'], ['dps', 'dps']] as const) for (const p of (d[key] ?? []) as any[]) roleOf.set(p.id, role);
+  // Backup for roles: the rankings group players the same way
+  const rankRoles = new Map<string, PlayerDigest['role']>();
+  const rr = ranks.rankings?.data?.[0]?.roles ?? {};
+  for (const [key, role] of [['tanks', 'tank'], ['healers', 'healer'], ['dps', 'dps']] as const) for (const c of (rr[key]?.characters ?? []) as any[]) if (c?.name) rankRoles.set(c.name, role);
   const detail = detailRows(details.details);
   const tankIds = [...roleOf].filter(([, r]) => r === 'tank').map(([id]) => id);
   const castsBy = new Map<number, any>((main.casts?.data?.entries ?? []).map((e: any) => [e.id, e]));
   const deathEntries: any[] = survival.deaths?.data?.entries ?? [];
 
+  // Everyone in the fight: the damage table leaves out players who did no damage (often healers),
+  // so add anyone listed in the player details or the casts table too.
   const entries: any[] = (main.damage?.data?.entries ?? []).filter((e: any) => e && e.type !== 'Pet' && e.type !== 'NPC');
+  const seen = new Set(entries.map((e) => e.id));
+  for (const det of detail) {
+    if (!det?.id || seen.has(det.id)) continue;
+    seen.add(det.id);
+    entries.push({ id: det.id, name: det.name, type: det.type, icon: `${det.type}-${det.specs?.[0]?.spec ?? ''}`, total: 0 });
+  }
+  for (const c of castsBy.values()) {
+    if (!c?.id || seen.has(c.id) || c.type === 'Pet' || c.type === 'NPC') continue;
+    seen.add(c.id);
+    entries.push({ id: c.id, name: c.name, type: c.type, icon: c.icon ?? c.type, total: 0 });
+  }
   const raidIds = entries.map((e) => e.id);
   const players = entries.map((e): PlayerDigest => {
     const rank = rankRows.find((r) => r.name === e.name);
@@ -106,7 +131,7 @@ export async function buildFightDigest(host: string, code: string, fight: Fight)
       server: det?.server ?? rank?.server?.name ?? null,
       className: rank?.class ?? iconClass ?? e.type ?? '',
       specName: rank?.spec ?? det?.specs?.[0]?.spec ?? iconSpec ?? '',
-      role: roleOf.get(e.id) ?? 'dps',
+      role: roleOf.get(e.id) ?? rankRoles.get(e.name) ?? roleFromSpec(rank?.spec ?? det?.specs?.[0]?.spec ?? iconSpec),
       total: num(e.total),
       dps: num(e.total) / (seconds || 1),
       parse: typeof rank?.rankPercent === 'number' ? rank.rankPercent : null,

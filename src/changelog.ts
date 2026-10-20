@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.13.1',
+    date: '2026-10-20',
+    changes: [
+      'Fight breakdown: everyone in the fight is included, including healers who did no damage, so healing totals and the tank, healer and damage counts are right.',
+      'Fight breakdown: raid DPS over the fight chart, with Bloodlust marked.',
+      'Pet and totem healing is added to its owner.',
+    ],
+  },
+  {
     version: '0.13.0',
     date: '2026-10-20',
     changes: [

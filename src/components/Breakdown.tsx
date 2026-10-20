@@ -1,6 +1,7 @@
 // Whole-raid breakdown of one fight, shown when no player is chosen. Click a player to analyze them.
 import type { FightBreakdown } from '../../server/types';
 import { compact, mmss, n0, pct } from '../format';
+import { DpsChart } from './charts';
 import Glyph from './Glyph';
 import { ClassIcon, GameIcon, classCss, parseCss } from './icons';
 
@@ -17,6 +18,8 @@ export default function Breakdown({ data, onPick }: { data: FightBreakdown; onPi
   const dispels = players.filter((p) => p.dispels > 0).sort((a, b) => b.dispels - a.dispels);
   const avoidable = players.filter((p) => p.role !== 'tank' && p.avoidable > 0).sort((a, b) => b.avoidable - a.avoidable).slice(0, 6);
   const firstDeath = data.deaths[0];
+  const counts = { tank: 0, healer: 0, dps: 0 };
+  for (const p of players) counts[p.role]++;
 
   return (
     <div className="result">
@@ -25,7 +28,8 @@ export default function Breakdown({ data, onPick }: { data: FightBreakdown; onPi
           <span className="kpi-icon big"><Glyph name="users" size={22} /></span>
           <div>
             <div className="eyebrow">
-              {fight.name} · <span className={fight.kill ? 'kill' : 'wipe'}>{fight.kill ? 'Kill' : 'Wipe'}</span> · {mmss(fight.seconds)} · {totals.raidSize} players
+              {fight.name} · <span className={fight.kill ? 'kill' : 'wipe'}>{fight.kill ? 'Kill' : 'Wipe'}</span> · {mmss(fight.seconds)} · {players.length} players
+              ({counts.tank} tank{counts.tank === 1 ? '' : 's'}, {counts.healer} healer{counts.healer === 1 ? '' : 's'}, {counts.dps} damage)
             </div>
             <h1>Whole raid</h1>
           </div>
@@ -39,6 +43,20 @@ export default function Breakdown({ data, onPick }: { data: FightBreakdown; onPi
         <Kpi glyph="alert" label="Deaths" value={String(totals.deaths)} sub={firstDeath ? `First: ${firstDeath.name} at ${mmss(firstDeath.seconds)}` : 'Nobody died'} />
         <Kpi glyph="shield" label="Item level" value={totals.avgItemLevel ? totals.avgItemLevel.toFixed(1) : '–'} sub="Raid average" />
       </div>
+
+      <section className="panel">
+        <h2 className="panel-title">Raid DPS over the fight</h2>
+        {data.dpsSeries?.length > 1 ? (
+          <DpsChart
+            series={data.dpsSeries}
+            average={totals.dps}
+            marks={data.bloodlust.map((b) => ({ t: b.seconds, name: `${b.name} (${b.by})` }))}
+            markLabel="Bloodlust"
+          />
+        ) : (
+          <p className="muted small">Warcraft Logs didn&rsquo;t return a damage graph for this fight.</p>
+        )}
+      </section>
 
       <div className="grid-2">
         <section className="panel">

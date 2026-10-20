@@ -5,6 +5,7 @@ import type { Fight, PlayerTables } from '../server/wcl';
 import { dpsSeriesFrom, survivalFrom } from '../server/dashboard';
 import { statTooltip } from '../src/statInfo';
 import { cooldownFor } from '../server/cooldowns';
+import { seriesOverTime } from '../server/breakdown';
 
 const fight: Fight = { id: 11, encounterID: 651, name: 'Magtheridon', startTime: 0, endTime: 177_000, kill: true, size: 25, difficulty: 3 };
 const abilities = new Map<number, string>([[1, 'Steady Shot'], [2, 'Bestial Wrath'], [3, 'Blood Fury'], [4, 'Auto Shot'], [5, 'Arcane Shot']]);
@@ -109,5 +110,12 @@ assert.equal(cooldownFor('Celestial Alignment'), undefined);
 assert.equal(cooldownFor('Celestial Alignment', 'classic.warcraftlogs.com'), 180);
 assert.equal(cooldownFor('Arcane Power', 'classic.warcraftlogs.com'), 90);
 assert.equal(cooldownFor('Arcane Power', 'fresh.warcraftlogs.com'), 180);
+
+// Raid DPS graph: a series that starts 30s before the pull still lines up with the fight
+const g = { data: { series: [{ name: 'Total', pointStart: 970_000, pointInterval: 1000, data: [...new Array(30).fill(0), ...new Array(60).fill(0).map((_, i) => (i < 30 ? 2000 : 1000))] }] } };
+const line = seriesOverTime(g, 1_000_000, 60, 1500);
+assert.equal(line.length, 60);
+assert.ok(line[5].dps > line[50].dps, 'busy first half shows higher raid DPS');
+assert.ok(Math.abs(line.reduce((t, p) => t + p.dps, 0) / 60 - 1500) < 2);
 
 console.log('\nAll analysis checks passed.');

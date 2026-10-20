@@ -222,4 +222,6 @@ export interface FightBreakdown {
   deaths: { seconds: number; name: string; className: string; by: string }[];
   takenByAbility: { name: string; icon?: string; total: number; playersHit: number; avoidable: boolean }[];
   bloodlust: { seconds: number; by: string; name: string }[];
+  /** Raid DPS across the fight, seconds from the pull (empty if Warcraft Logs didn't return a graph). */
+  dpsSeries: { t: number; dps: number }[];
 }

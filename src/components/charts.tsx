@@ -12,7 +12,8 @@ const QUALITY = ['q-poor', 'q-common', 'q-uncommon', 'q-rare', 'q-epic', 'q-lege
 
 // ---------- DPS over time ----------
 
-export function DpsChart({ series, average, snapshot }: { series: { t: number; dps: number }[]; average: number; snapshot: PlayerSnapshot }) {
+/** `marks` are moments to flag on the chart (your cooldowns, or Bloodlust for the whole raid); `markLabel` names them in the key. */
+export function DpsChart({ series, average, snapshot, marks, markLabel = 'cooldown used' }: { series: { t: number; dps: number }[]; average: number; snapshot?: PlayerSnapshot; marks?: { t: number; name: string }[]; markLabel?: string }) {
   const W = 640;
   const H = 240;
   const pad = { l: 52, r: 12, t: 22, b: 26 };
@@ -26,7 +27,7 @@ export function DpsChart({ series, average, snapshot }: { series: { t: number; d
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * yMax);
   const xStep = tMax > 300 ? 60 : tMax > 120 ? 30 : 15;
   const xTicks = Array.from({ length: Math.floor(tMax / xStep) + 1 }, (_, i) => i * xStep);
-  const cds = snapshot.cooldowns.flatMap((c) => c.times.map((t) => ({ t, name: c.name })));
+  const cds = marks ?? snapshot?.cooldowns.flatMap((c) => c.times.map((t) => ({ t, name: c.name }))) ?? [];
 
   function onMove(e: React.PointerEvent<SVGRectElement>) {
     const box = (e.currentTarget.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
@@ -82,7 +83,7 @@ export function DpsChart({ series, average, snapshot }: { series: { t: number; d
         />
       </svg>
       <p className="muted small chart-key">
-        <span className="key-line" /> DPS, smoothed <span className="key-dash" /> fight average <span className="key-cd" /> cooldown used
+        <span className="key-line" /> DPS, smoothed <span className="key-dash" /> fight average <span className="key-cd" /> {markLabel}
       </p>
       <dl className="chart-stats">
         <div><dt>Peak</dt><dd>{n0(peak.dps)}<span>at {mmss(peak.t)}</span></dd></div>

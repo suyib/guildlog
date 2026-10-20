@@ -50,7 +50,7 @@ export async function fightBreakdown(host: string, code: string, ref: FightRef):
     return built;
   })();
 
-  const [digest, heal, utility, lust] = await Promise.all([
+  const [digest, heal, utility, lust, graph] = await Promise.all([
     digestPromise,
     optional(report(host, code, ref.id, 'healing: table(dataType:Healing, fightIDs:$fid) taken: table(dataType:DamageTaken, fightIDs:$fid)', 25_000)),
     optional(report(host, code, ref.id, 'interrupts: table(dataType:Interrupts, fightIDs:$fid) dispels: table(dataType:Dispels, fightIDs:$fid) hpsRanks: rankings(fightIDs:$fid, playerMetric:hps)', 20_000)),
@@ -61,18 +61,38 @@ export async function fightBreakdown(host: string, code: string, ref: FightRef):
       { filter: 'ability.id in (2825, 32182)' },
       ',$filter:String',
     )),
+    optional(report(host, code, ref.id, 'graph: graph(dataType:DamageDone, fightIDs:$fid)', 20_000)),
   ]);
 
   const seconds = (ref.endTime - ref.startTime) / 1000 || 1;
-  const healBy = new Map<number, any>(((heal.healing?.data?.entries ?? []) as any[]).map((e) => [e.id, e]));
+  // Healing per player. Pets and totems are added to their owner when Warcraft Logs lists them separately.
+  const healBy = new Map<number, { total: number; overheal: number; name: string; type: string }>();
+  for (const e of (heal.healing?.data?.entries ?? []) as any[]) {
+    if (!e?.id || e.type === 'NPC') continue;
+    const owner = e.type === 'Pet' ? num(e.petOwner) || null : e.id;
+    if (!owner) continue;
+    const row = healBy.get(owner) ?? { total: 0, overheal: 0, name: e.type === 'Pet' ? '' : e.name, type: e.type === 'Pet' ? '' : e.type };
+    row.total += num(e.total);
+    row.overheal += num(e.overheal);
+    if (e.type !== 'Pet') { row.name = e.name; row.type = e.type; }
+    healBy.set(owner, row);
+  }
+  // Anyone who only healed and is missing from the summary (rare) still gets a row
+  for (const [id, h] of healBy) {
+    if (!h.name || digest.players.some((p) => p.id === id)) continue;
+    digest.players.push({
+      id, name: h.name, server: null, className: h.type, specName: '', role: 'healer', total: 0, dps: 0, parse: null, itemLevel: null, activePct: null,
+      abilities: [], casts: [], cooldowns: [], deaths: [], taken: 0, avoidable: 0, avoidableTop: [],
+    });
+  }
   const hpsParse = new Map(rankingRows(utility.hpsRanks).map((r: any) => [r.name, r.rankPercent]));
   const interrupts = countsFrom(utility.interrupts);
   const dispels = countsFrom(utility.dispels);
 
   const players = digest.players.map((p) => {
     const h = healBy.get(p.id);
-    const healing = num(h?.total);
-    const overheal = num(h?.overheal);
+    const healing = h?.total ?? 0;
+    const overheal = h?.overheal ?? 0;
     const healerParse = p.role === 'healer' && typeof hpsParse.get(p.name) === 'number' ? (hpsParse.get(p.name) as number) : null;
     return {
       id: p.id,
@@ -133,6 +153,7 @@ export async function fightBreakdown(host: string, code: string, ref: FightRef):
     .map((e) => ({ seconds: Math.round((num(e.timestamp) - ref.startTime) / 100) / 10, by: actorName.get(e.sourceID) ?? 'Unknown', name: e.abilityGameID === 32182 ? 'Heroism' : 'Bloodlust' }));
 
   const totalDamage = players.reduce((t, p) => t + p.total, 0);
+  const dpsSeries = seriesOverTime(graph.graph, ref.startTime, seconds, totalDamage / seconds);
   const totalHealing = players.reduce((t, p) => t + p.healing, 0);
   const ilvls = players.map((p) => p.itemLevel).filter((v): v is number => !!v);
 
@@ -152,5 +173,54 @@ export async function fightBreakdown(host: string, code: string, ref: FightRef):
     deaths,
     takenByAbility,
     bloodlust,
+    dpsSeries,
   };
+}
+
+/**
+ * Raid DPS across the fight from Warcraft Logs' damage graph, totalled per second, smoothed over
+ * 5 seconds and scaled so its average is the raid's real DPS. Each series' own start time and step
+ * are used, so the line lines up with the fight even when the graph covers a wider stretch of the log.
+ */
+export function seriesOverTime(graph: any, fightStart: number, seconds: number, avgDps: number): { t: number; dps: number }[] {
+  const series: any[] = graph?.data?.series ?? graph?.series ?? [];
+  if (!series.length || seconds < 3) return [];
+  const total = series.find((x) => /^total$/i.test(String(x?.name)));
+  const used = total ? [total] : series;
+  const secs = Math.ceil(seconds);
+
+  const bucket = (base: number) => {
+    const b = new Array<number>(secs).fill(0);
+    let inside = 0;
+    let all = 0;
+    for (const s of used) {
+      const start = num(s?.pointStart);
+      const step = num(s?.pointInterval) || 1000;
+      (s?.data ?? []).forEach((p: any, i: number) => {
+        let t: number, v: number;
+        if (Array.isArray(p)) [t, v] = [num(p[0]), num(p[1])];
+        else if (p && typeof p === 'object') [t, v] = [num(p.x), num(p.y)];
+        else [t, v] = [start + i * step, num(p)];
+        all++;
+        const sec = Math.floor((t - base) / 1000);
+        if (sec >= 0 && sec < secs) { b[sec] += v; inside++; }
+      });
+    }
+    return { b, share: all ? inside / all : 0 };
+  };
+  // Times are usually from the start of the log; if most points don't land in the fight, they're from the pull
+  let { b, share } = bucket(fightStart);
+  if (share < 0.5) {
+    const alt = bucket(0);
+    if (alt.share > share) b = alt.b;
+  }
+  const smooth = b.map((_, i) => {
+    const a = Math.max(0, i - 2);
+    const z = Math.min(secs, i + 3);
+    return b.slice(a, z).reduce((t, v) => t + v, 0) / (z - a);
+  });
+  const mean = smooth.reduce((t, v) => t + v, 0) / secs;
+  if (!(mean > 0)) return [];
+  const scale = avgDps > 0 ? avgDps / mean : 1;
+  return smooth.map((v, i) => ({ t: i, dps: Math.round(v * scale) }));
 }
