@@ -32,8 +32,10 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
       <FightHeader result={result} />
       {crossClass.length > 0 && (section === 'overview' || section === 'compare') && (
         <p className="warning">
-          <strong>Different class:</strong> {crossClass.map((p) => p.s.name).join(', ')} {crossClass.length > 1 ? 'are' : 'is'} not a {me.className}, so only
-          general stats are compared (DPS, parse, active time, item level, downtime, deaths, damage taken and shared buffs). Rotation and cooldown comparisons are skipped.
+          <strong>Different {crossClass.every((p) => p.s.className === me.className) ? 'spec' : 'class or spec'}:</strong>{' '}
+          {crossClass.map((p) => `${p.s.name} (${spaced(p.s.specName)} ${p.s.className})`).join(', ')} {crossClass.length > 1 ? 'aren\u2019t' : 'isn\u2019t'} a{' '}
+          {spaced(me.specName)} {me.className}, so only general stats are compared (DPS, parse, active time, item level, downtime, deaths, damage taken and
+          shared buffs). Rotation and cooldown comparisons are skipped.
         </p>
       )}
       {section === 'overview' && <Overview result={result} />}
@@ -334,7 +336,7 @@ function GearView({ result }: { result: AnalysisResult }) {
         {d.stats.length > 0 ? (
           <>
             <p className="muted small">Hover or tap a stat to see what it does for a {result.player.className}.</p>
-            <StatsList stats={d.stats} className={result.player.className} />
+            <StatsList stats={d.stats} className={result.player.className} host={result.player.host} />
           </>
         ) : (
           <p className="muted small">No stats in this log. Warcraft Logs only records them when the logger saw you at the pull.</p>
@@ -367,7 +369,8 @@ function BuffsView({ result }: { result: AnalysisResult }) {
     .slice(0, 20);
 
   return (
-    <div className="grid-2-1">
+    <>
+      <Survival result={result} />
       <section className="panel">
         <h2 className="panel-title">{ref ? `Buff uptime vs ${ref.name}` : 'Buff uptime'}</h2>
         {ref && !refSameClass && <p className="muted small">Different class: their class-only buffs (stances, forms, auras) are hidden.</p>}
@@ -394,29 +397,104 @@ function BuffsView({ result }: { result: AnalysisResult }) {
           </div>
         )}
       </section>
-      <section className="panel">
-        <h2 className="panel-title">Survival</h2>
-        {me.deaths.length === 0 ? (
-          <p className="good-note"><Glyph name="check" size={16} />No deaths</p>
-        ) : (
-          <ul className="death-list">
-            {me.deaths.map((x, i) => (
-              <li key={i}><Glyph name="alert" size={16} />Died at {mmss(x.seconds)}{x.by ? ` to ${x.by}` : ''}</li>
-            ))}
-          </ul>
-        )}
-        {me.damageTaken.length > 0 && (
-          <table className="grid">
-            <thead><tr><th>Damage taken from</th><th className="r">Amount</th></tr></thead>
-            <tbody>
-              {me.damageTaken.slice(0, 10).map((x) => (
-                <tr key={x.name}><td>{x.name}</td><td className="r">{compact(x.total)}</td></tr>
+    </>
+  );
+}
+
+/** Damage summary, avoidable damage and deaths for the Buffs & survival section. */
+function Survival({ result }: { result: AnalysisResult }) {
+  const me = result.player;
+  const sv = result.dashboard?.survival;
+  const takenTotal = sv?.total ?? me.damageTaken.reduce((t, x) => t + x.total, 0);
+  const perSecond = me.fightSeconds > 0 ? takenTotal / me.fightSeconds : 0;
+  const avoidable = sv?.abilities.filter((a) => a.avoidable) ?? [];
+  const who = sv?.isTank ? 'the other tanks' : 'the non-tanks';
+
+  return (
+    <>
+      <div className="kpis">
+        <Kpi glyph="shield" label="Damage taken" value={compact(takenTotal)} sub={`${compact(perSecond)} per second`} />
+        <Kpi
+          glyph="alert"
+          label="Likely avoidable"
+          value={sv ? compact(sv.avoidableTotal) : '–'}
+          valueCls={sv && sv.avoidableTotal > 0 ? 'warn-text' : ''}
+          sub={sv ? (takenTotal > 0 ? `${Math.round((sv.avoidableTotal / takenTotal) * 100)}% of your damage taken` : 'none') : 'Not available for this log'}
+        />
+        <Kpi
+          glyph="users"
+          label="Raid median"
+          value={sv ? compact(sv.raidMedianTotal) : '–'}
+          delta={sv && sv.raidMedianTotal > 0 ? { text: `${Math.abs(Math.round(((takenTotal - sv.raidMedianTotal) / sv.raidMedianTotal) * 100))}% ${takenTotal <= sv.raidMedianTotal ? 'less' : 'more'} than ${who}`, good: takenTotal <= sv.raidMedianTotal } : null}
+          sub={sv ? `Across ${who}` : 'Not available for this log'}
+        />
+        <Kpi glyph="pulse" label="Deaths" value={String(me.deaths.length)} sub={me.deaths.length ? me.deaths.map((d) => mmss(d.seconds)).join(', ') : 'Alive the whole fight'} />
+      </div>
+
+      <div className="grid-2-1">
+        <section className="panel">
+          <h2 className="panel-title">Damage taken by ability</h2>
+          {sv ? (
+            <>
+              <p className="muted small">
+                &ldquo;Likely avoidable&rdquo; means it hit fewer than half of {who === 'the other tanks' ? 'the non-tanks' : who}: raid-wide damage hits everyone, while things you can move out of only hit the people who stood in them. Check the boss&rsquo;s mechanics before treating it as a mistake.
+              </p>
+              <div className="scroll">
+                <table className="grid">
+                  <thead><tr><th>Ability</th><th className="r">You</th><th className="r">Raid median</th><th className="r">Players hit</th><th></th></tr></thead>
+                  <tbody>
+                    {sv.abilities.slice(0, 15).map((a) => (
+                      <tr key={a.name} className={a.avoidable && a.total > a.raidMedian ? 'warn' : ''}>
+                        <td><span className="with-icon"><GameIcon file={a.icon} />{a.name}</span></td>
+                        <td className="r">{compact(a.total)}</td>
+                        <td className="r muted">{compact(a.raidMedian)}</td>
+                        <td className="r muted">{a.playersHit} / {a.raidSize}</td>
+                        <td>{a.avoidable && <span className="badge badge-warn">Likely avoidable</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : me.damageTaken.length > 0 ? (
+            <>
+              <p className="muted small">Raid comparison isn&rsquo;t available for this analysis. Click Analyze again to load it.</p>
+              <table className="grid">
+                <thead><tr><th>Ability</th><th className="r">Amount</th></tr></thead>
+                <tbody>
+                  {me.damageTaken.slice(0, 12).map((x) => (
+                    <tr key={x.name}><td>{x.name}</td><td className="r">{compact(x.total)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ) : (
+            <p className="muted small">No damage taken.</p>
+          )}
+        </section>
+
+        <section className="panel">
+          <h2 className="panel-title">Survival</h2>
+          {me.deaths.length === 0 ? (
+            <p className="good-note"><Glyph name="check" size={16} />No deaths</p>
+          ) : (
+            <ul className="death-list">
+              {me.deaths.map((x, i) => (
+                <li key={i}><Glyph name="alert" size={16} />Died at {mmss(x.seconds)}{x.by ? ` to ${x.by}` : ''}</li>
               ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-    </div>
+            </ul>
+          )}
+          {sv && (
+            <dl className="facts single">
+              <div><dt>Rank for damage taken</dt><dd>{sv.rank} of {sv.compared}</dd></div>
+              <div><dt>Avoidable abilities that hit you</dt><dd>{avoidable.length}</dd></div>
+              {avoidable[0] && <div><dt>Biggest avoidable hit</dt><dd>{avoidable[0].name}</dd></div>}
+            </dl>
+          )}
+          <p className="muted small">Rank 1 is the least damage taken{sv?.isTank ? ' among tanks' : ' among non-tanks'}.</p>
+        </section>
+      </div>
+    </>
   );
 }
 
@@ -481,7 +559,7 @@ function PlayerTable({ players, children, showCrossClass = false }: { players: R
                   <ClassIcon className={p.s.className} size={16} />
                   <span className={classCss(p.s.className)}>{p.me ? 'You' : p.s.name}</span>
                 </span>
-                {showCrossClass && !p.sameClass && <div className="tag">Different class</div>}
+                {showCrossClass && !p.sameClass && <div className="tag">{p.s.className === players[0].s.className ? 'Different spec' : 'Different class'}</div>}
               </th>
             ))}
           </tr>

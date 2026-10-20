@@ -48,7 +48,7 @@ export interface PlayerSnapshot {
   damageTaken: { name: string; total: number }[];
 }
 
-export type ComparisonKind = 'same-report' | 'chosen-player' | 'top-parse' | 'previous-kill';
+export type ComparisonKind = 'same-report' | 'chosen-player' | 'other-log' | 'top-parse' | 'previous-kill';
 
 /** What the user picked in the "Compare with" dropdown. */
 export type CompareChoice =
@@ -56,7 +56,9 @@ export type CompareChoice =
   | { kind: 'player'; playerId: number }
   | { kind: 'top' }
   | { kind: 'previous' }
-  | { kind: 'none' };
+  | { kind: 'none' }
+  /** Someone in a different report: you pick the log, fight and player. */
+  | { kind: 'log'; host: string; code: string; fight: FightRef; actor: ActorRef };
 
 /** Just enough about a fight to fetch a player's data without re-reading the whole report. */
 export interface FightRef { id: number; encounterID: number; name: string; startTime: number; endTime: number; kill: boolean }
@@ -83,7 +85,7 @@ export interface Comparison {
   kind: ComparisonKind;
   label: string;
   snapshot: PlayerSnapshot;
-  /** False when the comparison is a different class: only general stats are compared. */
+  /** False when the comparison is a different class or spec (say Balance vs Feral): only general stats are compared. */
   sameClass: boolean;
 }
 
@@ -121,6 +123,30 @@ export interface Dashboard {
   stats: { name: string; value: string }[];
   /** DPS across the fight, seconds from the pull. */
   dpsSeries: { t: number; dps: number }[];
+  /** Damage taken against the rest of the raid (missing when Warcraft Logs doesn't break it down). */
+  survival?: Survival;
+}
+
+export interface Survival {
+  total: number;
+  /** Damage from abilities that hit fewer than half of the non-tanks. */
+  avoidableTotal: number;
+  /** Median damage taken by the raid (other tanks if you're a tank, everyone else if not). */
+  raidMedianTotal: number;
+  /** 1 = took the least damage among the players compared. */
+  rank: number;
+  compared: number;
+  isTank: boolean;
+  abilities: {
+    name: string;
+    icon?: string;
+    total: number;
+    playersHit: number;
+    raidSize: number;
+    /** Median damage from this ability among the players it hit. */
+    raidMedian: number;
+    avoidable: boolean;
+  }[];
 }
 
 export interface AnalysisResult {
@@ -144,7 +170,8 @@ export interface ReportSummary {
   title: string;
   /** When the log started, ms since epoch. */
   startTime?: number;
-  fights: { id: number; name: string; encounterId: number; kill: boolean; seconds: number; startTime: number; endTime: number }[];
+  /** playerIds: who was in that fight (empty when Warcraft Logs doesn't say, so everyone is shown). */
+  fights: { id: number; name: string; encounterId: number; kill: boolean; seconds: number; startTime: number; endTime: number; playerIds: number[] }[];
   players: { id: number; name: string; className: string; server: string | null }[];
   suggestedFight?: number;
   suggestedPlayer?: number;

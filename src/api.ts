@@ -51,7 +51,7 @@ export function loadPortrait(p: { host: string; reportCode: string; name: string
  *   3. the summary (findings + save)
  */
 export async function runAnalysis(
-  p: { host: string; code: string; fight: FightRef; actor: ActorRef; compare: CompareChoice; chosen?: ActorRef },
+  p: { host: string; code: string; fight: FightRef; actor: ActorRef; compare: CompareChoice; chosen?: ActorRef; otherLabel?: string },
   onProgress: (items: Progress[]) => void,
 ): Promise<AnalysisResult> {
   const progress: Progress[] = [];
@@ -83,7 +83,7 @@ export async function runAnalysis(
   const myDps = myRow && fightSeconds > 0 ? myRow.total / fightSeconds : 0;
   const dashboardPromise = step(
     'Gear, stats and DPS over time',
-    post<Dashboard>('/api/dashboard', { host: p.host, code: p.code, fightId: p.fight.id, sourceId: p.actor.id, fightSeconds, dps: myDps }),
+    post<Dashboard>('/api/dashboard', { host: p.host, code: p.code, fightId: p.fight.id, sourceId: p.actor.id, fightSeconds, dps: myDps, startTime: p.fight.startTime, endTime: p.fight.endTime }),
   ).catch((e) => {
     notes.push(`Couldn\u2019t load gear and stats: ${(e as Error).message}`);
     return undefined;
@@ -96,6 +96,7 @@ export async function runAnalysis(
 
   // Who to compare with
   const targets: SnapshotTarget[] = [];
+  const comparisonJobsPre: Promise<Comparison | null>[] = [];
   if (p.compare.kind === 'player' && p.chosen) {
     targets.push({
       kind: 'chosen-player',
@@ -104,6 +105,19 @@ export async function runAnalysis(
       sameClass: p.chosen.className === p.actor.className,
       row: rowFor(p.chosen),
     });
+  }
+  if (p.compare.kind === 'log') {
+    const o = p.compare;
+    const label = p.otherLabel ?? `${o.actor.name} (other log)`;
+    // Read the other log's fight first so the comparison gets their parse and item level too
+    comparisonJobsPre.push(
+      step(`${o.actor.name}: reading the other log`, post<FightPlayerRow[]>('/api/fight', { host: o.host, code: o.code, fightId: o.fight.id }))
+        .then((otherRows) => {
+          const row = otherRows.find((r) => r.id === o.actor.id || r.name === o.actor.name);
+          return step(o.actor.name, snap({ host: o.host, code: o.code, fight: o.fight, actor: o.actor, row }));
+        })
+        .then((snapshot) => ({ kind: 'other-log' as const, label, snapshot, sameClass: snapshot.className === p.actor.className })),
+    );
   }
   if (p.compare.kind === 'auto') {
     rows
@@ -120,9 +134,9 @@ export async function runAnalysis(
       }));
   }
 
-  const comparisonJobs: Promise<Comparison | null>[] = targets.map((t) =>
+  const comparisonJobs: Promise<Comparison | null>[] = [...comparisonJobsPre, ...targets.map((t) =>
     step(t.actor.name, snap(t)).then((snapshot) => ({ kind: t.kind, label: t.label, snapshot, sameClass: t.sameClass })),
-  );
+  )];
 
   if (p.compare.kind === 'auto' || p.compare.kind === 'top') {
     const me = { name: p.actor.name, className: myRow?.className ?? p.actor.className, specName: myRow?.specName ?? '' };
@@ -143,6 +157,9 @@ export async function runAnalysis(
   });
 
   const [player, dashboard] = await Promise.all([mePromise, dashboardPromise]);
-  const compareKey = p.compare.kind === 'player' ? `p:${p.chosen?.name ?? ''}` : p.compare.kind;
+  const compareKey =
+    p.compare.kind === 'player' ? `p:${p.chosen?.name ?? ''}`
+    : p.compare.kind === 'log' ? `l:${p.compare.host}:${p.compare.code}:${p.compare.fight.id}:${p.compare.actor.name}`
+    : p.compare.kind;
   return step('Building the summary', post<AnalysisResult>('/api/finish', { player, comparisons, compareKey, notes, dashboard }));
 }

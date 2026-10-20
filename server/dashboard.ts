@@ -1,5 +1,5 @@
 // Turns raw Warcraft Logs data into the personal dashboard shown when nothing is compared.
-import type { Dashboard, GearItem } from './types.js';
+import type { Dashboard, GearItem, Survival } from './types.js';
 import { getDashboardRaw } from './wcl.js';
 
 const SLOT_NAMES = [
@@ -62,36 +62,95 @@ function statsFrom(raw: Record<string, any> | null | undefined): Dashboard['stat
 }
 
 /**
- * DPS over the fight. Warcraft Logs returns damage in evenly spaced buckets; the series is
- * smoothed over a few buckets and scaled so its average equals the player's real DPS,
- * which keeps the units right whichever way Warcraft Logs reports the buckets.
+ * DPS over the fight, built from the player's own damage events: damage is added up per second,
+ * then averaged over a 5-second window (like Warcraft Logs' graph). Pet damage isn't in these
+ * events, so the line is scaled so its average matches the player's real DPS.
  */
-function dpsSeriesFrom(graph: any, fightSeconds: number, dps: number): Dashboard['dpsSeries'] {
-  const series: any[] = graph?.data?.series ?? graph?.series ?? [];
-  if (!series.length) return [];
-  const total = series.find((s) => /^total$/i.test(String(s.name)));
-  const used = total ? [total] : series.filter((s) => Array.isArray(s.data));
-  const len = Math.max(...used.map((s) => s.data?.length ?? 0));
-  if (len < 2) return [];
-  const raw = Array.from({ length: len }, (_, i) =>
-    used.reduce((t, s) => {
-      const p = s.data?.[i];
-      return t + (Array.isArray(p) ? Number(p[1]) || 0 : Number(p) || 0);
-    }, 0),
-  );
-  const w = Math.max(1, Math.round(len / 40)); // ~40 smoothing windows across the fight
-  const smooth = raw.map((_, i) => {
-    const a = Math.max(0, i - w);
-    const b = Math.min(len, i + w + 1);
-    return raw.slice(a, b).reduce((t, v) => t + v, 0) / (b - a);
+export function dpsSeriesFrom(events: { timestamp: number; amount: number }[], start: number, fightSeconds: number, dps: number): Dashboard['dpsSeries'] {
+  const secs = Math.max(1, Math.ceil(fightSeconds));
+  if (events.length < 3 || secs < 3) return [];
+  const perSecond = new Array<number>(secs).fill(0);
+  for (const e of events) {
+    const i = Math.floor((e.timestamp - start) / 1000);
+    if (i >= 0 && i < secs) perSecond[i] += e.amount;
+  }
+  const half = 2;
+  const smooth = perSecond.map((_, i) => {
+    const a = Math.max(0, i - half);
+    const b = Math.min(secs, i + half + 1);
+    return perSecond.slice(a, b).reduce((t, v) => t + v, 0) / (b - a);
   });
-  const mean = smooth.reduce((t, v) => t + v, 0) / len;
+  const mean = smooth.reduce((t, v) => t + v, 0) / secs;
   const scale = mean > 0 && dps > 0 ? dps / mean : 1;
-  return smooth.map((v, i) => ({ t: Math.round((i / (len - 1)) * fightSeconds), dps: Math.round(v * scale) }));
+  return smooth.map((v, i) => ({ t: i, dps: Math.round(v * scale) }));
 }
 
-export async function buildDashboard(host: string, code: string, fightId: number, sourceId: number, fightSeconds: number, dps: number): Promise<Dashboard> {
-  const raw = await getDashboardRaw(host, code, fightId, sourceId);
+const MELEE = /^(melee|auto attack|attack)$/i;
+const median = (xs: number[]) => {
+  if (!xs.length) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+/**
+ * Damage taken by the player, set against the rest of the raid. An ability counts as
+ * "likely avoidable" when it hit fewer than half of the non-tanks: raid-wide damage hits
+ * everyone, while things you can step out of only hit the people who stood in them.
+ */
+export function survivalFrom(taken: any, sourceId: number, tankIds: number[], raidIds: number[]): Survival | undefined {
+  const entries: any[] = (taken?.data?.entries ?? taken?.entries ?? []).filter((e: any) => e && e.type !== 'Pet' && e.type !== 'NPC');
+  const me = entries.find((e) => e.id === sourceId);
+  if (!entries.length || !me || !Array.isArray(me.abilities)) return undefined;
+
+  const tanks = new Set(tankIds);
+  const raid = new Set([...raidIds, ...entries.map((e) => e.id)]);
+  const nonTanks = [...raid].filter((id) => !tanks.has(id));
+  const byAbility = new Map<string, { icon?: string; hits: Map<number, number> }>();
+  for (const e of entries) {
+    for (const a of (e.abilities ?? []) as any[]) {
+      if (!a?.name || !(Number(a.total) > 0)) continue;
+      const row = byAbility.get(a.name) ?? { icon: a.abilityIcon ?? a.icon, hits: new Map<number, number>() };
+      row.hits.set(e.id, (row.hits.get(e.id) ?? 0) + Number(a.total));
+      byAbility.set(a.name, row);
+    }
+  }
+
+  const abilities: Survival['abilities'] = ((me.abilities ?? []) as any[])
+    .filter((a) => a?.name && Number(a.total) > 0)
+    .map((a) => {
+      const row = byAbility.get(a.name)!;
+      const hitIds = [...row.hits.keys()];
+      const nonTankHits = hitIds.filter((id) => !tanks.has(id)).length;
+      const tankOnly = nonTankHits === 0;
+      return {
+        name: a.name,
+        icon: typeof row.icon === 'string' ? row.icon : undefined,
+        total: Number(a.total),
+        playersHit: hitIds.length,
+        raidSize: raid.size,
+        raidMedian: Math.round(median([...row.hits.values()])),
+        avoidable: !MELEE.test(a.name) && !tankOnly && nonTanks.length >= 3 && nonTankHits / nonTanks.length < 0.5,
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+
+  const totals = entries.map((e) => Number(e.total) || 0);
+  const nonTankTotals = entries.filter((e) => !tanks.has(e.id)).map((e) => Number(e.total) || 0);
+  const myTotal = Number(me.total) || 0;
+  return {
+    total: myTotal,
+    avoidableTotal: abilities.filter((a) => a.avoidable).reduce((t, a) => t + a.total, 0),
+    raidMedianTotal: Math.round(median(tanks.has(sourceId) ? totals : nonTankTotals)),
+    rank: 1 + (tanks.has(sourceId) ? totals : nonTankTotals).filter((t) => t < myTotal).length,
+    compared: (tanks.has(sourceId) ? totals : nonTankTotals).length,
+    isTank: tanks.has(sourceId),
+    abilities,
+  };
+}
+
+export async function buildDashboard(host: string, code: string, fightId: number, sourceId: number, fightSeconds: number, dps: number, start: number, end: number): Promise<Dashboard> {
+  const raw = await getDashboardRaw(host, code, fightId, sourceId, start, end);
   const summaryGear: any[] = raw.summary?.data?.gear ?? raw.summary?.gear ?? [];
   const combatGear: any[] = raw.combatant?.gear ?? [];
   // The summary table usually has item and enchant names; combatant info is the fallback.
@@ -100,6 +159,7 @@ export async function buildDashboard(host: string, code: string, fightId: number
   return {
     gear: gearFrom(merged),
     stats: statsFrom(raw.combatant?.stats ?? raw.summary?.data?.stats),
-    dpsSeries: dpsSeriesFrom(raw.graph, fightSeconds, dps),
+    dpsSeries: dpsSeriesFrom(raw.damageEvents, start, fightSeconds, dps),
+    survival: survivalFrom(raw.taken, sourceId, raw.tankIds, raw.raidIds),
   };
 }

@@ -195,12 +195,22 @@ button.ghost:hover:not(:disabled), a.button.ghost:hover { border-color: var(--pr
 
 .report-title { grid-column: 1 / -1; font-size: 15px; font-weight: 700; letter-spacing: 0.04em; color: var(--ink-2); }
 .pickers { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: end; }
-.pickers label {
+.pickers > label {
   display: flex; flex-direction: column; gap: 6px; min-width: 0;
   font: 400 12px var(--font-mono); letter-spacing: 0.04em; color: var(--ink-2);
 }
 .pickers button { padding: 0 28px; }
 .pickers .warning, .pickers > .muted { grid-column: 1 / -1; }
+
+/* Second log to compare against */
+.other-log { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: var(--raised); border: 1px dashed var(--line); }
+.other-log-title { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.other-pickers { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 12px; }
+.other-pickers .report-title { grid-column: 1 / -1; }
+.small-title { font-size: 13px; }
+.other-pickers label { display: flex; flex-direction: column; gap: 6px; min-width: 0; font: 400 12px var(--font-mono); letter-spacing: 0.04em; color: var(--ink-2); }
+button.secondary { background: transparent; border: 1px solid var(--primary); color: var(--ink); }
+button.secondary:hover:not(:disabled) { background: rgba(0, 124, 173, 0.18); }
 
 /* ---------- Analysis progress ---------- */
 .progress {
@@ -253,6 +263,10 @@ button.ghost:hover:not(:disabled), a.button.ghost:hover { border-color: var(--pr
 .facts > div { display: flex; justify-content: space-between; gap: 8px; padding: 8px 12px; border-radius: 10px; background: var(--raised); font-size: 13px; }
 .facts dt { color: var(--ink-2); }
 .facts dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.warn-text { color: var(--medium); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.badge-warn { background: rgba(255, 179, 71, 0.14); color: var(--medium); }
+.facts.single { grid-template-columns: 1fr; }
 .good-note { display: flex; align-items: center; gap: 8px; color: var(--win); font-weight: 600; margin: 0; }
 .death-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .death-list li { display: flex; align-items: center; gap: 8px; color: var(--high); font-weight: 600; }
@@ -485,6 +499,7 @@ progress.uptime-bar { height: 8px; color: var(--primary-light); }
 @media (max-width: 640px) {
   :root { --card-pad: 16px; --radius-card: 16px; --space: 12px; }
   .pickers { grid-template-columns: 1fr; }
+  .other-pickers { grid-template-columns: 1fr; }
   .pickers button { width: 100%; }
   .row { flex-direction: column; }
   .row .input-icon { flex: none; }

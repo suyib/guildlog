@@ -1,5 +1,6 @@
 // What each character stat does, shown as a tooltip on "Stats at the pull".
-// Numbers are for level 70 (the Burning Crusade raids these logs come from).
+// Rating numbers are for level 70 (Burning Crusade, fresh.warcraftlogs.com). Other versions have different
+// conversions, so for them the tooltip keeps only the sentences without numbers.
 
 type ClassName = 'Hunter' | 'Rogue' | 'Warrior' | 'Paladin' | 'Shaman' | 'Druid' | 'Mage' | 'Warlock' | 'Priest';
 
@@ -21,7 +22,7 @@ function strength(cls: string): string {
 function agility(cls: string): string {
   const crit = AGI_PER_CRIT[cls as ClassName];
   const critPart = crit ? ` About ${crit} Agility gives 1% crit.` : '';
-  if (cls === 'Hunter') return `Your best stat: each point gives 1 ranged attack power and 1 melee attack power.${critPart} Also adds armor and dodge.`;
+  if (cls === 'Hunter') return `Your best stat. Each point gives 1 ranged attack power and 1 melee attack power.${critPart} Also adds armor and dodge.`;
   if (cls === 'Rogue') return `Each point gives 1 attack power.${critPart} Also adds armor and dodge.`;
   if (cls === 'Druid') return `In Cat Form each point gives 1 attack power.${critPart} Also adds armor and dodge, which matters in Bear Form.`;
   if (cls === 'Warrior' || cls === 'Paladin' || cls === 'Shaman') return `Adds crit chance, armor and dodge.${critPart}`;
@@ -80,7 +81,15 @@ const RATING: Record<string, (cls: string) => string> = {
 };
 
 /** Tooltip text for a stat, tailored to the class where it matters. Null when there's nothing useful to say. */
-export function statTooltip(stat: string, className: string): string | null {
+export function statTooltip(stat: string, className: string, withLevel70Numbers = true): string | null {
   const fn = RATING[stat] ?? RATING[stat.replace(/ Rating$/i, '')];
-  return fn ? fn(className) : null;
+  if (!fn) return null;
+  const text = fn(className);
+  if (withLevel70Numbers) return text;
+  // Drop sentences that quote level-70 conversions or caps
+  const kept = text
+    .split(/(?<=\.)\s+/)
+    .map((s) => s.replace(/\s*\((about|around) [^)]*\d[^)]*\)/gi, ''))
+    .filter((s) => !/\d/.test(s));
+  return kept.join(' ').trim() || null;
 }

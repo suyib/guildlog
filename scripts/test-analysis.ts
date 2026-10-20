@@ -2,6 +2,8 @@
 import assert from 'node:assert/strict';
 import { buildFindings, buildSnapshot, findGaps, possibleUses } from '../server/analysis';
 import type { Fight, PlayerTables } from '../server/wcl';
+import { dpsSeriesFrom, survivalFrom } from '../server/dashboard';
+import { statTooltip } from '../src/statInfo';
 
 const fight: Fight = { id: 11, encounterID: 651, name: 'Magtheridon', startTime: 0, endTime: 177_000, kill: true, size: 25, difficulty: 3 };
 const abilities = new Map<number, string>([[1, 'Steady Shot'], [2, 'Bestial Wrath'], [3, 'Blood Fury'], [4, 'Auto Shot'], [5, 'Arcane Shot']]);
@@ -67,4 +69,36 @@ assert.ok(!cross.some((f) => f.title.startsWith('Fewer')), 'no cast-rate finding
 const buffFinding = cross.find((f) => f.title.startsWith('Buffs'));
 assert.ok(buffFinding && !buffFinding.detail.includes('Battle Stance') && buffFinding.detail.includes('Leader of the Pack'));
 assert.ok(cross.some((f) => f.title.startsWith('Bestial Wrath: 1 of 2')), 'own cooldown use still checked');
+
+// DPS over time from damage events: report-relative timestamps, aligned to the fight start
+const start = 5_000_000;
+const events = Array.from({ length: 120 }, (_, i) => ({ timestamp: start + i * 1000, amount: i < 60 ? 2000 : 1000 }));
+const series = dpsSeriesFrom(events, start, 120, 1500);
+assert.equal(series.length, 120);
+assert.ok(series[10].dps > series[100].dps, 'busy first half shows higher DPS');
+assert.ok(Math.abs(series.reduce((t, p) => t + p.dps, 0) / 120 - 1500) < 2, 'average matches real DPS');
+
+// Avoidable damage: Fire hit 2 of 8 non-tanks (avoidable), Nova hit everyone (not), Cleave only tanks (not)
+const ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const taken = { data: { entries: ids.map((id) => ({
+  id, name: `P${id}`, type: 'Druid', total: 0,
+  abilities: [
+    { name: 'Nova', total: 1000 },
+    ...(id <= 2 ? [{ name: 'Cleave', total: 5000 }] : []),
+    ...(id === 3 || id === 4 ? [{ name: 'Fire', total: 3000 }] : []),
+  ],
+})) } };
+for (const e of taken.data.entries) e.total = e.abilities.reduce((t, a) => t + a.total, 0);
+const sv = survivalFrom(taken, 3, [1, 2], ids)!;
+assert.equal(sv.abilities.find((a) => a.name === 'Fire')?.avoidable, true);
+assert.equal(sv.abilities.find((a) => a.name === 'Nova')?.avoidable, false);
+assert.equal(sv.avoidableTotal, 3000);
+assert.equal(sv.compared, 8);
+const tank = survivalFrom(taken, 1, [1, 2], ids)!;
+assert.equal(tank.abilities.find((a) => a.name === 'Cleave')?.avoidable, false, 'tank-only damage is not avoidable');
+
+// Stat tooltips: level-70 numbers only on Fresh logs
+assert.ok(statTooltip('Hit', 'Hunter', true)!.includes('142'));
+assert.ok(!/\d/.test(statTooltip('Hit', 'Hunter', false)!));
+
 console.log('\nAll analysis checks passed.');

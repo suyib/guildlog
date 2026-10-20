@@ -72,5 +72,6 @@ export function compareLabel(key: string | undefined): string {
   if (key === 'previous') return 'Previous kill';
   if (key === 'none') return 'Nothing (just my stats)';
   if (key.startsWith('p:')) return `vs ${key.slice(2)}`;
+  if (key.startsWith('l:')) return `vs ${key.split(':').slice(4).join(':')} (other log)`;
   return key;
 }

@@ -84,7 +84,7 @@ export function parseReportUrl(input: string): ParsedUrl {
 // ---------- Queries ----------
 
 export interface Actor { id: number; name: string; type: string; subType: string; petOwner: number | null; server?: string | null }
-export interface Fight { id: number; encounterID: number; name: string; startTime: number; endTime: number; kill: boolean | null; size: number | null; difficulty: number | null }
+export interface Fight { id: number; encounterID: number; name: string; startTime: number; endTime: number; kill: boolean | null; size: number | null; difficulty: number | null; friendlyPlayers?: number[] | null }
 export interface ReportMeta {
   code: string;
   title: string;
@@ -97,7 +97,7 @@ export interface ReportMeta {
 export async function getReportMeta(host: string, code: string, timeoutMs?: number): Promise<ReportMeta> {
   const q = `query($code:String!){reportData{report(code:$code){
     code title startTime zone{id name}
-    fights{id encounterID name startTime endTime kill size difficulty}
+    fights{id encounterID name startTime endTime kill size difficulty friendlyPlayers}
     masterData{actors{id name type subType petOwner server}}
   }}}`;
   const d = await gql<{ reportData: { report: ReportMeta | null } }>(host, q, { code }, timeoutMs);
@@ -201,37 +201,52 @@ export async function getReportRegion(host: string, code: string): Promise<strin
 
 // ---------- Personal dashboard (no comparison) ----------
 
-export interface DashboardRaw { summary: any; combatant: any; graph: any }
+export interface DashboardRaw { summary: any; combatant: any; damageEvents: { timestamp: number; amount: number }[]; taken: any; tankIds: number[]; raidIds: number[] }
+
+/** The player's own damage events across the fight, paged, within a time budget. */
+async function getDamageEvents(host: string, code: string, fightId: number, sourceId: number, start: number, end: number) {
+  const q = `query($code:String!,$fid:[Int]!,$sid:Int!,$st:Float,$et:Float){reportData{report(code:$code){
+    events(dataType:DamageDone, fightIDs:$fid, sourceID:$sid, startTime:$st, endTime:$et, limit:10000){data nextPageTimestamp}
+  }}}`;
+  const out: { timestamp: number; amount: number }[] = [];
+  let st: number | null = start;
+  const deadline = Date.now() + 35_000;
+  for (let page = 0; st !== null && page < 8; page++) {
+    const left = deadline - Date.now();
+    if (left < 3_000) break; // keep what we have; the chart is scaled to the real average anyway
+    const d: any = await gql(host, q, { code, fid: [fightId], sid: sourceId, st, et: end }, Math.min(20_000, left));
+    for (const e of d.reportData.report.events?.data ?? []) {
+      if (e?.type === 'damage' && typeof e.timestamp === 'number') out.push({ timestamp: e.timestamp, amount: (Number(e.amount) || 0) + (Number(e.absorbed) || 0) });
+    }
+    st = d.reportData.report.events?.nextPageTimestamp ?? null;
+  }
+  return out;
+}
 
 /**
- * One player's gear, stats and damage-over-time. Each part is its own request with a short
- * time limit, and any part that fails or is slow is simply left out of the dashboard.
+ * One player's gear, stats, damage over time and the raid's damage taken. Each part is its own
+ * request with a time limit, and any part that fails or is slow is simply left out.
  */
-export async function getDashboardRaw(host: string, code: string, fightId: number, sourceId: number): Promise<DashboardRaw> {
-  const vars = { code, fid: [fightId], sid: sourceId };
-  const one = (field: string) =>
-    gql<{ reportData: { report: Record<string, any> } }>(
-      host,
-      `query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){ ${field} }}}`,
-      vars,
-      20_000,
-    )
+export async function getDashboardRaw(host: string, code: string, fightId: number, sourceId: number, start: number, end: number): Promise<DashboardRaw> {
+  const report = (query: string, vars: Record<string, unknown>) =>
+    gql<{ reportData: { report: Record<string, any> } }>(host, query, vars, 20_000)
       .then((d) => d.reportData.report)
       .catch(() => ({}) as Record<string, any>);
-  const [summary, details, graph] = await Promise.all([
-    one('summary: table(dataType:Summary, fightIDs:$fid, sourceID:$sid)'),
-    // playerDetails takes no sourceID, so this query has its own variables
-    gql<{ reportData: { report: Record<string, any> } }>(
-      host,
-      `query($code:String!,$fid:[Int]!){reportData{report(code:$code){ details: playerDetails(fightIDs:$fid, includeCombatantInfo:true) }}}`,
-      { code, fid: [fightId] },
-      20_000,
-    )
-      .then((d) => d.reportData.report)
-      .catch(() => ({}) as Record<string, any>),
-    one('graph: graph(dataType:DamageDone, fightIDs:$fid, sourceID:$sid)'),
+  const [summary, details, damageEvents, taken] = await Promise.all([
+    report(`query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){ summary: table(dataType:Summary, fightIDs:$fid, sourceID:$sid) }}}`, { code, fid: [fightId], sid: sourceId }),
+    report(`query($code:String!,$fid:[Int]!){reportData{report(code:$code){ details: playerDetails(fightIDs:$fid, includeCombatantInfo:true) }}}`, { code, fid: [fightId] }),
+    getDamageEvents(host, code, fightId, sourceId, start, end).catch(() => []),
+    report(`query($code:String!,$fid:[Int]!){reportData{report(code:$code){ taken: table(dataType:DamageTaken, fightIDs:$fid) }}}`, { code, fid: [fightId] }),
   ]);
   const d = details.details?.data?.playerDetails ?? details.details?.playerDetails ?? {};
-  const mine = ['tanks', 'healers', 'dps'].flatMap((r) => (d[r] ?? []) as any[]).find((p) => p.id === sourceId);
-  return { summary: summary.summary, combatant: mine?.combatantInfo ?? null, graph: graph.graph };
+  const everyone = ['tanks', 'healers', 'dps'].flatMap((r) => (d[r] ?? []) as any[]);
+  const mine = everyone.find((p) => p.id === sourceId);
+  return {
+    summary: summary.summary,
+    combatant: mine?.combatantInfo ?? null,
+    damageEvents,
+    taken: taken.taken,
+    tankIds: ((d.tanks ?? []) as any[]).map((p) => p.id),
+    raidIds: everyone.map((p) => p.id),
+  };
 }

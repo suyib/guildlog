@@ -12,7 +12,10 @@ export async function reportSummary(url: string): Promise<ReportSummary> {
   const parsed = parseReportUrl(url);
   const meta = await getReportMeta(parsed.host, parsed.code);
   const encounters = meta.fights.filter((f) => f.encounterID > 0);
-  const players = meta.masterData.actors.filter((a) => a.type === 'Player');
+  // Only people who were in at least one boss fight. A report's actor list also holds everyone the
+  // logger saw (other raids, people in town), which is where "Unknown" class entries come from.
+  const inFights = new Set(encounters.flatMap((f) => f.friendlyPlayers ?? []));
+  const players = meta.masterData.actors.filter((a) => a.type === 'Player' && (inFights.size === 0 || inFights.has(a.id)));
 
   let suggestedFight: number | undefined;
   if (parsed.fight === 'last') suggestedFight = encounters.at(-1)?.id;
@@ -31,6 +34,7 @@ export async function reportSummary(url: string): Promise<ReportSummary> {
       seconds: Math.round((f.endTime - f.startTime) / 1000),
       startTime: f.startTime,
       endTime: f.endTime,
+      playerIds: f.friendlyPlayers ?? [],
     })),
     players: players
       .map((p) => ({ id: p.id, name: p.name, className: p.subType, server: p.server ?? null }))
@@ -149,8 +153,18 @@ async function findTopParse(host: string, fight: FightRef, me: { name: string; c
 /** Step 4: add your previous kill (if wanted), build findings and save. */
 export async function finish(input: { player: PlayerSnapshot; comparisons: Comparison[]; compareKey: string; notes: string[]; dashboard?: Dashboard }): Promise<AnalysisResult> {
   const { player, compareKey } = input;
-  const comparisons = [...input.comparisons];
   const notes = [...input.notes];
+  // Rotation and cooldown comparisons only make sense within the same spec (Balance vs Feral share a
+  // class but not a rotation). Players who did no damage in the fight are left out.
+  const sameSpec = (s: PlayerSnapshot) =>
+    s.className === player.className && (!s.specName || !player.specName || s.specName === player.specName);
+  const comparisons = input.comparisons
+    .filter((c) => {
+      if (c.snapshot.total > 0) return true;
+      notes.push(`${c.snapshot.name} did no damage in this fight, so they were left out.`);
+      return false;
+    })
+    .map((c) => (c.kind === 'previous-kill' ? c : { ...c, sameClass: sameSpec(c.snapshot) }));
 
   if (compareKey === 'auto' || compareKey === 'previous') {
     try {
@@ -163,7 +177,7 @@ export async function finish(input: { player: PlayerSnapshot; comparisons: Compa
   }
 
   // Same-report players first, so they are the main comparison
-  const order = { 'same-report': 0, 'chosen-player': 0, 'top-parse': 1, 'previous-kill': 2 } as const;
+  const order = { 'same-report': 0, 'chosen-player': 0, 'other-log': 0, 'top-parse': 1, 'previous-kill': 2 } as const;
   comparisons.sort((a, b) => order[a.kind] - order[b.kind]);
 
   const result: AnalysisResult = { player, comparisons, findings: buildFindings(player, comparisons), strengths: buildStrengths(player, comparisons, input.dashboard?.gear), notes, compareKey, ...(input.dashboard ? { dashboard: input.dashboard } : {}) };
