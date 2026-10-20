@@ -135,14 +135,23 @@ export async function getFightData(host: string, code: string, fightId: number, 
   return { damage: damage.damage, rankings: rankings.rankings, details: details.details };
 }
 
-export interface PlayerTables { dmg: any; casts: any; buffs: any; taken: any; deaths: any }
+export interface PlayerTables {
+  dmg: any;
+  casts: any;
+  buffs: any;
+  taken: any;
+  deaths: any;
+  /** Damage by each of this player's pets (hunter and warlock pets, totems), so their damage can be told apart. */
+  pets?: { name: string; entries: any[] }[];
+}
 
-/** One player's tables, split into two smaller queries that run at the same time. */
+/** One player's tables, split into two smaller queries that run at the same time, plus their pets' damage. */
 export async function getPlayerTables(host: string, code: string, fightId: number, sourceId: number): Promise<PlayerTables> {
   const vars = { code, fid: [fightId], sid: sourceId };
   const q1 = `query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){
     dmg: table(dataType:DamageDone, fightIDs:$fid, sourceID:$sid)
     casts: table(dataType:Casts, fightIDs:$fid, sourceID:$sid)
+    masterData{actors(type:"Pet"){id name petOwner}}
   }}}`;
   const q2 = `query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){
     buffs: table(dataType:Buffs, fightIDs:$fid, sourceID:$sid)
@@ -153,7 +162,21 @@ export async function getPlayerTables(host: string, code: string, fightId: numbe
     gql<{ reportData: { report: any } }>(host, q1, vars),
     gql<{ reportData: { report: any } }>(host, q2, vars),
   ]);
-  return { ...a.reportData.report, ...b.reportData.report };
+  const { masterData, ...first } = a.reportData.report;
+  const owned = ((masterData?.actors ?? []) as { id: number; name: string; petOwner: number | null }[]).filter((x) => x.petOwner === sourceId).slice(0, 6);
+  const pets = owned.length ? await getPetTables(host, code, fightId, owned) : [];
+  return { ...first, ...b.reportData.report, pets };
+}
+
+/** Each pet's own damage table in one query. Optional: without it, pet damage just isn't labeled. */
+async function getPetTables(host: string, code: string, fightId: number, pets: { id: number; name: string }[]) {
+  const fields = pets.map((p, i) => `p${i}: table(dataType:DamageDone, fightIDs:$fid, sourceID:${Math.trunc(p.id)})`).join('\n');
+  try {
+    const d = await gql<{ reportData: { report: Record<string, any> } }>(host, `query($code:String!,$fid:[Int]!){reportData{report(code:$code){ ${fields} }}}`, { code, fid: [fightId] }, 15_000);
+    return pets.map((p, i) => ({ name: p.name, entries: (d.reportData.report[`p${i}`]?.data?.entries ?? []) as any[] })).filter((p) => p.entries.length);
+  } catch {
+    return [];
+  }
 }
 
 export interface CastEvent { timestamp: number; type: string; abilityGameID: number; sourceID: number; targetID?: number }

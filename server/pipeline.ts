@@ -96,7 +96,7 @@ const toActor = (a: ActorRef): Actor => ({ id: a.id, name: a.name, type: 'Player
  */
 export async function snapshotOne(host: string, code: string, fightRef: FightRef, actorRef: ActorRef, row?: FightPlayerRow): Promise<PlayerSnapshot> {
   // v5: auto attacks are also read from damage events when the cast events leave them out
-  const cacheKey = `v5:${host}:${code}:${fightRef.id}:${fightRef.endTime}:${actorRef.id}`;
+  const cacheKey = `v6:${host}:${code}:${fightRef.id}:${fightRef.endTime}:${actorRef.id}`;
   const cached = await getCachedSnapshot(cacheKey);
   if (cached) return cached;
   const fresh = await buildFreshSnapshot(host, code, fightRef, actorRef, row);

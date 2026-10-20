@@ -43,27 +43,57 @@ export function buildSnapshot(input: SnapshotInput): PlayerSnapshot {
   const castIcons = new Map<string, string>();
   for (const e of castTable) if (e?.name && typeof e.abilityIcon === 'string') castIcons.set(e.name, e.abilityIcon);
 
-  const abilities: AbilityRow[] = dmgEntries
-    .map((e) => {
-      const hits = num(e.hitCount) + num(e.tickCount);
-      const crits = num(e.critHitCount) + num(e.critTickCount);
-      const misses = num(e.missCount);
-      const isPet = e.type === 'Pet' || (e.petOwner ?? null) !== null;
-      return {
-        name: String(e.name ?? 'Unknown'),
-        id: num(e.guid),
-        total: num(e.total),
-        share: total ? num(e.total) / total : 0,
-        casts: castCounts[e.name] ?? num(e.uses),
-        hits,
-        critPct: hits ? round((crits / hits) * 100) : null,
-        missPct: hits + misses ? round((misses / (hits + misses)) * 100) : null,
-        avgHit: hits ? Math.round(num(e.total) / hits) : null,
-        isPet,
-        icon: typeof e.abilityIcon === 'string' ? e.abilityIcon : undefined,
-      };
-    })
-    .sort((a, b) => b.total - a.total);
+  const row = (e: any, isPet: boolean, petName?: string, part?: number): AbilityRow => {
+    const amount = part ?? num(e.total);
+    const scale = num(e.total) ? amount / num(e.total) : 1;
+    const hits = Math.round((num(e.hitCount) + num(e.tickCount)) * scale);
+    const crits = Math.round((num(e.critHitCount) + num(e.critTickCount)) * scale);
+    const misses = Math.round(num(e.missCount) * scale);
+    return {
+      name: String(e.name ?? 'Unknown'),
+      id: num(e.guid),
+      total: amount,
+      share: total ? amount / total : 0,
+      casts: isPet ? num(e.uses) : (castCounts[e.name] ?? num(e.uses)),
+      hits,
+      critPct: hits ? round((crits / hits) * 100) : null,
+      missPct: hits + misses ? round((misses / (hits + misses)) * 100) : null,
+      avgHit: hits ? Math.round(amount / hits) : null,
+      isPet,
+      ...(petName ? { petName } : {}),
+      icon: typeof e.abilityIcon === 'string' ? e.abilityIcon : undefined,
+    };
+  };
+
+  // Warcraft Logs folds pet damage into the owner's table under the pet's ability names ("Melee",
+  // "Bite"), so take each pet's own share back out and list it separately as pet damage.
+  const petRows: AbilityRow[] = [];
+  const petTotals = new Map<number, number>();
+  for (const pet of tables.pets ?? []) {
+    for (const e of pet.entries) {
+      if (!num(e.total)) continue;
+      petTotals.set(num(e.guid), (petTotals.get(num(e.guid)) ?? 0) + num(e.total));
+      petRows.push(row(e, true, pet.name));
+    }
+  }
+  // Folded in when the owner's rows hold at least each pet ability's damage; otherwise nothing to take out
+  const folded = [...petTotals].every(([guid, t]) => dmgEntries.some((e) => num(e.guid) === guid && num(e.total) >= t * 0.99));
+  if (!folded) petTotals.clear();
+  const ownRows: AbilityRow[] = [];
+  for (const e of dmgEntries) {
+    const flaggedPet = e.type === 'Pet' || (e.petOwner ?? null) !== null;
+    if (flaggedPet) {
+      if (!petRows.some((r) => r.id === num(e.guid))) ownRows.push(row(e, true));
+      continue;
+    }
+    const own = num(e.total) - (petTotals.get(num(e.guid)) ?? 0);
+    // Anything left after the pet's share is the player's own (a hunter's melee swings, say)
+    if (own > Math.max(1, num(e.total) * 0.005)) ownRows.push(row(e, false, undefined, own));
+  }
+  const abilities: AbilityRow[] = [...ownRows, ...petRows].sort((a, b) => b.total - a.total);
+  // Shares of everything listed, in case a pet's damage wasn't folded into the owner's table
+  const listed = abilities.reduce((t, a) => t + a.total, 0) || 1;
+  for (const a of abilities) a.share = a.total / listed;
 
   // ---- Buffs ----
   const buffTotal = num(tables.buffs?.data?.totalTime) || fightMs;

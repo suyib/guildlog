@@ -119,6 +119,18 @@ function niceMax(v: number): number {
 
 // ---------- Damage breakdown donut ----------
 
+/** "Melee (pet: Kitty)" for pet damage, so it isn't mistaken for the player's own. */
+export const abilityLabel = (a: Pick<AbilityRow, 'name' | 'isPet' | 'petName'>) => (a.isPet ? `${a.name} (pet${a.petName ? `: ${a.petName}` : ''})` : a.name);
+
+/** One line saying how much of the damage came from pets, when any did. */
+export function PetShare({ abilities }: { abilities: AbilityRow[] }) {
+  const all = abilities.reduce((t, a) => t + a.total, 0);
+  const pet = abilities.filter((a) => a.isPet).reduce((t, a) => t + a.total, 0);
+  if (!all || !pet) return null;
+  const names = [...new Set(abilities.filter((a) => a.isPet && a.petName).map((a) => a.petName!))];
+  return <p className="muted small">Pet damage{names.length ? ` (${names.join(', ')})` : ''}: {((pet / all) * 100).toFixed(1)}% of the total, marked &ldquo;pet&rdquo; below.</p>;
+}
+
 interface Slice { key: string; name: string; total: number; share: number; slot: string; icon?: string; casts?: number; isPet?: boolean; count?: number }
 
 export function DamageDonut({ abilities, total }: { abilities: AbilityRow[]; total: number }) {
@@ -130,8 +142,8 @@ export function DamageDonut({ abilities, total }: { abilities: AbilityRow[]; tot
     const head = sorted.length > MAX_SLICES + 1 ? sorted.slice(0, MAX_SLICES) : sorted.slice(0, MAX_SLICES + 1);
     const rest = sorted.slice(head.length);
     const out: Slice[] = head.map((a, i) => ({
-      key: `${a.name}-${a.id}`,
-      name: a.isPet ? `${a.name} (pet)` : a.name,
+      key: `${a.name}-${a.id}-${a.isPet ? 'pet' : 'own'}`,
+      name: abilityLabel(a),
       total: a.total,
       share: a.total / sum,
       slot: `slot-${i + 1}`,
@@ -160,6 +172,8 @@ export function DamageDonut({ abilities, total }: { abilities: AbilityRow[]; tot
   const shown = slices.find((s) => s.key === active) ?? null;
 
   return (
+    <>
+    <PetShare abilities={abilities} />
     <div className="donut-wrap">
       <svg viewBox="0 0 200 200" className="donut" role="img" aria-label="Share of damage by ability">
         {arcs.map(({ s, d }) => (
@@ -196,6 +210,7 @@ export function DamageDonut({ abilities, total }: { abilities: AbilityRow[]; tot
         ))}
       </ul>
     </div>
+    </>
   );
 }
 

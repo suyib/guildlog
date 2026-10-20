@@ -11,6 +11,8 @@ export interface AbilityRow {
   missPct: number | null; // 0..100
   avgHit: number | null;
   isPet: boolean;
+  /** Which pet did it, when known (hunter and warlock pets). */
+  petName?: string;
   /** Game icon file name from Warcraft Logs, e.g. ability_hunter_steadyshot.jpg */
   icon?: string;
 }

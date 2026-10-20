@@ -288,12 +288,12 @@ function DamageView({ result }: { result: AnalysisResult }) {
           </thead>
           <tbody>
             {me.abilities.map((a) => (
-              <tr key={`${a.name}-${a.id}`}>
+              <tr key={`${a.name}-${a.id}-${a.isPet ? 'pet' : 'own'}`}>
                 <td>
                   <span className="with-icon">
                     <GameIcon file={a.isPet ? 'ability_hunter_pet_cat' : a.icon} />
                     {a.name}
-                    {a.isPet && <span className="muted small">(pet)</span>}
+                    {a.isPet && <span className="muted small">(pet{a.petName ? `: ${a.petName}` : ''})</span>}
                   </span>
                 </td>
                 <td className="amount-col">

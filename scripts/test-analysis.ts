@@ -118,4 +118,26 @@ assert.equal(line.length, 60);
 assert.ok(line[5].dps > line[50].dps, 'busy first half shows higher raid DPS');
 assert.ok(Math.abs(line.reduce((t, p) => t + p.dps, 0) / 60 - 1500) < 2);
 
+// Pet damage folded into the hunter's table ("Melee", "Gore") is split back out and labeled as the pet's
+const withPet = buildSnapshot({
+  host: 'fresh.warcraftlogs.com', code: 'ABC', fight,
+  actor: { id: 28, name: 'Suy', type: 'Player', subType: 'Hunter', petOwner: null },
+  tables: {
+    ...tables(51, []),
+    dmg: { data: { entries: [
+      { name: 'Auto Shot', guid: 75, total: 32_000, hitCount: 40 },
+      { name: 'Melee', guid: 1, total: 14_000, hitCount: 40 },
+      { name: 'Gore', guid: 35290, total: 1_300, hitCount: 5 },
+    ] } },
+    pets: [{ name: 'Kitty', entries: [{ name: 'Melee', guid: 1, total: 13_800, hitCount: 39, uses: 39 }, { name: 'Gore', guid: 35290, total: 1_300, hitCount: 5, uses: 5 }] }],
+  },
+  casts: castEvents([], [], 0, 0),
+});
+const petMelee = withPet.abilities.find((a) => a.name === 'Melee' && a.isPet)!;
+assert.equal(petMelee.petName, 'Kitty');
+assert.equal(petMelee.total, 13_800);
+assert.equal(withPet.abilities.find((a) => a.name === 'Melee' && !a.isPet)?.total, 200, 'the hunter\u2019s own swings stay theirs');
+assert.ok(withPet.abilities.find((a) => a.name === 'Gore')!.isPet);
+assert.ok(Math.abs(withPet.abilities.reduce((t, a) => t + a.share, 0) - 1) < 1e-9);
+
 console.log('\nAll analysis checks passed.');

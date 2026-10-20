@@ -33,7 +33,7 @@ export interface PlayerDigest {
 }
 
 /** Bump when what's stored per fight changes, so older stored fights are rebuilt. */
-export const DIGEST_VERSION = 3; // 3: everyone in the fight is included (not only those in the damage table), with roles
+export const DIGEST_VERSION = 4; // 4: pet damage listed as "<pet> (pet)"; 3: everyone in the fight is included, with roles
 
 export interface FightDigest {
   v?: number;
@@ -62,6 +62,19 @@ function roleFromSpec(spec: string | undefined): PlayerDigest['role'] {
   if (/protection|guardian|blood|brewmaster/.test(s)) return 'tank';
   if (/holy|restoration|discipline|mistweaver/.test(s)) return 'healer';
   return 'dps';
+}
+
+/**
+ * A player's damage by ability from the fight-wide table. Their pets come as separate totals; they're
+ * listed as "<pet name> (pet)" so pet damage isn't mistaken for the player's own (skipped when the
+ * pet's damage is already counted in the abilities, so nothing is counted twice).
+ */
+function withPets(e: any): { name: string; total: number }[] {
+  const own = ((e.abilities ?? []) as any[]).filter((a) => a?.name && num(a.total) > 0).map((a) => ({ name: String(a.name), total: num(a.total) }));
+  const pets = ((e.pets ?? []) as any[]).filter((p) => p?.name && num(p.total) > 0).map((p) => ({ name: `${p.name} (pet)`, total: num(p.total) }));
+  const ownSum = own.reduce((t, a) => t + a.total, 0);
+  const petSum = pets.reduce((t, a) => t + a.total, 0);
+  return pets.length && ownSum + petSum <= num(e.total) * 1.02 ? [...own, ...pets] : own;
 }
 
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
@@ -137,9 +150,7 @@ export async function buildFightDigest(host: string, code: string, fight: Fight)
       parse: typeof rank?.rankPercent === 'number' ? rank.rankPercent : null,
       itemLevel: ilvl > 0 ? ilvl : null,
       activePct: typeof e.activeTime === 'number' && seconds > 0 ? Math.round((e.activeTime / (seconds * 1000)) * 1000) / 10 : null,
-      abilities: ((e.abilities ?? []) as any[])
-        .filter((a) => a?.name && num(a.total) > 0)
-        .map((a) => ({ name: String(a.name), total: num(a.total) }))
+      abilities: withPets(e)
         .sort((a, b) => b.total - a.total)
         .slice(0, 10),
       casts: castList.slice(0, 12),
