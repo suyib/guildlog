@@ -131,6 +131,17 @@ h2, h3 { margin: 0; }
 .side-card button { width: 100%; }
 .side-version { margin-top: auto; padding: 0 10px; font: 400 11px var(--font-mono); color: var(--ink-3); }
 .side-card + .side-version { margin-top: 0; }
+.changelog-link { margin-left: 6px; color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; font-size: 11px; }
+.changelog-link:hover { color: var(--primary-light); }
+
+/* Changelog page */
+.changelog { list-style: none; margin: 0; padding: 0; display: grid; gap: 18px; }
+.changelog > li { display: grid; gap: 6px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.changelog > li:last-child { border-bottom: 0; padding-bottom: 0; }
+.release-head { display: flex; align-items: baseline; gap: 12px; }
+.release-version { font-size: 16px; font-weight: 800; color: var(--primary-light); }
+.release-head time { font: 400 12px var(--font-mono); color: var(--ink-3); }
+.changelog ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 13px; display: grid; gap: 3px; }
 
 /* Line icons */
 .glyph { flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -493,7 +504,8 @@ progress.uptime-bar { height: 8px; color: var(--primary-light); }
   .side-nav { flex-direction: row; gap: 4px; }
   .side-nav[aria-label="This analysis"] { order: 3; width: 100%; overflow-x: auto; scrollbar-width: none; }
   .side-nav a, .side-nav button { width: auto; height: 34px; white-space: nowrap; font-size: 13px; }
-  .side-label, .side-card, .side-version { display: none; }
+  .side-label, .side-card { display: none; }
+  .side-version { order: 2; margin: 0; padding: 0; }
   .content { padding: 16px 16px 40px; }
 }
 @media (max-width: 640px) {

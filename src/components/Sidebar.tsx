@@ -3,9 +3,9 @@ import { sectionsFor, useNav } from '../nav';
 import Glyph from './Glyph';
 import { ShareButton } from './ResultView';
 
-export default function Sidebar({ page }: { page: 'analyze' | 'history' | 'saved' }) {
+export default function Sidebar({ page }: { page: 'analyze' | 'history' | 'changelog' | 'saved' }) {
   const { result, section, setSection } = useNav();
-  const sections = sectionsFor(page === 'history' ? null : result);
+  const sections = sectionsFor(page === 'history' || page === 'changelog' ? null : result);
 
   return (
     <aside className="sidebar">
@@ -15,7 +15,7 @@ export default function Sidebar({ page }: { page: 'analyze' | 'history' | 'saved
       </a>
 
       <nav className="side-nav" aria-label="Pages">
-        <a href="/" className={page !== 'history' ? 'on' : ''}><Glyph name="compass" />Analyze</a>
+        <a href="/" className={page === 'analyze' || page === 'saved' ? 'on' : ''}><Glyph name="compass" />Analyze</a>
         <a href="/#/history" className={page === 'history' ? 'on' : ''}><Glyph name="clock" />History</a>
       </nav>
 
@@ -54,7 +54,9 @@ export default function Sidebar({ page }: { page: 'analyze' | 'history' | 'saved
         </div>
       )}
 
-      <div className="side-version">v{__APP_VERSION__}</div>
+      <div className="side-version">
+        v{__APP_VERSION__} <a href="/#/changelog" className="changelog-link">Changelog</a>
+      </div>
     </aside>
   );
 }

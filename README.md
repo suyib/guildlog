@@ -39,6 +39,10 @@ npx vercel dev               # runs the UI, API functions and middleware togethe
 npm test                     # offline checks of the analysis logic
 ```
 
+## Releases
+
+Every version bump in `package.json` gets a short entry at the top of `src/changelog.ts`, which feeds the Changelog page (linked next to the version number in the menu).
+
 ## Tuning the analysis
 
 - `server/cooldowns.ts`: the cooldowns that get audited (name → cooldown in seconds) and the gap threshold. Add Forever's real abilities and values here as logs come in.
