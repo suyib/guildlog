@@ -84,12 +84,12 @@ export function buildSnapshot(input: SnapshotInput): PlayerSnapshot {
   const cooldowns: CooldownUse[] = [];
   const byName = new Map<string, number[]>();
   for (const e of timeline) {
-    if (cooldownFor(e.name) === undefined) continue;
+    if (cooldownFor(e.name, input.host) === undefined) continue;
     if (!byName.has(e.name)) byName.set(e.name, []);
     byName.get(e.name)!.push(round(e.t));
   }
   for (const [name, times] of byName) {
-    const cd = cooldownFor(name)!;
+    const cd = cooldownFor(name, input.host)!;
     cooldowns.push({ name, cooldownSec: cd, uses: times.length, possible: possibleUses(fightSeconds, cd), times, icon: castIcons.get(name) });
   }
 
@@ -181,7 +181,7 @@ export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Fi
   for (const name of cdNames) {
     const mine = me.cooldowns.find((c) => c.name === name);
     const theirs = classRef?.cooldowns.find((c) => c.name === name);
-    const cd = mine?.cooldownSec ?? theirs?.cooldownSec ?? cooldownFor(name);
+    const cd = mine?.cooldownSec ?? theirs?.cooldownSec ?? cooldownFor(name, me.host);
     if (!cd) continue;
     const possible = possibleUses(me.fightSeconds, cd);
     const uses = mine?.uses ?? 0;

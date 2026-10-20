@@ -52,6 +52,8 @@ Everything specific to the game version is marked `GAME CONTENT` at the top of i
 
 Then run `supabase/cleanup.sql` with the new site name to clear out the old version's data.
 
+While testing, Mists of Pandaria logs (classic.warcraftlogs.com) are also allowed. Everything for that is marked `TESTING ONLY`; remove it before raiding starts.
+
 ## Discord bot
 
 The bot runs on the same Vercel project (no extra server) as a single function, `api/discord.ts`, because the free Vercel plan allows 12 functions. Commands: `/raidstart`, `/raidend`, `/raids`, `/check`, `/claim`, `/unclaim`, `/remind`, `/info`. Character numbers are only ever sent by DM (or shown to the person who asked); channels only get raid-wide summaries.

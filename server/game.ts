@@ -5,5 +5,8 @@
 export const GAME = {
   name: 'Burning Crusade',
   /** Warcraft Logs sites whose reports are accepted. */
-  hosts: ['fresh.warcraftlogs.com'],
+  // classic.warcraftlogs.com (Mists of Pandaria) is allowed for testing only. Before raiding starts,
+  // remove it here, remove the TESTING ONLY parts of server/cooldowns.ts and src/statInfo.ts, and run
+  // supabase/cleanup.sql.
+  hosts: ['fresh.warcraftlogs.com', 'classic.warcraftlogs.com'],
 };

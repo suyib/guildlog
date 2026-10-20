@@ -119,8 +119,8 @@ export async function buildFightDigest(host: string, code: string, fight: Fight)
         .slice(0, 10),
       casts: castList.slice(0, 12),
       cooldowns: castList
-        .filter((c) => cooldownFor(c.name) !== undefined)
-        .map((c) => ({ name: c.name, uses: c.count, possible: possibleUses(seconds, cooldownFor(c.name)!) })),
+        .filter((c) => cooldownFor(c.name, host) !== undefined)
+        .map((c) => ({ name: c.name, uses: c.count, possible: possibleUses(seconds, cooldownFor(c.name, host)!) })),
       deaths: deathEntries
         .filter((x) => x.id === e.id || x.name === e.name)
         .map((x) => ({ seconds: Math.round((num(x.deathTime ?? x.timestamp) - fight.startTime) / 1000), by: x.killingBlow?.name ?? x.ability?.name ?? 'Unknown' })),

@@ -336,7 +336,7 @@ function GearView({ result }: { result: AnalysisResult }) {
         {d.stats.length > 0 ? (
           <>
             <p className="muted small">Hover or tap a stat to see what it does for a {result.player.className}.</p>
-            <StatsList stats={d.stats} className={result.player.className} />
+            <StatsList stats={d.stats} className={result.player.className} host={result.player.host} />
           </>
         ) : (
           <p className="muted small">No stats in this log. Warcraft Logs only records them when the logger saw you at the pull.</p>

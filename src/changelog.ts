@@ -9,6 +9,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.11.1',
+    date: '2026-10-20',
+    changes: ['For testing: Mists of Pandaria logs (classic.warcraftlogs.com) can be loaded again, with their own cooldown list, and stat tooltips leave out the level-70 numbers on them.'],
+  },
+  {
     version: '0.11.0',
     date: '2026-10-20',
     changes: [

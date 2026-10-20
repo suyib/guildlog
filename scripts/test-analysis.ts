@@ -100,9 +100,14 @@ assert.equal(tank.abilities.find((a) => a.name === 'Cleave')?.avoidable, false, 
 
 // Stat tooltips explain the stat for the class
 assert.ok(statTooltip('Hit', 'Hunter')!.includes('142'));
+assert.ok(!/\d/.test(statTooltip('Hit', 'Hunter', false)!));
 
 // Cooldown names match regardless of case and curly apostrophes
 assert.equal(cooldownFor('bestial wrath'), 120);
 assert.equal(cooldownFor('Celestial Alignment'), undefined);
+// Testing period: Mists of Pandaria logs use their own list
+assert.equal(cooldownFor('Celestial Alignment', 'classic.warcraftlogs.com'), 180);
+assert.equal(cooldownFor('Arcane Power', 'classic.warcraftlogs.com'), 90);
+assert.equal(cooldownFor('Arcane Power', 'fresh.warcraftlogs.com'), 180);
 
 console.log('\nAll analysis checks passed.');
