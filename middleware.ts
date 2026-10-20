@@ -10,7 +10,7 @@ export const config = {
 // app files those pages need, and the bot endpoints below. The app bundle holds no secrets; every API route stays protected.
 // Discord and the reminder scheduler can't enter a password, so these endpoints check their own
 // credentials instead (Discord's request signature, or the CRON_SECRET key).
-const BOT_ENDPOINTS = ['/api/discord', '/api/discord-register', '/api/cron'];
+const BOT_ENDPOINTS = ['/api/discord'];
 const isPublic = (path: string) =>
   path === '/terms' || path === '/privacy' || path.startsWith('/assets/') || BOT_ENDPOINTS.includes(path);
 

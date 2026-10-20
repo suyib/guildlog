@@ -41,13 +41,13 @@ npm test                     # offline checks of the analysis logic
 
 ## Discord bot
 
-The bot runs on the same Vercel project (no extra server). Commands: `/raidstart`, `/raidend`, `/raids`, `/check`, `/claim`, `/unclaim`, `/remind`, `/info`. Character numbers are only ever sent by DM (or shown to the person who asked); channels only get raid-wide summaries.
+The bot runs on the same Vercel project (no extra server) as a single function, `api/discord.ts`, because the free Vercel plan allows 12 functions. Commands: `/raidstart`, `/raidend`, `/raids`, `/check`, `/claim`, `/unclaim`, `/remind`, `/info`. Character numbers are only ever sent by DM (or shown to the person who asked); channels only get raid-wide summaries.
 
 1. In the Discord developer portal, create the app and bot, then add the `DISCORD_*` values and `CRON_SECRET` to Vercel (see `.env.example`) and redeploy.
 2. Set **Interactions Endpoint URL** to `https://guildlog.uk/api/discord`.
 3. Invite the bot with the `bot` and `applications.commands` scopes (permissions: Send Messages, Embed Links, View Channels).
-4. Open `https://guildlog.uk/api/discord-register?key=YOUR_CRON_SECRET` to register the commands (again whenever they change).
-5. For reminders, have a free scheduler (e.g. cron-job.org) open `https://guildlog.uk/api/cron?key=YOUR_CRON_SECRET` every 5 minutes. Vercel also runs it once a day as a backup.
+4. Open `https://guildlog.uk/api/discord?task=register&key=YOUR_CRON_SECRET` to register the commands (again whenever they change).
+5. For reminders, have a free scheduler (e.g. cron-job.org) open `https://guildlog.uk/api/discord?task=reminders&key=YOUR_CRON_SECRET` every 5 minutes. Vercel also runs it once a day as a backup.
 
 Raid summaries are built once per boss kill (a few fight-wide Warcraft Logs queries) and stored in `bot_raid_fights`, so button presses are instant afterwards.
 

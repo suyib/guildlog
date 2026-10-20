@@ -16,7 +16,7 @@ import {
 } from './store.js';
 import { parseWhen } from './time.js';
 
-// ---------- Command definitions (sent to Discord by /api/discord-register) ----------
+// ---------- Command definitions (sent to Discord by GET /api/discord?task=register) ----------
 
 const STRING = 3, INTEGER = 4, BOOLEAN = 5, USER = 6, ROLE = 8, SUB = 1;
 // Usable in the server and in DMs with the bot
@@ -178,7 +178,7 @@ async function remind(i: Interaction): Promise<Outcome> {
   });
 }
 
-/** The message posted when a reminder is due (used by /api/cron). */
+/** The message posted when a reminder is due (used by GET /api/discord?task=reminders). */
 export function reminderMessage(p: { message: string; place: string | null; consumes: boolean; gatherAt: string; roleId: string | null }): MessageBody {
   const unix = Math.floor(new Date(p.gatherAt).getTime() / 1000);
   const fields = [{ name: 'Gather', value: `<t:${unix}:t> (<t:${unix}:R>)${p.place ? `\n${p.place}` : ''}` }];

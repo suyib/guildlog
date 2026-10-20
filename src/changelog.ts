@@ -17,6 +17,7 @@ export const CHANGELOG: Release[] = [
       'Character claims approved by officers.',
       'Links from the bot open the site with the log already loaded.',
       'Privacy Policy updated for the bot.',
+      'The bot runs as one function to stay within the free Vercel plan.',
     ],
   },
   {
