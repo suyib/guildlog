@@ -2,9 +2,10 @@
 import { BRAND, type Embed, type MessageBody, button, env, linkButton, row } from './api.js';
 import { type FightDigest, type PlayerDigest, type RaidDigest, playerFights } from './digest.js';
 
-export type Page = 'overview' | 'damage' | 'rotation' | 'gear' | 'survival';
+export type Page = 'summary' | 'overview' | 'damage' | 'rotation' | 'gear' | 'survival';
 
 export const PAGES: { id: Page; label: string }[] = [
+  { id: 'summary', label: 'Quick summary' },
   { id: 'overview', label: 'My overview' },
   { id: 'rotation', label: 'Rotation & cooldowns' },
   { id: 'damage', label: 'Damage breakdown' },
@@ -22,7 +23,8 @@ const clip = (s: string, max = 1024) => (s.length > max ? `${s.slice(0, max - 1)
 
 /** Buttons under a raid message: each sends that page to whoever clicks it, by DM. `raid` is "host:code". */
 export function pageButtons(raid: string) {
-  return [row(...PAGES.map((p) => button(p.label, `raid:${p.id}:${raid}`, p.id === 'overview' ? 1 : 2)))];
+  const b = PAGES.map((p) => button(p.label, `raid:${p.id}:${raid}`, p.id === 'summary' ? 1 : 2));
+  return [row(...b.slice(0, 3)), row(...b.slice(3))]; // Discord allows 5 buttons per row
 }
 
 /** Link to the full analysis on the site for one fight and player. */
@@ -94,6 +96,19 @@ export function personalPage(page: Page, digest: RaidDigest, character: string, 
 
   let embed: Embed;
   switch (page) {
+    case 'summary': {
+      const q = quickSummary(rows, digest);
+      embed = {
+        ...base,
+        title: `Quick summary: ${head}`,
+        description: `${rows.length} boss${rows.length > 1 ? 'es' : ''} in ${digest.meta.title}.${pendingNote}`,
+        fields: [
+          { name: 'What went well', value: clip(q.good.map((x) => `• ${x}`).join('\n') || 'Nothing stood out this time.') },
+          { name: 'What to work on', value: clip(q.work.map((x) => `• ${x}`).join('\n') || 'Nothing stood out. Nice work.') },
+        ],
+      };
+      break;
+    }
     case 'overview':
       embed = { ...base, title: `Your raid: ${head}`, description: overview(rows) + pendingNote };
       break;
@@ -199,4 +214,87 @@ function survival(rows: Rows): string {
     top.size ? `\n**Likely avoidable damage**\n${[...top].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n, t]) => `${n}: ${compact(t)}`).join('\n')}` : '',
     '\n_"Likely avoidable" means it hit fewer than half of the non-tanks. Check the boss mechanics before treating it as a mistake._',
   ].join('\n');
+}
+
+// ---------- Quick summary: what went well and what to work on, at a glance ----------
+
+const median = (xs: number[]) => {
+  if (!xs.length) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+function quickSummary(rows: Rows, digest: RaidDigest): { good: string[]; work: string[] } {
+  const good: string[] = [];
+  const work: string[] = [];
+  const me = rows[0].p;
+  const parsed = rows.filter((r) => r.p.parse !== null);
+  const avgParse = parsed.length ? parsed.reduce((t, r) => t + r.p.parse!, 0) / parsed.length : null;
+
+  // Parses
+  if (parsed.length) {
+    const best = [...parsed].sort((a, b) => b.p.parse! - a.p.parse!)[0];
+    const worst = [...parsed].sort((a, b) => a.p.parse! - b.p.parse!)[0];
+    if (best.p.parse! >= 75) good.push(`Best boss: ${best.fight.name} (parse ${Math.round(best.p.parse!)})`);
+    if (avgParse !== null && parsed.length > 1 && avgParse - worst.p.parse! >= 15) work.push(`${worst.fight.name} was your weakest boss (parse ${Math.round(worst.p.parse!)}, your average is ${Math.round(avgParse)})`);
+  }
+
+  // Against others of the same spec in the raid
+  let topCount = 0;
+  const behind: string[] = [];
+  for (const { fight, p } of rows) {
+    const peers = fight.players.filter((x) => x.name !== p.name && x.className === p.className && x.specName === p.specName);
+    if (!peers.length) continue;
+    const bestPeer = Math.max(...peers.map((x) => x.dps));
+    if (p.dps >= bestPeer) topCount++;
+    else if (p.dps < bestPeer * 0.9) behind.push(fight.name);
+  }
+  const specName = `${spaced(me.specName)} ${spaced(me.className)}`.trim();
+  if (topCount) good.push(`Top ${specName} in the raid on ${topCount} boss${topCount > 1 ? 'es' : ''}`);
+  if (behind.length) work.push(`More than 10% behind the best ${specName} on ${behind.slice(0, 3).join(', ')}`);
+
+  // Deaths
+  const deaths = rows.flatMap((r) => r.p.deaths.map((d) => `${r.fight.name} (${d.by})`));
+  if (!deaths.length) good.push(`No deaths across ${rows.length} boss${rows.length > 1 ? 'es' : ''}`);
+  else work.push(`Died ${deaths.length}×: ${deaths.slice(0, 3).join(', ')}`);
+
+  // Activity
+  const active = rows.map((r) => r.p.activePct).filter((v): v is number => v !== null);
+  const avgActive = active.length ? active.reduce((t, v) => t + v, 0) / active.length : null;
+  if (avgActive !== null && avgActive >= 95) good.push(`Active ${avgActive.toFixed(1)}% of the time on average`);
+  else if (avgActive !== null && avgActive < 90) work.push(`Active ${avgActive.toFixed(1)}% of the time on average; aim for 95% or more`);
+
+  // Cooldowns
+  const cds = new Map<string, { uses: number; possible: number }>();
+  for (const { p } of rows) for (const c of p.cooldowns) {
+    const x = cds.get(c.name) ?? { uses: 0, possible: 0 };
+    cds.set(c.name, { uses: x.uses + c.uses, possible: x.possible + c.possible });
+  }
+  const under = [...cds].filter(([, c]) => c.uses < c.possible);
+  if (cds.size && !under.length) good.push('Every tracked cooldown used as often as possible');
+  if (under.length) work.push(`Use cooldowns more: ${under.slice(0, 3).map(([n, c]) => `${n} ${c.uses}/${c.possible}`).join(', ')}`);
+
+  // Avoidable damage against the rest of the raid (non-tanks)
+  if (me.role !== 'tank') {
+    const worse = rows.filter(({ fight, p }) => {
+      const others = fight.players.filter((x) => x.role !== 'tank' && x.name !== p.name).map((x) => x.avoidable);
+      const m = median(others);
+      return p.avoidable > 0 && p.avoidable > Math.max(m * 1.5, m + 5000);
+    });
+    const totalAvoid = rows.reduce((t, r) => t + r.p.avoidable, 0);
+    if (worse.length) work.push(`More avoidable damage than most of the raid on ${worse.slice(0, 3).map((r) => r.fight.name).join(', ')}`);
+    else if (rows.some((r) => r.fight.players.some((x) => x.avoidable > 0))) good.push(totalAvoid === 0 ? 'Took no avoidable damage' : 'Avoidable damage in line with or below the raid');
+  }
+
+  // Gear
+  const withGear = [...rows].reverse().find((r) => r.p.gear?.length)?.p;
+  if (withGear?.gear) {
+    const missing = withGear.gear.filter((g) => g.enchantable && !g.enchant && !g.enchantId).map((g) => g.slotName.toLowerCase());
+    if (!missing.length) good.push('Fully enchanted');
+    else work.push(`No enchant on: ${missing.join(', ')}`);
+  }
+
+  void digest;
+  return { good: good.slice(0, 5), work: work.slice(0, 5) };
 }

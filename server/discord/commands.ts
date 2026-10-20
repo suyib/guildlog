@@ -5,7 +5,7 @@ import { characterLevel } from '../blizzard.js';
 import { rest } from '../db.js';
 import { getReportMeta, getReportRegion, parseReportUrl } from '../wcl.js';
 import {
-  BRAND, EPHEMERAL, type Embed, type MessageBody, button, editReply, env, linkButton, memberRoles, postToChannel, row, sendDm,
+  BRAND, EPHEMERAL, type Embed, type MessageBody, button, discord, editReply, env, linkButton, memberRoles, postToChannel, row, sendDm,
 } from './api.js';
 import { type RaidDigest, playerFights, raidDigest } from './digest.js';
 import { RAID_CHECKLIST, ROLE_CHOICES, type Role, consumablesMessage, lookupMessage } from './info.js';
@@ -33,6 +33,7 @@ export const COMMANDS = [
       { type: BOOLEAN, name: 'consumes', description: 'Add a "bring your consumables" checklist' },
       { type: INTEGER, name: 'minutes_before', description: 'Post the reminder this many minutes before (default 15)', min_value: 0, max_value: 1440 },
       { type: ROLE, name: 'ping', description: 'Role to mention' },
+      { type: BOOLEAN, name: 'event', description: 'Also create a Discord event people can mark "Interested"' },
     ],
   },
   {
@@ -49,7 +50,7 @@ export const COMMANDS = [
   },
   {
     name: 'raids', description: 'Your summaries for one of the last 5 raids, or any Warcraft Logs link', ...contexts,
-    options: [{ type: STRING, name: 'link', description: 'A Warcraft Logs report link' }],
+    options: [{ type: STRING, name: 'raid', description: 'Pick a recent raid, or paste a Warcraft Logs link', autocomplete: true }],
   },
   {
     name: 'check', description: 'Your character: class, spec, item level, stats and last raid (sent by DM)', ...contexts,
@@ -86,7 +87,7 @@ export interface Interaction {
   channel_id?: string;
   member?: { user: DUser; roles: string[]; permissions?: string };
   user?: DUser;
-  data?: { name?: string; custom_id?: string; options?: Opt[]; values?: string[] };
+  data?: { name?: string; custom_id?: string; options?: (Opt & { focused?: boolean })[]; values?: string[] };
   message?: { id: string; embeds?: Embed[] };
 }
 interface DUser { id: string; username: string; global_name?: string | null }
@@ -97,8 +98,8 @@ export interface Outcome { response: unknown; after?: () => Promise<void> }
 
 const reply = (body: MessageBody, ephemeral = true): Outcome => ({ response: { type: 4, data: { ...body, flags: ephemeral ? EPHEMERAL : undefined } } });
 /** "Thinking…" now (only visible to the user), then replace it once the work is done. */
-const deferred = (i: Interaction, work: () => Promise<MessageBody>): Outcome => ({
-  response: { type: 5, data: { flags: EPHEMERAL } },
+const deferred = (i: Interaction, work: () => Promise<MessageBody>, ephemeral = true): Outcome => ({
+  response: { type: 5, data: { flags: ephemeral ? EPHEMERAL : undefined } },
   after: async () => {
     let body: MessageBody;
     try {
@@ -141,6 +142,7 @@ export async function handle(i: Interaction): Promise<Outcome> {
       case 'info': return info(i);
     }
   }
+  if (i.type === 4 && i.data?.name === 'raids') return raidChoices(i);
   if (i.type === 3) {
     const id = i.data?.custom_id ?? '';
     if (id.startsWith('raid:')) return raidButton(i, id);
@@ -171,11 +173,54 @@ async function remind(i: Interaction): Promise<Outcome> {
     roleId: (opt(o, 'ping') as string | undefined) ?? null,
     by: userOf(i).id,
   };
+  const wantEvent = !!opt(o, 'event');
+  const inServer = !!i.guild_id;
+  // In the server the announcement replaces the command's reply in that channel; from a DM it goes to the raid channel
   return deferred(i, async () => {
     await createReminder({ channel_id: channelId, created_by: userOf(i).id, send_at: sendAt.toISOString(), payload });
-    const unix = Math.floor(when.getTime() / 1000);
-    return { content: `Reminder set for <t:${Math.floor(sendAt.getTime() / 1000)}:F> in <#${channelId}>. Gather time: <t:${unix}:t> (<t:${unix}:R>).` };
-  });
+    let eventUrl: string | null = null;
+    let eventNote = '';
+    if (wantEvent) {
+      const guild = i.guild_id ?? env.guildId();
+      try {
+        const ev = await discord<{ id: string }>(`/guilds/${guild}/scheduled-events`, {
+          method: 'POST',
+          body: {
+            name: message.slice(0, 100),
+            description: payload.consumes ? `Bring: ${RAID_CHECKLIST.join(', ')}.` : undefined,
+            privacy_level: 2,
+            entity_type: 3,
+            entity_metadata: { location: (payload.place ?? 'In game').slice(0, 100) },
+            scheduled_start_time: when.toISOString(),
+            scheduled_end_time: new Date(when.getTime() + 3 * 3600_000).toISOString(),
+          },
+        });
+        eventUrl = `https://discord.com/events/${guild}/${ev.id}`;
+      } catch {
+        eventNote = '\n_(Couldn’t create the Discord event. Give the bot the "Create Events" permission and try again.)_';
+      }
+    }
+    const announcement = announcementMessage(payload, sendAt, eventUrl);
+    if (inServer) return { ...announcement, content: `${announcement.content ?? ''}${eventNote}`.trim() || undefined };
+    await postToChannel(channelId, announcement);
+    return { content: `Posted in <#${channelId}>. I'll remind everyone <t:${Math.floor(sendAt.getTime() / 1000)}:R>.${eventNote}` };
+  }, !inServer);
+}
+
+/** Posted straight away when a reminder is set: what, when, where, and when the reminder will go out. */
+function announcementMessage(p: { message: string; place: string | null; consumes: boolean; gatherAt: string; roleId: string | null }, sendAt: Date, eventUrl: string | null): MessageBody {
+  const unix = Math.floor(new Date(p.gatherAt).getTime() / 1000);
+  const fields = [
+    { name: 'Gather', value: `<t:${unix}:F> (<t:${unix}:R>)${p.place ? `\n${p.place}` : ''}` },
+    { name: 'Reminder', value: `I'll post a reminder <t:${Math.floor(sendAt.getTime() / 1000)}:R>.` },
+  ];
+  if (p.consumes) fields.push({ name: 'Bring', value: RAID_CHECKLIST.map((x) => `• ${x}`).join('\n') + '\nNeed a list? Use `/info consumables`.' });
+  return {
+    content: p.roleId ? `<@&${p.roleId}>` : undefined,
+    embeds: [{ title: 'Raid scheduled', description: p.message, color: BRAND, fields }],
+    components: eventUrl ? [row(linkButton('Open the Discord event', eventUrl))] : [],
+    allowed_mentions: { roles: p.roleId ? [p.roleId] : [] },
+  };
 }
 
 /** The message posted when a reminder is due (used by GET /api/discord?task=reminders). */
@@ -245,20 +290,30 @@ async function raidEnd(i: Interaction): Promise<Outcome> {
 
 // ---------- /raids and the page buttons ----------
 
+/** Picked from the list (host:code) or pasted as a Warcraft Logs link. */
+function readRaidValue(value: string): { host: string; code: string } {
+  const picked = value.match(/^([a-z0-9.-]+\.warcraftlogs\.com):([A-Za-z0-9]+)$/i);
+  if (picked) return { host: picked[1], code: picked[2] };
+  return parseReportUrl(value);
+}
+
 async function raids(i: Interaction): Promise<Outcome> {
-  const link = opt(i.data?.options, 'link') as string | undefined;
-  if (link) {
-    let parsed: ReturnType<typeof parseReportUrl>;
+  const value = (opt(i.data?.options, 'raid') ?? opt(i.data?.options, 'link')) as string | undefined;
+  if (value) {
+    let parsed: { host: string; code: string };
     try {
-      parsed = parseReportUrl(link);
+      parsed = readRaidValue(value);
     } catch (e) {
       return reply({ content: (e as Error).message });
     }
-    return reply({ content: 'Pick what you’d like to receive by DM:', components: pageButtons(`${parsed.host}:${parsed.code}`) });
+    return deferred(i, async () => {
+      const r = await raidByCode(parsed.code).catch(() => null);
+      return { content: `**${r?.title ?? 'This raid'}**: pick what you’d like to receive by DM.`, components: pageButtons(`${parsed.host}:${parsed.code}`) };
+    });
   }
   return deferred(i, async () => {
     const list = await recentRaids(5);
-    if (!list.length) return { content: 'No raids saved yet. Paste a Warcraft Logs link: `/raids link:`' };
+    if (!list.length) return { content: 'No raids saved yet. Paste a Warcraft Logs link: `/raids raid:`' };
     return {
       content: 'Pick a raid (latest first), then choose what you’d like by DM:',
       components: [
@@ -275,6 +330,21 @@ async function raids(i: Interaction): Promise<Outcome> {
       ],
     };
   });
+}
+
+/** Suggestions as you type in /raids: the latest raids posted with /raidstart, newest first. */
+async function raidChoices(i: Interaction): Promise<Outcome> {
+  const typed = String(i.data?.options?.find((o) => o.focused)?.value ?? '').trim();
+  const choices: { name: string; value: string }[] = [];
+  if (/warcraftlogs\.com\/reports\//i.test(typed)) choices.push({ name: 'Use this Warcraft Logs link', value: typed.slice(0, 100) });
+  const list = await recentRaids(25).catch(() => []);
+  for (const r of list) {
+    const date = new Date(r.started_at).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    const name = `${r.title ?? r.report_code} · ${date}`;
+    if (typed && !/^https?:/i.test(typed) && !name.toLowerCase().includes(typed.toLowerCase())) continue;
+    choices.push({ name: name.slice(0, 100), value: `${r.host}:${r.report_code}` });
+  }
+  return { response: { type: 8, data: { choices: choices.slice(0, 25) } } };
 }
 
 function raidPicked(i: Interaction): Outcome {

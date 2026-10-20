@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.10.1',
+    date: '2026-10-20',
+    changes: [
+      'Bot: /remind posts the announcement in the channel it was used in, and can create a Discord event.',
+      'Bot: /raids suggests the latest raids from /raidstart as you type, or takes a pasted link.',
+      'Bot: new "Quick summary" button with what went well and what to work on.',
+    ],
+  },
+  {
     version: '0.10.0',
     date: '2026-10-21',
     changes: [

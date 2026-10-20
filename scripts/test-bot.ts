@@ -75,4 +75,14 @@ assert.ok(overview.embeds![0].description!.includes('average parse **85**'));
 assert.ok(personalPage('gear', digest, 'Suy', 'Thunderstrike')!.embeds![0].description!.includes('no enchant on: head'));
 assert.equal(personalPage('overview', digest, 'Nobody', null), null);
 
+// Quick summary: the at-a-glance page with what went well and what to work on
+const quick = personalPage('summary', digest, 'Suy', null)!;
+const [goodField, workField] = quick.embeds![0].fields!;
+assert.equal(goodField.name, 'What went well');
+assert.ok(goodField.value.includes('No deaths'));
+assert.ok(workField.value.includes('Bestial Wrath 2/4'), 'under-used cooldowns are listed');
+assert.ok(workField.value.includes('No enchant on: head'));
+// Six page buttons, split across two rows (Discord allows five per row)
+assert.equal(summary.components!.length, 2);
+
 console.log('All bot checks passed.');
