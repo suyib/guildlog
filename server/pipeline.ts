@@ -88,8 +88,8 @@ const toActor = (a: ActorRef): Actor => ({ id: a.id, name: a.name, type: 'Player
  * table isn't fetched again; without it only the damage table is fetched.
  */
 export async function snapshotOne(host: string, code: string, fightRef: FightRef, actorRef: ActorRef, row?: FightPlayerRow): Promise<PlayerSnapshot> {
-  // v2: cooldowns are now tracked per game version, so snapshots cached before that are skipped
-  const cacheKey = `v2:${host}:${code}:${fightRef.id}:${fightRef.endTime}:${actorRef.id}`;
+  // v3: snapshots now include cast names and buff windows; older cached ones are skipped
+  const cacheKey = `v3:${host}:${code}:${fightRef.id}:${fightRef.endTime}:${actorRef.id}`;
   const cached = await getCachedSnapshot(cacheKey);
   if (cached) return cached;
   const fresh = await buildFreshSnapshot(host, code, fightRef, actorRef, row);

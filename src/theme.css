@@ -379,6 +379,18 @@ progress.uptime-bar { height: 8px; color: var(--primary-light); }
 .timeline .cast.me { stroke: var(--primary-light); }
 .timeline .gap { fill: var(--gap-band); }
 .timeline .cd { fill: var(--cooldown); }
+.timeline .win-lust { fill: rgba(255, 128, 0, 0.18); }
+.timeline .win-cd { fill: rgba(255, 209, 0, 0.75); }
+.timeline .hover-line { stroke: var(--ink); stroke-width: 1; opacity: 0.6; }
+.timeline .row.on .name { fill: var(--ink); }
+.timeline-wrap { display: flex; flex-direction: column; gap: 8px; }
+.timeline-readout { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 26px; margin: 0; font-size: 13px; }
+.timeline-readout .tr-time { font: 700 12px var(--font-mono); color: var(--ink-2); }
+.timeline-readout .tr-who { color: var(--ink-3); }
+.timeline-readout .tr-cast { font-weight: 700; }
+.tr-chip { padding: 2px 8px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 600; }
+.tr-chip.lust { background: rgba(255, 128, 0, 0.18); color: #ffb066; }
+.tr-chip.cd { background: rgba(255, 209, 0, 0.14); color: var(--cooldown); }
 
 /* ---------- Charts ---------- */
 .chart-wrap { display: flex; flex-direction: column; gap: 8px; }

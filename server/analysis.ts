@@ -1,9 +1,11 @@
 import { GAP_SECONDS, IGNORE_FOR_GAPS, cooldownFor } from './cooldowns.js';
 import { isGeneralBuff } from './buffs.js';
-import type { AbilityRow, BuffRow, Comparison, CooldownUse, Finding, Gap, GearItem, PlayerSnapshot, Strength } from './types.js';
+import type { AbilityRow, BuffRow, BuffWindow, Comparison, CooldownUse, Finding, Gap, GearItem, PlayerSnapshot, Strength } from './types.js';
 import type { Actor, CastEvent, Fight, PlayerTables } from './wcl.js';
 
 const num = (v: unknown): number => (typeof v === 'number' && isFinite(v) ? v : 0);
+/** Raid-wide haste effects, shown as their own band on the cast timeline. */
+const LUST = new Set(['Bloodlust', 'Heroism', 'Time Warp', 'Ancient Hysteria']);
 const round = (v: number, dp = 1) => Math.round(v * 10 ** dp) / 10 ** dp;
 
 export function mmss(seconds: number): string {
@@ -75,6 +77,19 @@ export function buildSnapshot(input: SnapshotInput): PlayerSnapshot {
     }))
     .sort((a: BuffRow, b: BuffRow) => b.uptimePct - a.uptimePct);
 
+  // When raid haste and your own big cooldowns were active (from the buff's uptime bands)
+  const windows: BuffWindow[] = [];
+  for (const a of (tables.buffs?.data?.auras ?? []) as any[]) {
+    const name = String(a?.name ?? '');
+    const kind = LUST.has(name) ? 'lust' : cooldownFor(name, input.host) !== undefined ? 'cooldown' : null;
+    if (!kind) continue;
+    for (const b of (a.bands ?? []) as any[]) {
+      const start = round(Math.max(0, (num(b.startTime) - fight.startTime) / 1000));
+      const end = round(Math.min(fightSeconds, (num(b.endTime) - fight.startTime) / 1000));
+      if (end > start) windows.push({ name, start, end, kind, icon: typeof a.abilityIcon === 'string' ? a.abilityIcon : undefined });
+    }
+  }
+
   // ---- Cast timeline, cooldowns, gaps ----
   const timeline = casts.events
     .map((e) => ({ t: (e.timestamp - fight.startTime) / 1000, name: casts.abilities.get(e.abilityGameID) ?? String(e.abilityGameID) }))
@@ -140,6 +155,8 @@ export function buildSnapshot(input: SnapshotInput): PlayerSnapshot {
     cooldowns,
     gaps,
     castSeconds: active.map((t) => round(t)),
+    casts: timeline.filter((e) => !IGNORE_FOR_GAPS.has(e.name)).map((e) => ({ t: round(e.t), name: e.name })),
+    windows,
     deaths,
     damageTaken,
   };

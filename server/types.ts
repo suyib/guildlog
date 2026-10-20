@@ -18,6 +18,7 @@ export interface AbilityRow {
 export interface BuffRow { name: string; id: number; uptimePct: number; uses: number; icon?: string }
 export interface CooldownUse { name: string; cooldownSec: number; uses: number; possible: number; times: number[]; icon?: string }
 export interface Gap { start: number; end: number; seconds: number }
+export interface BuffWindow { name: string; start: number; end: number; kind: 'lust' | 'cooldown'; icon?: string }
 
 export interface PlayerSnapshot {
   /** Realm name, used to look up the character portrait. */
@@ -44,6 +45,10 @@ export interface PlayerSnapshot {
   cooldowns: CooldownUse[];
   gaps: Gap[];
   castSeconds: number[]; // non-auto cast times, seconds from pull (for timelines)
+  /** Non-auto casts with names, for the timeline's hover (missing on analyses saved before v0.11.2). */
+  casts?: { t: number; name: string }[];
+  /** When Bloodlust/Heroism and your own big cooldowns were up, seconds from pull. */
+  windows?: BuffWindow[];
   deaths: { seconds: number; by: string }[];
   damageTaken: { name: string; total: number }[];
 }
