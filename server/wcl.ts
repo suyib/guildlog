@@ -11,6 +11,9 @@ const HOST_RE = /^([a-z0-9-]+\.)?warcraftlogs\.com$/i;
 let cachedToken: { token: string; exp: number } | null = null;
 let pendingToken: Promise<string> | null = null;
 
+/** Identifies the site to Warcraft Logs; a request with no name can look like a bot to its traffic protection. */
+const CLIENT_HEADERS = { 'User-Agent': 'GuildLogs/1.0 (+https://guildlog.uk)', Accept: 'application/json' };
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Worth trying again: Warcraft Logs busy or briefly down (rate limit, 5xx). */
 const retryable = (status: number) => status === 429 || status >= 500;
@@ -43,6 +46,7 @@ async function fetchToken(): Promise<string> {
         headers: {
           Authorization: 'Basic ' + Buffer.from(`${id}:${secret}`).toString('base64'),
           'Content-Type': 'application/x-www-form-urlencoded',
+          ...CLIENT_HEADERS,
         },
         body: 'grant_type=client_credentials',
         signal: AbortSignal.timeout(8_000),
@@ -76,7 +80,7 @@ export async function signInCheck(): Promise<string[]> {
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { Authorization: 'Basic ' + Buffer.from(`${id}:${secret}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: { Authorization: 'Basic ' + Buffer.from(`${id}:${secret}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded', ...CLIENT_HEADERS },
         body: 'grant_type=client_credentials',
         signal: AbortSignal.timeout(8_000),
       });
@@ -106,7 +110,7 @@ export async function gql<T>(host: string, query: string, variables: Record<stri
     try {
       res = await fetch(`https://${host}/api/v2/client`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...CLIENT_HEADERS },
         body: JSON.stringify({ query, variables }),
         signal: AbortSignal.timeout(timeoutMs),
       });

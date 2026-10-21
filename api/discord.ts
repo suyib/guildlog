@@ -49,9 +49,10 @@ const text = (body: string, status = 200) => new Response(body, { status, header
 
 export async function GET(req: Request): Promise<Response> {
   const url = new URL(req.url);
-  const secret = process.env.CRON_SECRET;
+  // Trimmed, so a space or line break pasted into Vercel's setting doesn't lock everyone out
+  const secret = process.env.CRON_SECRET?.trim().replace(/^['"]|['"]$/g, '');
   // Vercel's scheduled job sends the secret as a Bearer token; other schedulers use ?key=
-  const key = url.searchParams.get('key') ?? req.headers.get('authorization')?.replace(/^Bearer /, '');
+  const key = (url.searchParams.get('key') ?? req.headers.get('authorization')?.replace(/^Bearer /, ''))?.trim();
   if (!secret || key !== secret) return text('Not allowed', 401);
 
   const task = url.searchParams.get('task') ?? 'reminders'; // Vercel's daily job calls it without a task

@@ -24,6 +24,7 @@ export const CHANGELOG: Release[] = [
       'Discord: slow database answers are retried, and a claim that timed out is checked before trying again, so it isn\u2019t made twice.',
       'Warcraft Logs sign-in is shared between requests and retried when Warcraft Logs is briefly unavailable (the \u201cauth failed (503)\u201d error after the site has been idle). If one Warcraft Logs site\u2019s sign-in is down, the others are tried.',
       'Discord: a test link for the activity log that says why it can\u2019t post, if it can\u2019t.',
+      'The scheduler key (CRON_SECRET) ignores stray spaces or quotes pasted into Vercel.',
     ],
   },
   {
