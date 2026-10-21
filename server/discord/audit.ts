@@ -30,8 +30,10 @@ export function describe(i: Interaction): string {
     }
     if (id === 'raids:pick') return `Picked a raid from /raids${i.data?.values?.[0] ? ` (${logRef(i.data.values[0])})` : ''}`;
     if (kind === 'claim') return `Claim ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action}`;
+    if (kind === 'bug') return 'Button: Report a bug (opened the form)';
     return `Button: ${kind || 'unknown'}`;
   }
+  if (i.type === 5 && i.data?.custom_id?.startsWith('bug:submit')) return 'Sent a bug report';
   return `Interaction type ${i.type}`;
 }
 

@@ -10,6 +10,9 @@ export const env = {
   raidChannel: () => process.env.DISCORD_RAID_CHANNEL_ID?.trim() ?? '',
   adminChannel: () => process.env.DISCORD_ADMIN_CHANNEL_ID?.trim() ?? '',
   adminRole: () => process.env.DISCORD_ADMIN_ROLE_ID?.trim() ?? '',
+  /** Where bug reports go: a channel (e.g. in a separate test server the bot is in), else a DM to the owner. */
+  bugChannel: () => process.env.DISCORD_BUG_CHANNEL_ID?.trim() ?? '',
+  ownerId: () => process.env.DISCORD_OWNER_ID?.trim() ?? '',
   /** Private channel for the bot's activity log; logging is off when unset. */
   logChannel: () => process.env.DISCORD_LOG_CHANNEL_ID?.trim() ?? '',
   site: () => (process.env.SITE_URL?.trim() || 'https://guildlog.uk').replace(/\/$/, ''),
@@ -80,6 +83,9 @@ export interface Embed {
 export const EPHEMERAL = 64;
 export const BRAND = 0x007cad;
 
+/** Credit line in the raid summary's footer. */
+export const CREDIT = 'Made by suy';
+
 export const postToChannel = (channelId: string, body: MessageBody) => discord(`/channels/${channelId}/messages`, { method: 'POST', body });
 
 /** Send a direct message. Returns false when the person has DMs from server members turned off. */
@@ -113,3 +119,5 @@ export async function memberRoles(userId: string): Promise<string[] | null> {
 export const button = (label: string, customId: string, style: 1 | 2 | 3 | 4 = 2, disabled = false) => ({ type: 2, style, label, custom_id: customId, disabled });
 export const linkButton = (label: string, url: string) => ({ type: 2, style: 5, label, url });
 export const row = (...components: unknown[]) => ({ type: 1, components });
+/** Opens the bug report form. `context` (e.g. "host:code") is passed along so the report says which raid. */
+export const bugButton = (context = '') => button('Report a bug', `bug:open${context ? `:${context}` : ''}`.slice(0, 100), 2);

@@ -1,5 +1,5 @@
 // What the bot posts: the raid summary in the channel, and each person's own summaries by DM.
-import { BRAND, type Embed, type MessageBody, button, env, linkButton, row } from './api.js';
+import { BRAND, CREDIT, type Embed, type MessageBody, bugButton, button, env, linkButton, row } from './api.js';
 import { activeOver, raidFeedback } from '../raidFeedback.js';
 import type { RaidPoint } from '../types.js';
 import { type FightDigest, type PlayerDigest, type RaidDigest, playerFights } from './digest.js';
@@ -88,17 +88,17 @@ export function raidSummary(digest: RaidDigest, loggerId: string | null): Messag
       { name: 'Deaths on kills', value: String(deaths), inline: true },
       ...feedbackFields,
     ],
-    footer: { text: 'Click a button below to get your own numbers by DM' },
+    footer: { text: `Click a button below to get your own numbers by DM · ${CREDIT}` },
     timestamp: new Date(meta.startTime).toISOString(),
   };
   const logged = loggerId ? `Logged by <@${loggerId}>. ` : '';
   return {
     content: `${logged}${digest.pending ? `Still reading ${digest.pending} boss${digest.pending > 1 ? 'es' : ''} from Warcraft Logs; your summaries include them once they're ready.` : ''}`.trim() || undefined,
     embeds: [embed],
-    // The DM buttons, plus a link that opens this log on the site (fits in the second row's 5 slots)
+    // The DM buttons, a link that opens this log on the site, and Report a bug (the second row's 5 slots)
     components: (() => {
       const [first, second] = pageButtons(`${digest.host}:${digest.code}`);
-      return [first, { ...second, components: [...second.components, linkButton('Open on Guild Logs', reportLink(digest.host, digest.code))] }];
+      return [first, { ...second, components: [...second.components, linkButton('Open on Guild Logs', reportLink(digest.host, digest.code)), bugButton(`${digest.host}:${digest.code}`)] }];
     })(),
     allowed_mentions: { users: loggerId ? [loggerId] : [] },
   };

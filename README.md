@@ -64,7 +64,9 @@ The bot runs on the same Vercel project (no extra server) as a single function, 
 4. Open `https://guildlog.uk/api/discord?task=register&key=YOUR_CRON_SECRET` to register the commands (again whenever they change).
 5. For reminders, have a free scheduler (e.g. cron-job.org) open `https://guildlog.uk/api/discord?task=reminders&key=YOUR_CRON_SECRET` every 5 minutes. Vercel also runs it once a day as a backup.
 
-**Activity log (optional).** Set `DISCORD_LOG_CHANNEL_ID` to a private channel and the bot posts one line per command or button press: who, what (command and which options were used, never what was typed), where, when, and whether it worked or the error if not. Failed reminders and command registration are logged too. Mentions in the log don't ping anyone.
+**Bug reports.** A **Report a bug** button (under each raid summary and in `/help`) opens a short form. Reports go to `DISCORD_BUG_CHANNEL_ID` if set (a channel in a separate test server works, once the bot is added there), otherwise to `DISCORD_OWNER_ID` by DM.
+
+**Activity log (optional).** Set `DISCORD_LOG_CHANNEL_ID` to a private channel and the bot posts one line per command or button press: who, what (command and which options were used, never what was typed), where, when, and whether it worked or the error if not. Failed reminders and command registration are logged too. Mentions in the log don't ping anyone. To check it's set up, open `https://guildlog.uk/api/discord?task=logtest&key=YOUR_CRON_SECRET`: it posts a test line, or says what's wrong.
 
 Raid summaries are built once per boss kill (a few fight-wide Warcraft Logs queries) and stored in `bot_raid_fights`, so button presses are instant afterwards.
 

@@ -8,20 +8,49 @@ function cfg() {
   return { url: url.replace(/\/$/, ''), key };
 }
 
+const isTimeout = (e: unknown) => e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError' || /aborted due to timeout/i.test(e.message));
+
+/**
+ * One PostgREST call. Reads are retried once if the database is slow to answer (a Supabase project
+ * that's been idle can take a few seconds to wake); writes aren't, as they may already have landed.
+ */
 export async function rest(path: string, init: RequestInit = {}): Promise<any> {
+  const read = !init.method || init.method === 'GET';
+  try {
+    return await restOnce(path, init);
+  } catch (e) {
+    if (!read || !isTimeout(e)) throw e;
+    return restOnce(path, init);
+  }
+}
+
+export class DbTimeout extends Error {
+  constructor() {
+    super('The database was slow to answer. Please try again in a minute.');
+    this.name = 'TimeoutError'; // so callers can tell it apart from other errors
+  }
+}
+
+async function restOnce(path: string, init: RequestInit): Promise<any> {
   const c = cfg();
   if (!c) throw new Error('Supabase is not configured');
-  const res = await fetch(`${c.url}/rest/v1/${path}`, {
-    signal: AbortSignal.timeout(8_000), // the database should never be what makes a step time out
-    ...init,
-    headers: {
-      apikey: c.key,
-      // Legacy service_role keys are JWTs and go in Authorization too; new sb_secret_ keys only need apikey.
-      ...(c.key.startsWith('sb_secret_') ? {} : { Authorization: `Bearer ${c.key}` }),
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${c.url}/rest/v1/${path}`, {
+      signal: AbortSignal.timeout(8_000), // the database should never be what makes a step time out
+      ...init,
+      headers: {
+        apikey: c.key,
+        // Legacy service_role keys are JWTs and go in Authorization too; new sb_secret_ keys only need apikey.
+        ...(c.key.startsWith('sb_secret_') ? {} : { Authorization: `Bearer ${c.key}` }),
+        'Content-Type': 'application/json',
+        ...(init.headers ?? {}),
+      },
+    });
+  } catch (e) {
+    if (isTimeout(e)) throw new DbTimeout();
+    throw e;
+  }
   if (res.status === 401) {
     throw new Error('Supabase rejected the key. In Vercel, set SUPABASE_SERVICE_ROLE_KEY to the secret (sb_secret_…) or legacy service_role key from the same project as SUPABASE_URL, then redeploy.');
   }

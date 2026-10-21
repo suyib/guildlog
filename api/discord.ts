@@ -2,6 +2,7 @@
 //   POST  Discord interactions. Set https://guildlog.uk/api/discord as the "Interactions Endpoint URL".
 //   GET ?task=register&key=CRON_SECRET   sends the slash commands to Discord (run after they change)
 //   GET ?task=reminders&key=CRON_SECRET  posts due reminders (call every 5 minutes, e.g. from cron-job.org)
+//   GET ?task=logtest&key=CRON_SECRET    posts a test line to the activity log channel and says why if it can't
 import { waitUntil } from '@vercel/functions';
 import { discord, env, postToChannel, verifyDiscordRequest } from '../server/discord/api.js';
 import { audit, auditTask } from '../server/discord/audit.js';
@@ -78,6 +79,25 @@ export async function GET(req: Request): Promise<Response> {
     // Quiet when there was nothing to do (this runs every 5 minutes)
     if (sent) await auditTask(`Posted ${sent} scheduled reminder${sent > 1 ? 's' : ''}`);
     return text(`Sent ${sent} of ${due.length} due reminders`);
+  }
+  if (task === 'logtest') {
+    const channel = env.logChannel();
+    if (!channel) return text('DISCORD_LOG_CHANNEL_ID isn\u2019t set in this deployment. Add it in Vercel, then redeploy (new variables only reach new deployments).', 400);
+    if (!/^\d{17,20}$/.test(channel)) return text(`DISCORD_LOG_CHANNEL_ID is "${channel.slice(0, 40)}", which isn\u2019t a channel ID. Right-click the channel in Discord, Copy Channel ID, and paste just the number.`, 400);
+    try {
+      await postToChannel(channel, { content: `<t:${Math.floor(Date.now() / 1000)}:f> · Activity log test: the bot can post here.`, allowed_mentions: { parse: [] } });
+      return text('Posted a test line to the activity log channel.');
+    } catch (e) {
+      const msg = (e as Error).message;
+      const hint = /50001|Missing Access/.test(msg)
+        ? 'The bot can\u2019t see that channel. In the channel\u2019s settings > Permissions, add the bot (or its role) with View Channel and Send Messages.'
+        : /50013|Missing Permissions/.test(msg)
+          ? 'The bot can see the channel but can\u2019t post. Give it Send Messages in that channel\u2019s permissions.'
+          : /10003|Unknown Channel/.test(msg)
+            ? 'Discord doesn\u2019t know that channel ID. Copy it again (Developer Mode on, right-click the channel > Copy Channel ID).'
+            : 'See the error above.';
+      return text(`Couldn\u2019t post to the log channel.\n${msg}\n\n${hint}`, 500);
+    }
   }
   return text('Unknown task', 400);
 }

@@ -7,6 +7,7 @@ import type { RaidDigest } from '../server/discord/digest';
 import { personalPage, raidSummary } from '../server/discord/pages';
 import { activeOver, raidFeedback } from '../server/raidFeedback';
 import { auditLine, describe } from '../server/discord/audit';
+import { rest } from '../server/db';
 
 // Signed requests: Discord's PING gets a PONG, a bad signature is refused
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -113,7 +114,7 @@ assert.ok(quickFields['What to work on'].includes('No enchant on: head'));
 // Six page buttons, split across two rows (Discord allows five per row)
 assert.equal(summary.components!.length, 2);
 // ...plus a link that opens the log on the site
-const siteButton = (summary.components![1] as any).components.at(-1);
+const siteButton = (summary.components![1] as any).components.at(-2);
 assert.equal(siteButton.style, 5);
 assert.equal(siteButton.url, 'https://guildlog.uk/?log=' + encodeURIComponent('https://fresh.warcraftlogs.com/reports/ABC'));
 assert.ok((summary.components![1] as any).components.length <= 5);
@@ -125,6 +126,20 @@ const helpText = JSON.stringify(help.response.data.embeds);
 for (const c of COMMANDS) assert.ok(helpText.includes(`/${c.name}`) || c.name === 'help', `/help is missing /${c.name}`);
 assert.ok(help.response.data.embeds[0].fields.every((f: any) => f.value.length <= 1024));
 
+// Credit only in the raid summary's footer
+assert.ok(summary.embeds![0].footer!.text.endsWith('Made by suy'));
+const helpReply: any = await (await call({ type: 2, token: 't', user: { id: '1', username: 'suy' }, data: { name: 'help' } })).json();
+assert.ok(!JSON.stringify(helpReply).includes('Made by suy'));
+assert.equal(helpReply.data.components[0].components[0].custom_id, 'bug:open');
+
+// Report a bug: the button opens a form; sending it needs somewhere to go
+const form: any = await handle({ type: 3, token: 't', user: { id: '1', username: 'suy' }, data: { custom_id: 'bug:open:fresh.warcraftlogs.com:ABC' } });
+assert.equal(form.response.type, 9);
+assert.equal(form.response.data.custom_id, 'bug:submit:fresh.warcraftlogs.com:ABC');
+assert.equal(form.response.data.components.length, 2);
+assert.equal((summary.components![1] as any).components.at(-1).custom_id, 'bug:open:fresh.warcraftlogs.com:ABC');
+assert.equal(describe({ type: 5, token: 't', data: { custom_id: 'bug:submit' } } as any), 'Sent a bug report');
+
 // Activity log: who, what and where, never what they typed
 const typed = { type: 2, token: 't', guild_id: 'g', channel_id: '55', member: { user: { id: '7', username: 'suy' }, roles: [] },
   data: { name: 'remind', options: [{ name: 'message', type: 3, value: 'secret plans' }, { name: 'time', type: 3, value: '19:45' }] } } as any;
@@ -134,5 +149,26 @@ assert.ok(!line.includes('secret plans') && !line.includes('19:45'), 'typed valu
 assert.equal(describe({ type: 2, token: 't', data: { name: 'info', options: [{ name: 'lookup', type: 1, options: [{ name: 'search', type: 3, value: 'x' }] }] } } as any), '/info lookup (options: search)');
 assert.equal(describe({ type: 3, token: 't', data: { custom_id: 'raid:summary:fresh.warcraftlogs.com:AbC' } } as any), 'Button: Quick summary (fresh/AbC)');
 assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').includes('in DMs · **FAILED** after 0.5s: boom'));
+
+// Slow database: reads are retried once, writes aren't (they may already have been saved)
+{
+  const realFetch = globalThis.fetch;
+  process.env.SUPABASE_URL = 'https://db.example';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    if (calls === 1) throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+    return new Response('[{"ok":true}]', { status: 200 });
+  }) as typeof fetch;
+  assert.deepEqual(await rest('bot_claims'), [{ ok: true }]);
+  assert.equal(calls, 2);
+  calls = 0;
+  await assert.rejects(rest('bot_claims', { method: 'POST', body: '{}' }), /slow to answer/);
+  assert.equal(calls, 1);
+  globalThis.fetch = realFetch;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+}
 
 console.log('All bot checks passed.');

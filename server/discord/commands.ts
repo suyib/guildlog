@@ -5,7 +5,7 @@ import { characterLevel } from '../blizzard.js';
 import { rest } from '../db.js';
 import { getReportMeta, getReportRegion, parseReportUrl } from '../wcl.js';
 import {
-  BRAND, EPHEMERAL, type Embed, type MessageBody, button, discord, editReply, env, linkButton, memberRoles, postToChannel, row, sendDm,
+  BRAND, bugButton, EPHEMERAL, type Embed, type MessageBody, button, discord, editReply, env, linkButton, memberRoles, postToChannel, row, sendDm,
 } from './api.js';
 import { type RaidDigest, playerFights, raidDigest } from './digest.js';
 import { RAID_CHECKLIST, ROLE_CHOICES, type Role, consumablesMessage, lookupMessage } from './info.js';
@@ -87,7 +87,14 @@ export interface Interaction {
   channel_id?: string;
   member?: { user: DUser; roles: string[]; permissions?: string };
   user?: DUser;
-  data?: { name?: string; custom_id?: string; options?: (Opt & { focused?: boolean })[]; values?: string[] };
+  data?: {
+    name?: string;
+    custom_id?: string;
+    options?: (Opt & { focused?: boolean })[];
+    values?: string[];
+    /** A submitted form: rows of text inputs */
+    components?: { components?: { custom_id: string; value?: string }[] }[];
+  };
   message?: { id: string; embeds?: Embed[] };
 }
 interface DUser { id: string; username: string; global_name?: string | null }
@@ -155,7 +162,9 @@ export async function handle(i: Interaction): Promise<Outcome> {
     if (id.startsWith('raid:')) return raidButton(i, id);
     if (id === 'raids:pick') return raidPicked(i);
     if (id.startsWith('claim:')) return claimDecision(i, id);
+    if (id === 'bug:open' || id.startsWith('bug:open:')) return bugForm(id.slice('bug:open:'.length));
   }
+  if (i.type === 5 && i.data?.custom_id?.startsWith('bug:submit')) return bugSubmit(i);
   return reply({ content: 'That command isn’t available.' });
 }
 
@@ -458,9 +467,17 @@ async function claim(i: Interaction): Promise<Outcome> {
     if (existing && existing.discord_id === user.id) return { content: `You've already ${existing.status === 'approved' ? 'claimed' : 'asked to claim'} ${character}.` };
     if (existing) return { content: `${character} is already claimed by someone else. If it's yours, ask an officer to sort it out.` };
     if ((await claimsFor(user.id)).length >= 6) return { content: 'You can claim up to 6 characters. Use /unclaim to remove one first.' };
+    const make = () => createClaim({ discord_id: user.id, discord_name: nameOf(user), character, realm });
     let c: Claim;
     try {
-      c = await createClaim({ discord_id: user.id, discord_name: nameOf(user), character, realm });
+      c = await make().catch(async (e) => {
+        // Slow database: the claim may have been saved anyway, so look before trying again
+        if ((e as Error).name !== 'TimeoutError') throw e;
+        const saved = await claimOnCharacter(character, realm);
+        if (saved && saved.discord_id === user.id) return saved;
+        if (saved) throw new Error('409 already claimed');
+        return make();
+      });
     } catch (e) {
       // The database refuses a second live claim on the same character (two people asking at once)
       if (/409|duplicate|unique/i.test((e as Error).message)) return { content: `${character} is already claimed by someone else. If it's yours, ask an officer to sort it out.` };
@@ -567,9 +584,65 @@ export function helpMessage(): MessageBody {
           ].join('\n'),
         },
         { name: 'More detail', value: `The full analysis for any fight, with charts and comparisons, is at ${env.site()}.` },
+        { name: 'Something not working?', value: 'Press **Report a bug** below (it\u2019s also under every raid summary).' },
       ],
     }],
+    components: [row(bugButton())],
   };
+}
+
+// ---------- Bug reports ----------
+
+const TEXT_INPUT = 4;
+
+/** The pop-up form. `context` is "host:code" when opened from a raid summary. */
+function bugForm(context: string): Outcome {
+  const input = (custom_id: string, label: string, placeholder: string, required: boolean, max: number) =>
+    row({ type: TEXT_INPUT, custom_id, label, style: 2, placeholder, required, max_length: max });
+  return {
+    response: {
+      type: 9,
+      data: {
+        custom_id: `bug:submit${context ? `:${context}` : ''}`.slice(0, 100),
+        title: 'Report a bug',
+        components: [
+          input('what', 'What went wrong?', 'e.g. the Damage breakdown button said something went wrong', true, 1000),
+          input('doing', 'What were you doing? (optional)', 'Which command or button, which character, roughly when', false, 500),
+        ],
+      },
+    },
+  };
+}
+
+function bugSubmit(i: Interaction): Outcome {
+  const fields = new Map((i.data?.components ?? []).flatMap((r) => r.components ?? []).map((c) => [c.custom_id, (c.value ?? '').trim()]));
+  const context = (i.data?.custom_id ?? '').slice('bug:submit:'.length);
+  const [host, code] = context.split(':');
+  const u = userOf(i);
+  const report: MessageBody = {
+    embeds: [{
+      title: 'Bug report',
+      color: 0xd9534f,
+      description: fields.get('what') || '(nothing written)',
+      fields: [
+        { name: 'From', value: `<@${u.id}> (${u.username})`, inline: true },
+        { name: 'Where', value: i.guild_id ? (i.channel_id ? `<#${i.channel_id}>` : 'the server') : 'DMs', inline: true },
+        ...(code ? [{ name: 'Raid', value: `[${code}](https://${host}/reports/${code})`, inline: true }] : []),
+        ...(fields.get('doing') ? [{ name: 'What they were doing', value: fields.get('doing')!.slice(0, 1024) }] : []),
+      ],
+      timestamp: new Date().toISOString(),
+    }],
+    allowed_mentions: { parse: [] },
+  };
+  return deferred(i, async () => {
+    const channel = env.bugChannel();
+    const owner = env.ownerId();
+    if (channel) await postToChannel(channel, report);
+    else if (owner) {
+      if (!(await sendDm(owner, report))) throw new Error('the report couldn\u2019t be delivered');
+    } else throw new Error('bug reports aren\u2019t set up yet');
+    return { content: 'Thanks, your report has been sent to suy.' };
+  });
 }
 
 // ---------- /info ----------
