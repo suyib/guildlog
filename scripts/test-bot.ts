@@ -187,7 +187,7 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
   }) as typeof fetch;
   const results = await Promise.all([1, 2, 3].map(() => gql('fresh.warcraftlogs.com', '{x}', {})));
   assert.deepEqual(results, [{ ok: true }, { ok: true }, { ok: true }]);
-  assert.equal(tokenCalls, 2, 'one 503, then one shared sign-in');
+  assert.equal(tokenCalls, 2, 'one 503, then one shared sign-in on the next site');
   globalThis.fetch = realFetch;
 }
 

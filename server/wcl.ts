@@ -4,7 +4,8 @@
 
 import { GAME } from './game.js';
 
-const TOKEN_URL = 'https://www.warcraftlogs.com/oauth/token';
+// Warcraft Logs answers sign-ins on each of its sites; if one is unavailable, the next is tried
+const TOKEN_URLS = ['https://www.warcraftlogs.com/oauth/token', 'https://fresh.warcraftlogs.com/oauth/token', 'https://classic.warcraftlogs.com/oauth/token'];
 const HOST_RE = /^([a-z0-9-]+\.)?warcraftlogs\.com$/i;
 
 let cachedToken: { token: string; exp: number } | null = null;
@@ -32,21 +33,22 @@ async function fetchToken(): Promise<string> {
   const secret = process.env.WCL_CLIENT_SECRET;
   if (!id || !secret) throw new Error('Server is missing WCL_CLIENT_ID or WCL_CLIENT_SECRET');
   let status = 0;
-  for (const wait of [0, 1_000, 3_000]) {
+  const attempts = [...TOKEN_URLS.map((url) => ({ url, wait: 0 })), { url: TOKEN_URLS[0], wait: 2_000 }];
+  for (const { url, wait } of attempts) {
     if (wait) await sleep(wait);
     let res: Response;
     try {
-      res = await fetch(TOKEN_URL, {
+      res = await fetch(url, {
         method: 'POST',
         headers: {
           Authorization: 'Basic ' + Buffer.from(`${id}:${secret}`).toString('base64'),
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: 'grant_type=client_credentials',
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(8_000),
       });
     } catch {
-      status = 0; // network error or timeout: try again
+      status = 0; // network error or timeout: try the next one
       continue;
     }
     if (res.ok) {
@@ -59,8 +61,33 @@ async function fetchToken(): Promise<string> {
       throw new Error('Warcraft Logs rejected the site\u2019s API key. Check WCL_CLIENT_ID and WCL_CLIENT_SECRET in Vercel.');
     }
     if (!retryable(status)) break;
+    console.warn(`Warcraft Logs sign-in at ${url} returned ${status}`);
   }
-  throw new Error(`Warcraft Logs is having trouble right now (sign-in ${status ? `returned ${status}` : 'didn\u2019t answer'}). Try again in a few minutes.`);
+  throw new Error(`Warcraft Logs is having trouble right now (sign-in ${status ? `returned ${status}` : 'didn\u2019t answer'} on all its sites). Try again in a few minutes.`);
+}
+
+/** For troubleshooting: what each sign-in address answers right now (never includes the token itself). */
+export async function signInCheck(): Promise<string[]> {
+  const id = process.env.WCL_CLIENT_ID;
+  const secret = process.env.WCL_CLIENT_SECRET;
+  if (!id || !secret) return ['WCL_CLIENT_ID or WCL_CLIENT_SECRET is missing in this deployment.'];
+  return Promise.all(TOKEN_URLS.map(async (url) => {
+    const started = Date.now();
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: 'Basic ' + Buffer.from(`${id}:${secret}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'grant_type=client_credentials',
+        signal: AbortSignal.timeout(8_000),
+      });
+      const ms = Date.now() - started;
+      if (res.ok) return `${url}: OK (${ms} ms)`;
+      const text = (await res.text()).replace(/\s+/g, ' ').slice(0, 200);
+      return `${url}: ${res.status} (${ms} ms) ${res.headers.get('server') ?? ''} ${text}`;
+    } catch (e) {
+      return `${url}: no answer (${(e as Error).message})`;
+    }
+  }));
 }
 
 /** Thrown when Warcraft Logs doesn't answer in time, so callers can skip optional data. */

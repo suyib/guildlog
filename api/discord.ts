@@ -3,11 +3,13 @@
 //   GET ?task=register&key=CRON_SECRET   sends the slash commands to Discord (run after they change)
 //   GET ?task=reminders&key=CRON_SECRET  posts due reminders (call every 5 minutes, e.g. from cron-job.org)
 //   GET ?task=logtest&key=CRON_SECRET    posts a test line to the activity log channel and says why if it can't
+//   GET ?task=wcltest&key=CRON_SECRET    shows what each Warcraft Logs sign-in address answers (for troubleshooting)
 import { waitUntil } from '@vercel/functions';
 import { discord, env, postToChannel, verifyDiscordRequest } from '../server/discord/api.js';
 import { audit, auditTask } from '../server/discord/audit.js';
 import { COMMANDS, type Interaction, handle, reminderMessage } from '../server/discord/commands.js';
 import { dueReminders, markReminderSent } from '../server/discord/store.js';
+import { signInCheck } from '../server/wcl.js';
 
 export const maxDuration = 60;
 
@@ -80,6 +82,7 @@ export async function GET(req: Request): Promise<Response> {
     if (sent) await auditTask(`Posted ${sent} scheduled reminder${sent > 1 ? 's' : ''}`);
     return text(`Sent ${sent} of ${due.length} due reminders`);
   }
+  if (task === 'wcltest') return text((await signInCheck()).join('\n'));
   if (task === 'logtest') {
     const channel = env.logChannel();
     if (!channel) return text('DISCORD_LOG_CHANNEL_ID isn\u2019t set in this deployment. Add it in Vercel, then redeploy (new variables only reach new deployments).', 400);
