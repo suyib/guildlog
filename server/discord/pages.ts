@@ -29,6 +29,11 @@ export function pageButtons(raid: string) {
   return [row(...b.slice(0, 3)), row(...b.slice(3))]; // Discord allows 5 buttons per row
 }
 
+/** Link that opens the whole log on the site, ready to pick a fight and player. */
+export function reportLink(host: string, code: string) {
+  return `${env.site()}/?log=${encodeURIComponent(`https://${host}/reports/${code}`)}`;
+}
+
 /** Link to the full analysis on the site for one fight and player. */
 export function siteLink(host: string, code: string, fightId: number, sourceId: number) {
   const log = `https://${host}/reports/${code}?fight=${fightId}&source=${sourceId}`;
@@ -90,7 +95,11 @@ export function raidSummary(digest: RaidDigest, loggerId: string | null): Messag
   return {
     content: `${logged}${digest.pending ? `Still reading ${digest.pending} boss${digest.pending > 1 ? 'es' : ''} from Warcraft Logs; your summaries include them once they're ready.` : ''}`.trim() || undefined,
     embeds: [embed],
-    components: pageButtons(`${digest.host}:${digest.code}`),
+    // The DM buttons, plus a link that opens this log on the site (fits in the second row's 5 slots)
+    components: (() => {
+      const [first, second] = pageButtons(`${digest.host}:${digest.code}`);
+      return [first, { ...second, components: [...second.components, linkButton('Open on Guild Logs', reportLink(digest.host, digest.code))] }];
+    })(),
     allowed_mentions: { users: loggerId ? [loggerId] : [] },
   };
 }

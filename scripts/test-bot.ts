@@ -112,6 +112,11 @@ assert.ok(quickFields['What to work on'].includes('Bestial Wrath 2/4'), 'under-u
 assert.ok(quickFields['What to work on'].includes('No enchant on: head'));
 // Six page buttons, split across two rows (Discord allows five per row)
 assert.equal(summary.components!.length, 2);
+// ...plus a link that opens the log on the site
+const siteButton = (summary.components![1] as any).components.at(-1);
+assert.equal(siteButton.style, 5);
+assert.equal(siteButton.url, 'https://guildlog.uk/?log=' + encodeURIComponent('https://fresh.warcraftlogs.com/reports/ABC'));
+assert.ok((summary.components![1] as any).components.length <= 5);
 
 // /help lists every command, only to the person who asked
 const help: any = await handle({ type: 2, token: 't', user: { id: '1', username: 'suy' }, data: { name: 'help' } });

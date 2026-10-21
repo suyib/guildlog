@@ -19,6 +19,8 @@ export const CHANGELOG: Release[] = [
       'Pet damage (hunter and warlock pets) is split out and labeled with the pet\u2019s name, e.g. \u201cMelee (pet: Kitty)\u201d, with its share of your total; DMs list pets the same way.',
       'Discord: optional activity log channel (who used which command or button, where, when, and whether it worked), without anything people typed.',
       'Discord: /help lists every command and what it does.',
+      'Discord: the /raidend summary has an \u201cOpen on Guild Logs\u201d button that opens that log on the site.',
+      'Discord: a test link for the activity log that says why it can\u2019t post, if it can\u2019t.',
     ],
   },
   {
