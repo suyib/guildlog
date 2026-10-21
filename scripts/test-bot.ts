@@ -8,7 +8,6 @@ import { personalPage, raidSummary } from '../server/discord/pages';
 import { activeOver, raidFeedback } from '../server/raidFeedback';
 import { auditLine, describe } from '../server/discord/audit';
 import { rest } from '../server/db';
-import { gql } from '../server/wcl';
 
 // Signed requests: Discord's PING gets a PONG, a bad signature is refused
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -170,25 +169,6 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
   globalThis.fetch = realFetch;
   delete process.env.SUPABASE_URL;
   delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-}
-
-// Warcraft Logs sign-in after idle: one shared sign-in for parallel requests, retried if it's briefly down
-{
-  const realFetch = globalThis.fetch;
-  process.env.WCL_CLIENT_ID = 'id';
-  process.env.WCL_CLIENT_SECRET = 'secret';
-  let tokenCalls = 0;
-  globalThis.fetch = (async (url: string) => {
-    if (String(url).includes('/oauth/token')) {
-      tokenCalls++;
-      return tokenCalls === 1 ? new Response('busy', { status: 503 }) : new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }), { status: 200 });
-    }
-    return new Response(JSON.stringify({ data: { ok: true } }), { status: 200 });
-  }) as typeof fetch;
-  const results = await Promise.all([1, 2, 3].map(() => gql('fresh.warcraftlogs.com', '{x}', {})));
-  assert.deepEqual(results, [{ ok: true }, { ok: true }, { ok: true }]);
-  assert.equal(tokenCalls, 2, 'one 503, then one shared sign-in');
-  globalThis.fetch = realFetch;
 }
 
 console.log('All bot checks passed.');

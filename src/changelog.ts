@@ -22,7 +22,6 @@ export const CHANGELOG: Release[] = [
       'Discord: the /raidend summary has an \u201cOpen on Guild Logs\u201d button that opens that log on the site.',
       'Discord: \u201cMade by suy\u201d in the raid summary footer, and a Report a bug button (raid summary and /help) with a short form.',
       'Discord: slow database answers are retried, and a claim that timed out is checked before trying again, so it isn\u2019t made twice.',
-      'Warcraft Logs sign-in is shared between requests and retried when Warcraft Logs is briefly unavailable (the \u201cauth failed (503)\u201d error after the site has been idle).',
       'Discord: a test link for the activity log that says why it can\u2019t post, if it can\u2019t.',
     ],
   },
