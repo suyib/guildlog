@@ -70,6 +70,16 @@ The bot runs on the same Vercel project (no extra server) as a single function, 
 
 Raid summaries are built once per boss kill (a few fight-wide Warcraft Logs queries) and stored in `bot_raid_fights`, so button presses are instant afterwards.
 
+## Past raids
+
+The **Past raids** page shows a calendar of raid nights, a card for each (bosses, kill times, wipes, deaths, what went well and what to work on, and who was there), attendance over time and kill times per boss.
+
+- Raids are added by `/raidend`, by **Add a past raid** on the page, or automatically from the guild's uploads if `GUILD_NAME`, `GUILD_REALM` and `GUILD_REGION` are set.
+- Each raid is then saved in full by the every-5-minutes job (`?task=reminders`, the same one that posts reminders): the report, each boss kill's breakdown, and every player's analysis and gear. A night is usually done within an hour.
+- When Warcraft Logs is down, saved raids load from that copy on the site and in the bot. Comparing with another log still needs Warcraft Logs.
+- Full player detail is kept for `ARCHIVE_DAYS` (default 90); summaries, breakdowns and raid cards stay. A full raid is roughly 3–5 MB.
+- Needs the `guild_raids` and `saved_data` tables: run `supabase/schema.sql` again (it's safe to re-run).
+
 ## Releases
 
 Every version bump in `package.json` gets a short entry at the top of `src/changelog.ts`, which feeds the Changelog page (linked next to the version number in the menu).

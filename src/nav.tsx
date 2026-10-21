@@ -15,7 +15,7 @@ export const SECTIONS: { id: SectionId; label: string; glyph: GlyphName }[] = [
 
 export type GlyphName =
   | 'compass' | 'clock' | 'grid' | 'cycle' | 'bars' | 'shield' | 'pulse' | 'users'
-  | 'bolt' | 'target' | 'timer' | 'link' | 'copy' | 'up' | 'down' | 'search' | 'check' | 'alert';
+  | 'bolt' | 'target' | 'timer' | 'link' | 'copy' | 'up' | 'down' | 'search' | 'check' | 'alert' | 'calendar';
 
 /** Sections that have something to show for this result. */
 export function sectionsFor(result: AnalysisResult | null) {

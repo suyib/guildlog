@@ -5,11 +5,13 @@
 import { buildFindings, buildSnapshot, buildStrengths } from './analysis.js';
 import { getCachedSnapshot, putCachedSnapshot, saveAnalysis } from './db.js';
 import type { ActorRef, AnalysisResult, Comparison, Dashboard, FightPlayerRow, FightRef, PlayerSnapshot, ReportSummary } from './types.js';
-import { type Actor, type Fight, getAutoAttackEvents, getCastEvents, getFightData, getPlayerTables, getReportMeta, parseReportUrl } from './wcl.js';
+import { metaLiveOrSaved } from './saved.js';
+import { type Actor, type Fight, getAutoAttackEvents, getCastEvents, getFightData, getPlayerTables, parseReportUrl } from './wcl.js';
 
 export async function reportSummary(url: string): Promise<ReportSummary> {
   const parsed = parseReportUrl(url);
-  const meta = await getReportMeta(parsed.host, parsed.code);
+  // Our own saved raids still load when Warcraft Logs is down
+  const { meta, offline } = await metaLiveOrSaved(parsed.host, parsed.code);
   const encounters = meta.fights.filter((f) => f.encounterID > 0);
   // Only people who were in at least one boss fight. A report's actor list also holds everyone the
   // logger saw (other raids, people in town), which is where "Unknown" class entries come from.
@@ -40,6 +42,7 @@ export async function reportSummary(url: string): Promise<ReportSummary> {
       .sort((a, b) => a.name.localeCompare(b.name)),
     suggestedFight,
     suggestedPlayer: players.some((p) => p.id === parsed.source) ? parsed.source : undefined,
+    ...(offline ? { offline } : {}),
   };
 }
 

@@ -6,7 +6,8 @@ import { IGNORE_FOR_GAPS, cooldownFor } from '../cooldowns.js';
 import { gearFrom, statsFrom, survivalFrom } from '../dashboard.js';
 import { detailRows, rankingRows } from '../pipeline.js';
 import type { GearItem } from '../types.js';
-import { type Fight, type ReportMeta, getReportMeta, gql } from '../wcl.js';
+import { type Fight, type ReportMeta, gql } from '../wcl.js';
+import { metaLiveOrSaved } from '../saved.js';
 import { storeFight, storedFights } from './store.js';
 
 export interface PlayerDigest {
@@ -177,7 +178,8 @@ export async function buildFightDigest(host: string, code: string, fight: Fight)
  */
 export async function raidDigest(host: string, code: string, budgetMs = 40_000): Promise<RaidDigest> {
   const deadline = Date.now() + budgetMs;
-  const [meta, stored] = await Promise.all([getReportMeta(host, code, 15_000), storedFights(code).catch(() => [])]);
+  // The saved copy of the raid answers when Warcraft Logs is down
+  const [{ meta }, stored] = await Promise.all([metaLiveOrSaved(host, code, 15_000), storedFights(code).catch(() => [])]);
   const kills = meta.fights.filter((f) => f.encounterID > 0 && f.kill);
   const have = new Map(stored.filter((s) => (s.data as FightDigest).v === DIGEST_VERSION).map((s) => [s.fight_id, s.data as FightDigest]));
   const missing = kills.filter((f) => !have.has(f.id));

@@ -2,6 +2,7 @@
 // Rule of thumb: anything about one person's character is sent by DM (or shown only to them);
 // only raid-wide information is posted in channels.
 import { characterLevel } from '../blizzard.js';
+import { registerRaid } from '../archive.js';
 import { rest } from '../db.js';
 import { getReportMeta, getReportRegion, parseReportUrl } from '../wcl.js';
 import {
@@ -299,6 +300,9 @@ async function raidEnd(i: Interaction): Promise<Outcome> {
     const digest = await raidDigest(raid.host, raid.report_code, 40_000);
     await postToChannel(channelId, raidSummary(digest, raid.logger_id));
     await endRaid(raid.report_code);
+    // Add it to Past raids on the site, which saves it in full over the next hour or so
+    const logger = raid.logger_id ? await discord<DUser>(`/users/${raid.logger_id}`).catch(() => null) : null;
+    await registerRaid({ host: raid.host, code: raid.report_code, source: 'discord', loggerName: logger ? nameOf(logger) : null, addedBy: me }).catch((e) => console.error('couldn\u2019t add to past raids', e));
     return { content: `Summary for ${raid.title ?? 'the raid'} posted in <#${channelId}>.` };
   });
 }

@@ -180,7 +180,45 @@ export interface ReportSummary {
   players: { id: number; name: string; className: string; server: string | null }[];
   suggestedFight?: number;
   suggestedPlayer?: number;
+  /** Set when Warcraft Logs was unavailable and this came from the saved copy of the raid. */
+  offline?: Offline;
 }
+
+/** A saved copy was used because Warcraft Logs didn't answer. */
+export interface Offline { savedAt: string }
+
+/** One raid night at a glance, for the Past raids calendar (built from the saved raid). */
+export interface RaidCard {
+  bosses: { name: string; encounterId: number; fightId: number | null; kill: boolean; seconds: number | null; wipes: number }[];
+  /** From the first pull to the end of the last boss fight. */
+  raidSeconds: number;
+  wipes: number;
+  /** Deaths on kills. */
+  deaths: number;
+  avgItemLevel: number | null;
+  /** Everyone in at least one boss fight. bosses: how many of the kills they were in. */
+  raiders: { name: string; className: string; specName: string; role: 'tank' | 'healer' | 'dps' | null; bosses: number }[];
+  kills: number;
+  feedback: RaidFeedback;
+}
+
+/** A raid on the Past raids page. */
+export interface SavedRaid {
+  code: string;
+  host: string;
+  title: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  loggerName: string | null;
+  source: 'discord' | 'site' | 'auto';
+  /** queued: waiting; saving: in progress; saved: everything stored; partial: some parts couldn't be read; empty: no boss fights. */
+  status: 'queued' | 'saving' | 'saved' | 'partial' | 'empty';
+  saved: number;
+  total: number;
+  card: RaidCard | null;
+}
+
+export interface RaidsList { raids: SavedRaid[]; archiveDays: number }
 
 export interface HistoryRow {
   id: string;
@@ -228,6 +266,7 @@ export interface FightBreakdown {
   dpsSeries: { t: number; dps: number }[];
   /** Plain-language "what went well / what to work on" for the whole raid. */
   feedback: RaidFeedback;
+  offline?: Offline;
 }
 
 export interface RaidPoint {

@@ -1,11 +1,12 @@
 // The Discord bot's one endpoint (the free Vercel plan allows 12 functions, so the bot's jobs share it).
 //   POST  Discord interactions. Set https://guildlog.uk/api/discord as the "Interactions Endpoint URL".
 //   GET ?task=register&key=CRON_SECRET   sends the slash commands to Discord (run after they change)
-//   GET ?task=reminders&key=CRON_SECRET  posts due reminders (call every 5 minutes, e.g. from cron-job.org)
+//   GET ?task=reminders&key=CRON_SECRET  posts due reminders, then saves Past raids (call every 5 minutes, e.g. from cron-job.org)
 //   GET ?task=logtest&key=CRON_SECRET    posts a test line to the activity log channel and says why if it can't
 //   GET ?task=wcltest&key=CRON_SECRET    shows what each Warcraft Logs sign-in address answers (for troubleshooting)
 import { waitUntil } from '@vercel/functions';
 import { discord, env, postToChannel, verifyDiscordRequest } from '../server/discord/api.js';
+import { archiveTick } from '../server/archive.js';
 import { audit, auditTask } from '../server/discord/audit.js';
 import { COMMANDS, type Interaction, handle, reminderMessage } from '../server/discord/commands.js';
 import { dueReminders, markReminderSent } from '../server/discord/store.js';
@@ -67,6 +68,7 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
   if (task === 'reminders') {
+    const started = Date.now();
     const due = await dueReminders();
     let sent = 0;
     for (const r of due) {
@@ -81,7 +83,16 @@ export async function GET(req: Request): Promise<Response> {
     }
     // Quiet when there was nothing to do (this runs every 5 minutes)
     if (sent) await auditTask(`Posted ${sent} scheduled reminder${sent > 1 ? 's' : ''}`);
-    return text(`Sent ${sent} of ${due.length} due reminders`);
+    // Then keep saving Past raids in the background, so the scheduler gets its answer straight away
+    // (cron-job.org gives up on slow replies and turns jobs off after repeated failures)
+    waitUntil(
+      archiveTick(started + 55_000)
+        .then(async (r) => {
+          for (const title of r.finished) await auditTask(`Saved ${title} in full on Past raids`);
+        })
+        .catch((e) => console.error('saving raids failed', e)),
+    );
+    return text(`Sent ${sent} of ${due.length} due reminders. Saving past raids in the background.`);
   }
   if (task === 'wcltest') return text((await signInCheck()).join('\n'));
   if (task === 'logtest') {

@@ -93,3 +93,42 @@ alter table public.bot_claims enable row level security;
 alter table public.bot_raids enable row level security;
 alter table public.bot_raid_fights enable row level security;
 alter table public.bot_reminders enable row level security;
+
+
+-- ---------- Past raids ----------
+
+-- The guild's raids on the Past raids page: added by /raidend, "Add a past raid", or picked up
+-- from the guild's uploads. card: the raid at a glance (bosses, wipes, attendance, feedback).
+create table if not exists public.guild_raids (
+  report_code text primary key,
+  host text not null,
+  title text,
+  start_time timestamptz,
+  end_time timestamptz,
+  logger_name text,
+  added_by text,
+  source text not null default 'site' check (source in ('discord', 'site', 'auto')),
+  status text not null default 'queued' check (status in ('queued', 'saving', 'saved', 'partial', 'empty')),
+  saved int not null default 0,
+  total int not null default 0,
+  runs int not null default 0,
+  card jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists guild_raids_start on public.guild_raids (start_time desc);
+create index if not exists guild_raids_status on public.guild_raids (status);
+
+-- Saved copies of each raid (report, breakdowns, every player's analysis), used when Warcraft Logs is down.
+create table if not exists public.saved_data (
+  report_code text not null,
+  kind text not null check (kind in ('meta', 'breakdown', 'rows', 'snapshot', 'dashboard')),
+  fight_id int not null default 0,
+  player_id int not null default 0,
+  created_at timestamptz not null default now(),
+  data jsonb not null,
+  primary key (report_code, kind, fight_id, player_id)
+);
+
+alter table public.guild_raids enable row level security;
+alter table public.saved_data enable row level security;

@@ -9,6 +9,16 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.15.0',
+    date: '2026-10-21',
+    changes: [
+      'Past raids: a calendar of raid nights, with a card for each (bosses, kill times, wipes, deaths, what went well and what to work on) and who was there.',
+      'Attendance over the last 4 weeks to all raids, and kill times per boss across the weeks.',
+      'Raids ended with /raidend are added automatically; older logs can be added from the page (optionally, the guild\u2019s new uploads too).',
+      'Each raid is saved in full in the background, so boss breakdowns, player analyses and the Discord bot keep working when Warcraft Logs is down.',
+    ],
+  },
+  {
     version: '0.14.0',
     date: '2026-10-20',
     changes: [

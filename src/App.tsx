@@ -3,16 +3,18 @@ import AnalyzePage from './components/AnalyzePage';
 import ChangelogPage from './components/ChangelogPage';
 import HistoryPage from './components/HistoryPage';
 import LegalPage from './components/LegalPage';
+import RaidsPage from './components/RaidsPage';
 import SavedPage from './components/SavedPage';
 import Sidebar from './components/Sidebar';
 import { NavProvider } from './nav';
 
-type Route = { page: 'analyze' } | { page: 'history' } | { page: 'changelog' } | { page: 'saved'; id: string };
+type Route = { page: 'analyze' } | { page: 'history' } | { page: 'raids' } | { page: 'changelog' } | { page: 'saved'; id: string };
 
-// Shareable analyses live at /a/<id>; the rest of the app uses hash routes (#/ and #/history).
+// Shareable analyses live at /a/<id>; the rest of the app uses hash routes (#/, #/raids and #/history).
 function parseRoute(): Route {
   const h = window.location.hash.replace(/^#\/?/, '');
   if (h === 'history') return { page: 'history' };
+  if (h === 'raids') return { page: 'raids' };
   if (h === 'changelog') return { page: 'changelog' };
   if (h.startsWith('a/')) return { page: 'saved', id: h.slice(2) }; // older #/a/<id> links
   const m = window.location.pathname.match(/^\/a\/([0-9a-f-]{36})\/?$/i);
@@ -42,6 +44,7 @@ export default function App() {
         <Sidebar page={route.page} />
         <main className="content">
           {route.page === 'analyze' && <AnalyzePage />}
+          {route.page === 'raids' && <RaidsPage />}
           {route.page === 'history' && <HistoryPage />}
           {route.page === 'changelog' && <ChangelogPage />}
           {route.page === 'saved' && <SavedPage id={route.id} />}

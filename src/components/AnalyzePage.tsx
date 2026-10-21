@@ -282,6 +282,12 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
               {report.title}
               {report.startTime ? <> • {new Date(report.startTime).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}</> : null}
             </div>
+            {report.offline && (
+              <p className="warning">
+                Warcraft Logs isn&rsquo;t answering, so this is the copy saved on {new Date(report.offline.savedAt).toLocaleDateString('en-US', { dateStyle: 'medium' })}.
+                Boss kills and everyone&rsquo;s analyses work as normal; comparing with another log needs Warcraft Logs back.
+              </p>
+            )}
             <label>
               Encounter
               <select value={fightId} onChange={(e) => setFightId(Number(e.target.value))}>

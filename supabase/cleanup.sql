@@ -13,8 +13,13 @@ delete from public.analyses where compare_key in ('auto', 'top', 'previous');
 -- Bot raids from any other game version
 delete from public.bot_raids where host <> 'fresh.warcraftlogs.com';
 
--- Stored raid summaries are a cache; keep only those for raids that are still listed
-delete from public.bot_raid_fights where report_code not in (select report_code from public.bot_raids);
+-- Past raids (and their saved copies) from any other game version
+delete from public.guild_raids where host <> 'fresh.warcraftlogs.com';
+delete from public.saved_data where report_code not in (select report_code from public.guild_raids);
+
+-- Stored raid summaries; keep only those for raids that are still listed (bot or Past raids)
+delete from public.bot_raid_fights
+where report_code not in (select report_code from public.bot_raids union select report_code from public.guild_raids);
 
 -- Caches: rebuilt automatically the next time a fight is analyzed
 truncate public.snapshot_cache;
@@ -30,4 +35,6 @@ select 'analyses' as table_name, count(*) from public.analyses
 union all select 'bot_raids', count(*) from public.bot_raids
 union all select 'bot_raid_fights', count(*) from public.bot_raid_fights
 union all select 'bot_claims', count(*) from public.bot_claims
-union all select 'bot_reminders', count(*) from public.bot_reminders;
+union all select 'bot_reminders', count(*) from public.bot_reminders
+union all select 'guild_raids', count(*) from public.guild_raids
+union all select 'saved_data', count(*) from public.saved_data;

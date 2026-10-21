@@ -20,6 +20,7 @@ const PATHS: Record<GlyphName, string> = {
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
   check: 'M5 12.5l4.5 4.5L19 7',
   alert: 'M12 3l9.5 17h-19zM12 10v4M12 17.5h.01',
+  calendar: 'M4 6h16v14H4zM4 10h16M8 3v5M16 3v5M8 14h2M14 14h2M8 17h2',
 };
 
 export default function Glyph({ name, size = 18, label }: { name: GlyphName; size?: number; label?: string }) {

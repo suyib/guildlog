@@ -9,6 +9,8 @@ import { activeOver, raidFeedback } from '../server/raidFeedback';
 import { auditLine, describe } from '../server/discord/audit';
 import { rest } from '../server/db';
 import { gql } from '../server/wcl';
+import { buildCard } from '../server/archive';
+import { liveOrSaved } from '../server/saved';
 
 // Signed requests: Discord's PING gets a PONG, a bad signature is refused
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -189,6 +191,50 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
   assert.deepEqual(results, [{ ok: true }, { ok: true }, { ok: true }]);
   assert.equal(tokenCalls, 2, 'one 503, then one shared sign-in on the next site');
   globalThis.fetch = realFetch;
+}
+
+// Past raids: the raid card (bosses, wipes, attendance) from the saved report and summaries
+{
+  const meta: any = {
+    code: 'ABC', title: 'Gruul + Maggy', startTime: Date.UTC(2026, 9, 15, 19), zone: null,
+    fights: [
+      { id: 1, encounterID: 1, name: 'High King Maulgar', startTime: 0, endTime: 180000, kill: true, friendlyPlayers: [1, 2] },
+      { id: 2, encounterID: 2, name: 'Gruul', startTime: 200000, endTime: 300000, kill: false, friendlyPlayers: [1, 2, 3] },
+      { id: 3, encounterID: 2, name: 'Gruul', startTime: 400000, endTime: 700000, kill: true, friendlyPlayers: [1, 2] },
+      { id: 4, encounterID: 3, name: 'Magtheridon', startTime: 800000, endTime: 900000, kill: false, friendlyPlayers: [1, 2] },
+    ],
+    masterData: { actors: [{ id: 1, name: 'Suy', type: 'Player', subType: 'Hunter' }, { id: 2, name: 'Luke', type: 'Player', subType: 'Warrior' }, { id: 3, name: 'Alt', type: 'Player', subType: 'Mage' }, { id: 9, name: 'Town', type: 'Player', subType: 'Rogue' }] },
+  };
+  const luke = { ...player('Luke', 900, 50), id: 2, className: 'Warrior', specName: 'Protection', role: 'tank' as const };
+  const card = buildCard(meta, [
+    { ...digest.fights[0], id: 1, players: [{ ...player('Suy', 1500, 90), id: 1 }, luke] },
+    { ...digest.fights[1], id: 3, players: [{ ...player('Suy', 1600, 80), id: 1 }, luke] },
+  ] as any);
+  assert.equal(card.kills, 2);
+  assert.deepEqual(card.bosses.map((b) => [b.name, b.kill, b.seconds, b.wipes]), [['High King Maulgar', true, 180, 0], ['Gruul', true, 300, 1], ['Magtheridon', false, null, 1]]);
+  assert.equal(card.wipes, 2);
+  assert.equal(card.raidSeconds, 900);
+  assert.deepEqual(card.raiders.map((r) => [r.name, r.bosses, r.role]), [['Alt', 0, null], ['Luke', 2, 'tank'], ['Suy', 2, 'dps']], 'only people in boss fights, with kills attended');
+  assert.ok(card.feedback.work.some((p) => p.title.includes('wipe')));
+}
+
+// When Warcraft Logs is down, a saved raid answers from its saved copy (marked offline)
+{
+  const realFetch = globalThis.fetch;
+  process.env.SUPABASE_URL = 'https://db.example';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
+  globalThis.fetch = (async (url: string) => {
+    if (String(url).includes('saved_data') && String(url).includes('fight_id=eq.3')) return new Response(JSON.stringify([{ data: { fight: { id: 3 } }, created_at: '2026-10-21T20:00:00Z' }]), { status: 200 });
+    return new Response('[]', { status: 200 });
+  }) as typeof fetch;
+  const down = async () => { throw new Error('Warcraft Logs is having trouble right now'); };
+  const got: any = await liveOrSaved('ABC', 'breakdown', 3, 0, down);
+  assert.deepEqual(got, { fight: { id: 3 }, offline: { savedAt: '2026-10-21T20:00:00Z' } });
+  await assert.rejects(liveOrSaved('ABC', 'breakdown', 4, 0, down), /having trouble/, 'not saved: the real error');
+  assert.equal(await liveOrSaved('ABC', 'breakdown', 3, 0, async () => 'live'), 'live', 'live answer wins when it works');
+  globalThis.fetch = realFetch;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 }
 
 console.log('All bot checks passed.');

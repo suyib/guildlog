@@ -109,6 +109,11 @@ function Privacy() {
           are sent to you by direct message; only raid-wide summaries are posted in channels.
         </li>
         <li>
+          <strong>Past raids and attendance.</strong> For the guild&rsquo;s own raids we keep a copy of the log&rsquo;s data (bosses, kill times and
+          everyone&rsquo;s analyses) so it can be read when Warcraft Logs is down, and a record of which characters were in each raid, shown as
+          attendance on the Past raids page.
+        </li>
+        <li>
           <strong>A sign-in cookie.</strong> After you enter the guild password, a cookie named <code>gl_session</code> keeps you signed in for up to 30
           days. It contains no personal details. There are no tracking or advertising cookies, and no analytics.
         </li>
@@ -118,6 +123,7 @@ function Privacy() {
       <ul>
         <li>To show and share analyses, and keep them after Warcraft Logs archives a report.</li>
         <li>To track a character&rsquo;s progress over time and send weekly summaries to the person who claimed it.</li>
+        <li>To show the guild&rsquo;s raid history and attendance, and keep raids readable when Warcraft Logs is unavailable.</li>
         <li>To keep the site private to the guild.</li>
       </ul>
       <p>
@@ -143,6 +149,7 @@ function Privacy() {
       <ul>
         <li>Analyses are kept until they&rsquo;re deleted, so progress can be tracked over time.</li>
         <li>Discord links are kept until you unclaim, leave the server or ask us to remove them.</li>
+        <li>Full copies of each raid&rsquo;s analyses are kept for 90 days; the raid&rsquo;s summary and attendance are kept until deleted.</li>
       </ul>
 
       <h2>Your rights</h2>

@@ -9,7 +9,9 @@ import type {
   FightRef,
   HistoryRow,
   PlayerSnapshot,
+  RaidsList,
   ReportSummary,
+  SavedRaid,
   SnapshotTarget,
 } from '../server/types';
 
@@ -31,6 +33,8 @@ export const loadReport = (url: string) => post<ReportSummary>('/api/report', { 
 /** Whole-raid breakdown of one fight, for when no player is chosen. */
 export const loadBreakdown = (p: { host: string; code: string; fight: FightRef }) => post<FightBreakdown>('/api/fight', { ...p, breakdown: true });
 export const loadHistory = () => call<HistoryRow[]>('/api/history');
+export const loadRaids = () => call<RaidsList>('/api/raids');
+export const addRaid = (url: string) => post<SavedRaid>('/api/raids', { url });
 export const loadSaved = (id: string) => call<AnalysisResult>(`/api/history?id=${encodeURIComponent(id)}`);
 
 export interface Progress { label: string; state: 'loading' | 'done' | 'failed'; seconds?: number }
