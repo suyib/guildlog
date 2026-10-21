@@ -17,6 +17,8 @@ export const CHANGELOG: Release[] = [
       'Discord: every DM page now leads with headline numbers, then short \u201cWhat went well\u201d and \u201cWhat to work on\u201d points, with boss-by-boss detail and comparisons to others of your spec.',
       'Active time is averaged by fight length and leaves out kills under a minute and fights you died in, so short kills no longer flag most of the raid as idle. Tanks and healers aren\u2019t judged on it in the raid summary.',
       'Pet damage (hunter and warlock pets) is split out and labeled with the pet\u2019s name, e.g. \u201cMelee (pet: Kitty)\u201d, with its share of your total; DMs list pets the same way.',
+      'Discord: optional activity log channel (who used which command or button, where, when, and whether it worked), without anything people typed.',
+      'Discord: /help lists every command and what it does.',
     ],
   },
   {

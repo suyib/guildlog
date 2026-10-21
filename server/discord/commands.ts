@@ -75,6 +75,7 @@ export const COMMANDS = [
         options: [{ type: STRING, name: 'search', description: 'What to look up', required: true, max_length: 100 }] },
     ],
   },
+  { name: 'help', description: 'What the bot can do and how to use each command', ...contexts },
 ];
 
 // ---------- Interaction plumbing ----------
@@ -92,8 +93,11 @@ export interface Interaction {
 interface DUser { id: string; username: string; global_name?: string | null }
 interface Opt { name: string; type: number; value?: string | number | boolean; options?: Opt[] }
 
-/** What the endpoint should do: reply now, and optionally keep working afterwards. */
-export interface Outcome { response: unknown; after?: () => Promise<void> }
+/**
+ * What the endpoint should do: reply now, and optionally keep working afterwards. `after` resolves
+ * to an error message when the background work failed (for the activity log).
+ */
+export interface Outcome { response: unknown; after?: () => Promise<string | void> }
 
 const reply = (body: MessageBody, ephemeral = true): Outcome => ({ response: { type: 4, data: { ...body, flags: ephemeral ? EPHEMERAL : undefined } } });
 /** "Thinking…" now (only visible to the user), then replace it once the work is done. */
@@ -101,12 +105,15 @@ const deferred = (i: Interaction, work: () => Promise<MessageBody>, ephemeral = 
   response: { type: 5, data: { flags: ephemeral ? EPHEMERAL : undefined } },
   after: async () => {
     let body: MessageBody;
+    let failed: string | undefined;
     try {
       body = await work();
     } catch (e) {
-      body = { content: `Something went wrong: ${(e as Error).message}` };
+      failed = (e as Error).message;
+      body = { content: `Something went wrong: ${failed}` };
     }
     await editReply(i.token, body);
+    return failed;
   },
 });
 
@@ -139,6 +146,7 @@ export async function handle(i: Interaction): Promise<Outcome> {
       case 'claim': return claim(i);
       case 'unclaim': return unclaim(i);
       case 'info': return info(i);
+      case 'help': return reply(helpMessage());
     }
   }
   if (i.type === 4 && i.data?.name === 'raids') return raidChoices(i);
@@ -514,6 +522,53 @@ async function claimDecision(i: Interaction, id: string): Promise<Outcome> {
           : `Your claim on **${c.character}** wasn't approved. If that's a mistake, message an officer.`,
       });
     },
+  };
+}
+
+// ---------- /help ----------
+
+/** Everything the bot does, grouped by who it's for. Only the person who asked sees it. */
+export function helpMessage(): MessageBody {
+  const line = (cmd: string, what: string) => `**${cmd}**: ${what}`;
+  return {
+    embeds: [{
+      title: 'Guild Logs bot',
+      color: BRAND,
+      description: 'Your numbers only ever come to you by DM (or as a reply only you can see). Raid channels only get raid-wide summaries.',
+      fields: [
+        {
+          name: 'Getting started',
+          value: [
+            line('/claim', 'claim your character (and realm, if the name is common). An officer approves it, then the bot can send you your numbers. Alts can be claimed too.'),
+            line('/unclaim', 'remove one of your claimed characters.'),
+          ].join('\n'),
+        },
+        {
+          name: 'Your numbers',
+          value: [
+            line('/raids', 'pick one of the last 5 raids (or paste any Warcraft Logs link) to get your summaries by DM.'),
+            line('/check', 'your character at a glance: class, spec, item level, stats and your last raid.'),
+            'After each raid, the buttons under the summary in the raid channel send you: **Quick summary**, **My overview**, **Rotation & cooldowns**, **Damage breakdown**, **Gear & stats** and **Survival**.',
+          ].join('\n'),
+        },
+        {
+          name: 'Raid info',
+          value: [
+            line('/info consumables', 'flasks, elixirs, food, potions and weapon buffs for your role.'),
+            line('/info lookup', 'search Wowhead for an item, spell or anything else.'),
+          ].join('\n'),
+        },
+        {
+          name: 'Officers',
+          value: [
+            line('/raidstart', 'post the live log for tonight\u2019s raid.'),
+            line('/raidend', 'end the raid you started and post its summary, with what went well and what to work on.'),
+            line('/remind', 'schedule a raid reminder (optional place, consumables checklist, role ping and Discord event).'),
+          ].join('\n'),
+        },
+        { name: 'More detail', value: `The full analysis for any fight, with charts and comparisons, is at ${env.site()}.` },
+      ],
+    }],
   };
 }
 

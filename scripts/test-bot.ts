@@ -6,6 +6,7 @@ import { COMMANDS, handle, reminderMessage } from '../server/discord/commands';
 import type { RaidDigest } from '../server/discord/digest';
 import { personalPage, raidSummary } from '../server/discord/pages';
 import { activeOver, raidFeedback } from '../server/raidFeedback';
+import { auditLine, describe } from '../server/discord/audit';
 
 // Signed requests: Discord's PING gets a PONG, a bad signature is refused
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -111,5 +112,22 @@ assert.ok(quickFields['What to work on'].includes('Bestial Wrath 2/4'), 'under-u
 assert.ok(quickFields['What to work on'].includes('No enchant on: head'));
 // Six page buttons, split across two rows (Discord allows five per row)
 assert.equal(summary.components!.length, 2);
+
+// /help lists every command, only to the person who asked
+const help: any = await handle({ type: 2, token: 't', user: { id: '1', username: 'suy' }, data: { name: 'help' } });
+assert.equal(help.response.data.flags, 64);
+const helpText = JSON.stringify(help.response.data.embeds);
+for (const c of COMMANDS) assert.ok(helpText.includes(`/${c.name}`) || c.name === 'help', `/help is missing /${c.name}`);
+assert.ok(help.response.data.embeds[0].fields.every((f: any) => f.value.length <= 1024));
+
+// Activity log: who, what and where, never what they typed
+const typed = { type: 2, token: 't', guild_id: 'g', channel_id: '55', member: { user: { id: '7', username: 'suy' }, roles: [] },
+  data: { name: 'remind', options: [{ name: 'message', type: 3, value: 'secret plans' }, { name: 'time', type: 3, value: '19:45' }] } } as any;
+const line = auditLine(typed, 'ok', 1200);
+assert.ok(line.includes('/remind (options: message, time)') && line.includes('<@7> (suy)') && line.includes('in <#55>') && line.includes('ok, 1.2s'));
+assert.ok(!line.includes('secret plans') && !line.includes('19:45'), 'typed values stay private');
+assert.equal(describe({ type: 2, token: 't', data: { name: 'info', options: [{ name: 'lookup', type: 1, options: [{ name: 'search', type: 3, value: 'x' }] }] } } as any), '/info lookup (options: search)');
+assert.equal(describe({ type: 3, token: 't', data: { custom_id: 'raid:summary:fresh.warcraftlogs.com:AbC' } } as any), 'Button: Quick summary (fresh/AbC)');
+assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').includes('in DMs · **FAILED** after 0.5s: boom'));
 
 console.log('All bot checks passed.');

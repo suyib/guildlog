@@ -10,6 +10,8 @@ export const env = {
   raidChannel: () => process.env.DISCORD_RAID_CHANNEL_ID?.trim() ?? '',
   adminChannel: () => process.env.DISCORD_ADMIN_CHANNEL_ID?.trim() ?? '',
   adminRole: () => process.env.DISCORD_ADMIN_ROLE_ID?.trim() ?? '',
+  /** Private channel for the bot's activity log; logging is off when unset. */
+  logChannel: () => process.env.DISCORD_LOG_CHANNEL_ID?.trim() ?? '',
   site: () => (process.env.SITE_URL?.trim() || 'https://guildlog.uk').replace(/\/$/, ''),
   timezone: () => process.env.TIMEZONE?.trim() || 'Europe/London',
 };
