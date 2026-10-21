@@ -8,25 +8,59 @@ const TOKEN_URL = 'https://www.warcraftlogs.com/oauth/token';
 const HOST_RE = /^([a-z0-9-]+\.)?warcraftlogs\.com$/i;
 
 let cachedToken: { token: string; exp: number } | null = null;
+let pendingToken: Promise<string> | null = null;
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Worth trying again: Warcraft Logs busy or briefly down (rate limit, 5xx). */
+const retryable = (status: number) => status === 429 || status >= 500;
+
+/**
+ * A Warcraft Logs access token. After the server has been idle it starts fresh with no token, so
+ * the first requests all need one: they share a single sign-in, which is retried a few times if
+ * Warcraft Logs is briefly unavailable.
+ */
 async function getToken(): Promise<string> {
   if (cachedToken && cachedToken.exp > Date.now() + 60_000) return cachedToken.token;
+  pendingToken ??= fetchToken().finally(() => {
+    pendingToken = null;
+  });
+  return pendingToken;
+}
+
+async function fetchToken(): Promise<string> {
   const id = process.env.WCL_CLIENT_ID;
   const secret = process.env.WCL_CLIENT_SECRET;
   if (!id || !secret) throw new Error('Server is missing WCL_CLIENT_ID or WCL_CLIENT_SECRET');
-  const res = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: 'Basic ' + Buffer.from(`${id}:${secret}`).toString('base64'),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials',
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) throw new Error(`Warcraft Logs auth failed (${res.status})`);
-  const body = (await res.json()) as { access_token: string; expires_in: number };
-  cachedToken = { token: body.access_token, exp: Date.now() + body.expires_in * 1000 };
-  return cachedToken.token;
+  let status = 0;
+  for (const wait of [0, 1_000, 3_000]) {
+    if (wait) await sleep(wait);
+    let res: Response;
+    try {
+      res = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Basic ' + Buffer.from(`${id}:${secret}`).toString('base64'),
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'grant_type=client_credentials',
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch {
+      status = 0; // network error or timeout: try again
+      continue;
+    }
+    if (res.ok) {
+      const body = (await res.json()) as { access_token: string; expires_in: number };
+      cachedToken = { token: body.access_token, exp: Date.now() + body.expires_in * 1000 };
+      return cachedToken.token;
+    }
+    status = res.status;
+    if (status === 400 || status === 401) {
+      throw new Error('Warcraft Logs rejected the site\u2019s API key. Check WCL_CLIENT_ID and WCL_CLIENT_SECRET in Vercel.');
+    }
+    if (!retryable(status)) break;
+  }
+  throw new Error(`Warcraft Logs is having trouble right now (sign-in ${status ? `returned ${status}` : 'didn\u2019t answer'}). Try again in a few minutes.`);
 }
 
 /** Thrown when Warcraft Logs doesn't answer in time, so callers can skip optional data. */
@@ -38,22 +72,36 @@ export class WclTimeout extends Error {}
  */
 export async function gql<T>(host: string, query: string, variables: Record<string, unknown>, timeoutMs = 25_000): Promise<T> {
   if (!HOST_RE.test(host)) throw new Error('Not a Warcraft Logs host');
-  const token = await getToken();
-  let res: Response;
-  try {
-    res = await fetch(`https://${host}/api/v2/client`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ query, variables }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-  } catch (e) {
-    const name = (e as Error).name;
-    if (name === 'TimeoutError' || name === 'AbortError') {
-      throw new WclTimeout(`Warcraft Logs didn\u2019t answer within ${Math.round(timeoutMs / 1000)}s. It may be busy; try again in a minute.`);
+  let res: Response | null = null;
+  // One retry: a fresh token if the old one stopped working, or a short wait if Warcraft Logs was briefly unavailable
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const token = await getToken();
+    try {
+      res = await fetch(`https://${host}/api/v2/client`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ query, variables }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (e) {
+      const name = (e as Error).name;
+      if (name === 'TimeoutError' || name === 'AbortError') {
+        throw new WclTimeout(`Warcraft Logs didn\u2019t answer within ${Math.round(timeoutMs / 1000)}s. It may be busy; try again in a minute.`);
+      }
+      throw e;
     }
-    throw e;
+    if (attempt > 0) break;
+    if (res.status === 401) {
+      cachedToken = null;
+      continue;
+    }
+    if (res.status === 502 || res.status === 503 || res.status === 504) {
+      await sleep(1_500);
+      continue;
+    }
+    break;
   }
+  res = res!;
   if (!res.ok) throw new Error(`Warcraft Logs API error ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const body = (await res.json()) as { data?: T; errors?: { message: string }[] };
   if (body.errors?.length) throw new Error('Warcraft Logs: ' + body.errors.map((e) => e.message).join('; '));
