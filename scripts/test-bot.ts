@@ -11,6 +11,7 @@ import { rest } from '../server/db';
 import { gql } from '../server/wcl';
 import { buildCard } from '../server/archive';
 import { liveOrSaved } from '../server/saved';
+import { forThisGuild, readSession, sessionCookie, sign as signValue } from '../server/auth';
 
 // Signed requests: Discord's PING gets a PONG, a bad signature is refused
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -256,6 +257,38 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
   assert.ok(personalPage('overview', hd, 'Healz', null)!.embeds![0].fields!.some((f) => f.value.includes('#1 of 2 healers')));
   // The raid summary counts healers by their healing parse
   assert.ok(raidFeedback(hd.fights).good.some((p) => p.title.includes('strong performance') && p.who?.includes('Healz')));
+}
+
+// Sign-in: Discord sessions carry who you are and the server; older password cookies still work
+{
+  const secret = 'test-secret';
+  process.env.DISCORD_GUILD_ID = 'G1';
+  const cookie = (await sessionCookie(secret, { kind: 'discord', uid: '7', name: 'Suy', avatar: null, gid: 'G1', officer: true })).split(';')[0];
+  const s = await readSession(cookie, secret);
+  assert.equal(s?.uid, '7');
+  assert.equal(s?.officer, true);
+  assert.ok(forThisGuild(s!));
+  assert.equal(await readSession(cookie.replace(/.$/, (c) => (c === 'a' ? 'b' : 'a')), secret), null, 'tampered cookie refused');
+  const other = (await sessionCookie(secret, { kind: 'discord', uid: '7', name: 'Suy', gid: 'G2', officer: true })).split(';')[0];
+  assert.ok(!forThisGuild((await readSession(other, secret))!), 'a session for another server doesn\u2019t open this one');
+  // The pre-v0.18.0 password cookie: "<expiry>.<signature>"
+  const exp = String(Math.floor(Date.now() / 1000) + 3600);
+  const legacy = `gl_session=${await signValue(secret, exp)}`;
+  assert.equal((await readSession(legacy, secret))?.kind, 'password');
+  // The middleware agrees
+  process.env.SESSION_SECRET = secret;
+  const mw = (await import('../middleware')).default;
+  const at = (c?: string) => mw(new Request('https://guildlog.uk/', { headers: c ? { cookie: c } : {} }));
+  assert.equal((await at(cookie)).headers.get('x-middleware-next'), '1');
+  assert.equal((await at(legacy)).headers.get('x-middleware-next'), '1');
+  assert.equal((await at(other)).status, 401);
+  assert.equal((await at()).status, 401);
+  process.env.DISCORD_CLIENT_SECRET = 'x';
+  process.env.DISCORD_APP_ID = 'app';
+  assert.ok((await (await at()).text()).includes('Sign in with Discord'));
+  delete process.env.DISCORD_CLIENT_SECRET;
+  delete process.env.DISCORD_GUILD_ID;
+  delete process.env.SESSION_SECRET;
 }
 
 console.log('All bot checks passed.');

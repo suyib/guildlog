@@ -22,7 +22,7 @@ Every analysis is saved to Supabase, so it stays available after Warcraft Logs a
 1. **Warcraft Logs API client**: create one at https://www.warcraftlogs.com/api/clients (any name; redirect URL: https://guildlog.uk). Copy the client ID and secret.
 2. **Supabase**: create a project, open the SQL editor and run `supabase/schema.sql`. Copy the project URL and the service role key (Settings → API).
 3. **Vercel**: import this repo, then add these environment variables (see `.env.example`):
-   - `APP_PASSWORD`: the guild password
+   - `APP_PASSWORD`: the guild password (optional once Discord sign-in is set up; remove it to allow Discord sign-in only)
    - `SESSION_SECRET`: a long random string (e.g. `openssl rand -hex 32`)
    - `WCL_CLIENT_ID`, `WCL_CLIENT_SECRET`
    - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
@@ -30,6 +30,23 @@ Every analysis is saved to Supabase, so it stays available after Warcraft Logs a
 5. **Domain**: the live site is https://guildlog.uk. In Vercel → Project → Settings → Domains it's added with `www.guildlog.uk` and `guildlog-pi.vercel.app` redirecting to it. The app builds share links from whatever domain it's opened on, so no code changes are needed when the domain changes.
 
 Changing `APP_PASSWORD` doesn't sign people out; changing `SESSION_SECRET` does.
+
+## Signing in with Discord
+
+People sign in with their Discord account; only members of the guild's server (`DISCORD_GUILD_ID`) get in, and officers (the server owner, Administrator or Manage Server, or `DISCORD_ADMIN_ROLE_ID`) get officer-only actions such as adding raids. Officer status is checked again with Discord for every officer action.
+
+1. Discord developer portal → your app → **OAuth2**: copy the **Client Secret** (Reset Secret if needed) into Vercel as `DISCORD_CLIENT_SECRET`.
+2. Same page → **Redirects** → add `https://guildlog.uk/api/login` (it must match `SITE_URL` + `/api/login` exactly). Save.
+3. Redeploy. The sign-in page shows **Sign in with Discord**, plus the password box while `APP_PASSWORD` is set. Until `DISCORD_CLIENT_SECRET` is set, the password works as before and everyone signed in counts as an officer.
+
+Sessions last 7 days (30 with the password). Sign-ins, failed sign-ins from non-members and officer actions are posted to the activity log channel.
+
+## Offering it to other guilds later
+
+Every Discord sign-in records which server it's for, and a session only opens the site of that server, so the sign-in side is ready for more than one guild. Two ways to grow from here:
+
+- **A copy per guild** (no extra cost, data fully separate): each guild deploys this repo with its own Vercel, Supabase, Warcraft Logs client and Discord app. See the settings above.
+- **One hosted site for many guilds**: add a `guilds` table (server ID, name, officer role, allowed Warcraft Logs sites), add a `guild_id` column to the raid, claim and saved-data tables, and pick the guild from the signed-in session instead of `DISCORD_GUILD_ID`. Selling access needs Vercel Pro (the free plan is for non-commercial use) and likely a paid database.
 
 ## Local development
 

@@ -114,8 +114,12 @@ function Privacy() {
           attendance on the Past raids page.
         </li>
         <li>
-          <strong>A sign-in cookie.</strong> After you enter the guild password, a cookie named <code>gl_session</code> keeps you signed in for up to 30
-          days. It contains no personal details. There are no tracking or advertising cookies, and no analytics.
+          <strong>Signing in with Discord.</strong> We ask Discord for your user ID, username and avatar (nothing else, and never your messages
+          or password), and check with the bot that you&rsquo;re in the guild&rsquo;s Discord server and whether you&rsquo;re an officer. These are kept in
+          your sign-in cookie, not in our database. Sign-ins and officer actions on the site are noted in a private log channel for the officers.
+        </li>
+        <li>
+          <strong>A sign-in cookie.</strong> After you sign in, a cookie named <code>gl_session</code> keeps you signed in (7 days with Discord, 30 with the guild password). With Discord it holds your Discord ID, name and avatar; with the password, nothing personal. There are no tracking or advertising cookies, and no analytics.
         </li>
       </ul>
 

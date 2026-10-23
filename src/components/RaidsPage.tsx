@@ -3,7 +3,7 @@
 // Warcraft Logs is down.
 import { useEffect, useMemo, useState } from 'react';
 import type { RaidCard, SavedRaid } from '../../server/types';
-import { addRaid, loadRaids } from '../api';
+import { type Me, addRaid, loadMe, loadRaids } from '../api';
 import { mmss } from '../format';
 import Glyph from './Glyph';
 import { ClassIcon, SeverityDot, classCss } from './icons';
@@ -51,6 +51,10 @@ export default function RaidsPage() {
   const [month, setMonth] = useState<Date | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [range, setRange] = useState<RangeId>('8w');
+  const [me, setMe] = useState<Me | null>(null);
+  useEffect(() => {
+    loadMe().then(setMe);
+  }, []);
 
   const refresh = () =>
     loadRaids()
@@ -95,7 +99,11 @@ export default function RaidsPage() {
             <p className="help">Every raid ended with /raidend, plus any you add here. Saved raids open on the site even when Warcraft Logs is down.</p>
           </div>
         </div>
-        <AddRaid onAdded={(r) => refresh().then(() => setSelected(r.code))} />
+        {me?.officer ? (
+          <AddRaid onAdded={(r) => refresh().then(() => setSelected(r.code))} />
+        ) : me && (
+          <p className="muted small">Officers can add older raids here{me.kind === 'password' && me.discordLogin ? '; sign in with Discord to see if that includes you' : ''}.</p>
+        )}
         {error && <p className="error">{error}</p>}
         {!raids && !error && <p className="muted">Loading…</p>}
         {waiting.length > 0 && (

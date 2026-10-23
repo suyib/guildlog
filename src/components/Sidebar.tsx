@@ -1,10 +1,16 @@
 // Left-hand menu: app pages, then the sections of the analysis on screen.
+import { useEffect, useState } from 'react';
+import { type Me, loadMe } from '../api';
 import { sectionsFor, useNav } from '../nav';
 import Glyph from './Glyph';
 import { ShareButton } from './ResultView';
 
 export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history' | 'changelog' | 'saved' }) {
   const { result, section, setSection, view } = useNav();
+  const [me, setMe] = useState<Me | null>(null);
+  useEffect(() => {
+    loadMe().then(setMe);
+  }, []);
   const sections = sectionsFor(page === 'history' || page === 'changelog' || page === 'raids' ? null : result, view);
 
   return (
@@ -52,6 +58,17 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history
           ) : (
             <p>This analysis wasn&rsquo;t saved, so there&rsquo;s no link yet. Check the Supabase settings in Vercel.</p>
           )}
+        </div>
+      )}
+
+      {me?.signedIn && (
+        <div className="side-user">
+          {me.avatar ? <img src={me.avatar} width={28} height={28} alt="" /> : <span className="side-user-blank" aria-hidden="true"><Glyph name="users" size={16} /></span>}
+          <span className="side-user-name">
+            {me.name ?? 'Guild member'}
+            <span className="muted small">{me.kind === 'password' ? 'Guild password' : me.officer ? 'Officer' : 'Member'}</span>
+          </span>
+          <a href="/api/login?logout=1" className="side-user-out">Sign out</a>
         </div>
       )}
 

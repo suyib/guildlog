@@ -571,6 +571,14 @@ progress.uptime-bar { height: 8px; color: var(--primary-light); }
 .parse-gold { color: #e5cc80; }
 .parse-none { color: var(--ink-3); }
 
+/* ---------- Signed-in person, at the bottom of the menu ---------- */
+.side-user { display: flex; align-items: center; gap: 10px; margin-top: auto; padding: 10px; border-radius: 12px; background: var(--raised); }
+.side-user img, .side-user-blank { width: 28px; height: 28px; border-radius: 50%; flex: none; }
+.side-user-blank { display: grid; place-items: center; background: var(--hover); color: var(--ink-2); }
+.side-user-name { display: flex; flex-direction: column; min-width: 0; flex: 1; font-size: 13px; font-weight: 600; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-user-out { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.side-user + .side-version { margin-top: 8px; }
+
 /* ---------- Past raids ---------- */
 .grid-raids { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--space); align-items: start; }
 button.ghost.icon-only { width: 34px; padding: 0; font-size: 18px; }
@@ -694,6 +702,8 @@ table.attendance td { vertical-align: middle; white-space: nowrap; }
   .side-nav a, .side-nav button { width: auto; height: 34px; white-space: nowrap; font-size: 13px; }
   .side-label, .side-card { display: none; }
   .side-version { order: 2; margin: 0; padding: 0; }
+  .side-user { order: 2; margin: 0; padding: 4px 8px; background: none; }
+  .side-user-name { display: none; }
   .content { padding: 16px 16px 40px; }
 }
 @media (max-width: 640px) {

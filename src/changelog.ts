@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.18.0',
+    date: '2026-10-23',
+    changes: [
+      'Sign in with Discord: only members of the guild\u2019s server get in, and your name and avatar show in the menu. The guild password still works while it\u2019s set.',
+      'Officer-only actions: only officers can add raids to Past raids, checked with Discord each time.',
+      'Sign-ins and raids added on the site are noted in the activity log channel.',
+    ],
+  },
+  {
     version: '0.17.0',
     date: '2026-10-23',
     changes: [

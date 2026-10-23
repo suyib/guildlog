@@ -1,8 +1,26 @@
-// Shared-password session cookie, signed with HMAC-SHA256.
-// Uses Web Crypto so it runs in both Vercel Edge middleware and Node functions.
+// Sign-in sessions, in a cookie signed with HMAC-SHA256 (Web Crypto, so it also runs in the
+// middleware). Two kinds:
+//   Discord: who you are (Discord ID, name, avatar), which server (guild) you're signed in for,
+//            and whether you're an officer there.
+//   Password: the older shared guild password. Still accepted while APP_PASSWORD is set.
+// The guild ID is part of every Discord session, so one site can later serve several guilds.
 
 export const COOKIE_NAME = 'gl_session';
-const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+export const SESSION_DAYS = { discord: 7, password: 30 };
+
+export interface Session {
+  kind: 'discord' | 'password';
+  /** Discord user ID (Discord sessions only). */
+  uid?: string;
+  name?: string;
+  /** Discord avatar hash, for the picture in the menu. */
+  avatar?: string | null;
+  /** The Discord server this session is for. */
+  gid?: string;
+  /** Officer when signed in, rechecked live with Discord for officer-only actions. */
+  officer: boolean;
+  exp: number;
+}
 
 const enc = new TextEncoder();
 
@@ -19,17 +37,39 @@ function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+const b64url = (s: string) => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64url = (s: string) => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))));
+
 export async function passwordMatches(input: string, expected: string, secret: string): Promise<boolean> {
   // Compare HMACs so the comparison is constant-length.
   const [a, b] = await Promise.all([hmac(secret, input), hmac(secret, expected)]);
   return safeEqual(a, b);
 }
 
-export async function createSessionCookie(secret: string): Promise<string> {
-  const exp = Math.floor(Date.now() / 1000) + MAX_AGE_SECONDS;
-  const sig = await hmac(secret, String(exp));
-  return `${COOKIE_NAME}=${exp}.${sig}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${MAX_AGE_SECONDS}`;
+/** Sign a small value (used for the session and for Discord's sign-in "state"). */
+export async function sign(secret: string, value: string): Promise<string> {
+  return `${value}.${await hmac(secret, value)}`;
 }
+
+/** The value if its signature is right, else null. */
+export async function unsign(secret: string, signed: string): Promise<string | null> {
+  const i = signed.lastIndexOf('.');
+  if (i < 1) return null;
+  const value = signed.slice(0, i);
+  return safeEqual(signed.slice(i + 1), await hmac(secret, value)) ? value : null;
+}
+
+export async function sessionCookie(secret: string, s: Omit<Session, 'exp'>): Promise<string> {
+  const days = SESSION_DAYS[s.kind];
+  const session: Session = { ...s, exp: Math.floor(Date.now() / 1000) + days * 86_400 };
+  const value = await sign(secret, `v2:${b64url(JSON.stringify(session))}`);
+  return `${COOKIE_NAME}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${days * 86_400}`;
+}
+
+/** Kept for the password form: a password session. */
+export const createSessionCookie = (secret: string) => sessionCookie(secret, { kind: 'password', officer: false });
+
+export const clearSessionCookie = () => `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 
 export function readCookie(header: string | null, name: string): string | undefined {
   if (!header) return undefined;
@@ -40,19 +80,39 @@ export function readCookie(header: string | null, name: string): string | undefi
   return undefined;
 }
 
-export async function isValidSession(cookieHeader: string | null, secret: string): Promise<boolean> {
-  const value = readCookie(cookieHeader, COOKIE_NAME);
-  if (!value) return false;
-  const [expStr, sig] = value.split('.');
-  const exp = Number(expStr);
-  if (!exp || !sig || exp < Date.now() / 1000) return false;
-  return safeEqual(sig, await hmac(secret, expStr));
+/** The signed-in session from the request's cookie, or null. Older password cookies still count. */
+export async function readSession(cookieHeader: string | null, secret: string): Promise<Session | null> {
+  const raw = readCookie(cookieHeader, COOKIE_NAME);
+  if (!raw) return null;
+  const value = await unsign(secret, raw);
+  if (!value) return null;
+  const now = Date.now() / 1000;
+  if (value.startsWith('v2:')) {
+    try {
+      const s = JSON.parse(unb64url(value.slice(3))) as Session;
+      return s.exp > now ? s : null;
+    } catch {
+      return null;
+    }
+  }
+  // Before v0.18.0 the cookie was just "<expiry>.<signature>" from the guild password
+  const exp = Number(value);
+  return exp > now ? { kind: 'password', officer: false, exp } : null;
 }
 
+/** A Discord session is for one server; it only opens the site of that server. */
+export const forThisGuild = (s: Session) => s.kind !== 'discord' || !process.env.DISCORD_GUILD_ID?.trim() || s.gid === process.env.DISCORD_GUILD_ID.trim();
+
+export async function isValidSession(cookieHeader: string | null, secret: string): Promise<boolean> {
+  return (await readSession(cookieHeader, secret)) !== null;
+}
+
+/** For API routes: null when signed in, else the error response to send. */
 export async function requireSession(req: Request): Promise<Response | null> {
   const secret = process.env.SESSION_SECRET;
   if (!secret) return json({ error: 'Server is missing SESSION_SECRET' }, 500);
-  if (!(await isValidSession(req.headers.get('cookie'), secret))) return json({ error: 'Not signed in' }, 401);
+  const session = await readSession(req.headers.get('cookie'), secret);
+  if (!session || !forThisGuild(session)) return json({ error: 'Not signed in' }, 401);
   return null;
 }
 
