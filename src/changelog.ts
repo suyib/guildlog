@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.22.0',
+    date: '2026-10-23',
+    changes: [
+      '\u201cWhole night\u201d is the first choice in the boss list, and opens by default: every boss with kill times and wipes, raid time, deaths, who was there, what went well and what to work on, and everyone\u2019s DPS, HPS and parses across the night. Bosses still being read fill in on their own.',
+      'Past raids: a new raid gets its card as soon as its report is read, and opening its whole night brings the card up to date.',
+    ],
+  },
+  {
     version: '0.21.0',
     date: '2026-10-23',
     changes: [

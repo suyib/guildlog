@@ -14,6 +14,7 @@ import type {
   Rank,
   HomeData,
   ProfileData,
+  RaidOverview,
   RaidsList,
   ReportSummary,
   SavedRaid,
@@ -37,6 +38,8 @@ const post = <T>(path: string, body: unknown) => call<T>(path, { method: 'POST',
 export const loadReport = (url: string) => post<ReportSummary>('/api/report', { url });
 /** Whole-raid breakdown of one fight, for when no player is chosen. */
 export const loadBreakdown = (p: { host: string; code: string; fight: FightRef }) => post<FightBreakdown>('/api/fight', { ...p, breakdown: true });
+/** The whole night: every boss kill and everyone's numbers. */
+export const loadOverall = (p: { host: string; code: string }) => post<RaidOverview>('/api/fight', { ...p, overall: true });
 export const loadHistory = () => call<HistoryRow[]>('/api/history');
 export interface Me { signedIn: boolean; kind: 'discord' | 'password' | null; name: string | null; avatar: string | null; rank: Rank | null; officer: boolean; admin: boolean; discordLogin: boolean }
 let mePromise: Promise<Me> | null = null;

@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
-import type { AnalysisResult, CompareChoice, FightBreakdown, ReportSummary } from '../../server/types';
-import { type Progress, loadBreakdown, loadReport, runAnalysis } from '../api';
+import type { AnalysisResult, CompareChoice, FightBreakdown, RaidOverview, ReportSummary } from '../../server/types';
+import { type Progress, loadBreakdown, loadOverall, loadReport, runAnalysis } from '../api';
 import { mmss } from '../format';
 import { useNav } from '../nav';
 import Glyph from './Glyph';
 import Breakdown from './Breakdown';
 import { HomeExtras, HomeHero } from './Home';
+import NightView from './NightView';
 import ResultView from './ResultView';
+
+/** "Whole night" in the boss list (fight IDs start at 1, so 0 is free). */
+const OVERALL = 0;
 
 // Compare dropdown values: "none", "p:<playerId>" (someone in this fight) or "log" (someone in another log).
 type ReportPlayer = ReportSummary['players'][number];
@@ -51,6 +55,8 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(initial ?? null);
   const [breakdown, setBreakdown] = useState<FightBreakdown | null>(null);
+  const [night, setNight] = useState<RaidOverview | null>(null);
+  const [nightBusy, setNightBusy] = useState(false);
   // Clicking a player in the breakdown picks them and analyzes their fight
   const [pendingPick, setPendingPick] = useState(false);
   const [autoBreakdown, setAutoBreakdown] = useState(false);
@@ -164,11 +170,13 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
     setError(null);
     setResult(null);
     setBreakdown(null);
+    setNight(null);
     setBusy('report');
     try {
       const r = await loadReport(link);
       setReport(r);
-      setFightId(r.suggestedFight ?? r.fights.at(-1)?.id ?? '');
+      // A link to a specific fight opens it; otherwise the whole night
+      setFightId(r.suggestedFight ?? (r.fights.length ? OVERALL : ''));
       setPlayerId(r.suggestedPlayer ?? '');
       setCompareWith('none');
       setOther(null);
@@ -194,9 +202,44 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
   useEffect(() => {
     if (!autoBreakdown || !report || fightId === '' || busy) return;
     setAutoBreakdown(false);
-    runBreakdown();
+    if (fightId === OVERALL) runNight();
+    else runBreakdown();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoBreakdown, report, fightId, busy]);
+
+  /** "Whole night": every boss and everyone's numbers, like /raidend. */
+  async function runNight(again = false) {
+    if (!report) return;
+    setError(null);
+    setResult(null);
+    if (!again) {
+      setBreakdown(null);
+      setNight(null);
+      setProgress([{ label: 'Reading every boss kill', state: 'loading' }]);
+      setBusy('analysis');
+    }
+    setNightBusy(true);
+    const started = performance.now();
+    try {
+      const data = await loadOverall({ host: report.host, code: report.code });
+      setNight(data);
+      setProgress([]);
+    } catch (err) {
+      if (!again) setProgress([{ label: 'Reading every boss kill', state: 'failed', seconds: Math.round((performance.now() - started) / 100) / 10 }]);
+      setError((err as Error).message);
+    } finally {
+      setNightBusy(false);
+      if (!again) setBusy(null);
+    }
+  }
+
+  // Bosses still being read: keep reading in the background while the page is open
+  useEffect(() => {
+    if (!night?.pending || nightBusy) return;
+    const t = window.setTimeout(() => runNight(true), 4000);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [night, nightBusy]);
 
   /** No player chosen: the whole-raid breakdown of the fight. */
   async function runBreakdown() {
@@ -205,6 +248,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
     setError(null);
     setResult(null);
     setBreakdown(null);
+    setNight(null);
     setProgress([{ label: 'Reading the whole raid', state: 'loading' }]);
     setBusy('analysis');
     const started = performance.now();
@@ -220,6 +264,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
   }
 
   async function onAnalyze() {
+    if (fightId === OVERALL) return runNight();
     if (playerId === '') return runBreakdown();
     const f = report?.fights.find((x) => x.id === fightId);
     if (!report || !f || !me) return;
@@ -232,6 +277,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
     setError(null);
     setResult(null);
     setBreakdown(null);
+    setNight(null);
     setProgress([]);
     setBusy('analysis');
     try {
@@ -298,8 +344,13 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
             )}
             <label>
               Encounter
-              <select value={fightId} onChange={(e) => setFightId(Number(e.target.value))}>
+              <select value={fightId} onChange={(e) => {
+                const id = Number(e.target.value);
+                setFightId(id);
+                if (id === OVERALL) setPlayerId('');
+              }}>
                 <option value="" disabled>Choose a boss</option>
+                <option value={OVERALL}>Whole night (every boss)</option>
                 {report.fights.map((f) => (
                   <option key={f.id} value={f.id}>{f.name} – {f.kill ? 'Kill' : 'Wipe'} ({mmss(f.seconds)})</option>
                 ))}
@@ -307,8 +358,8 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
             </label>
             <label>
               Player
-              <select value={playerId} onChange={(e) => setPlayerId(e.target.value === '' ? '' : Number(e.target.value))}>
-                <option value="">Whole raid (fight breakdown)</option>
+              <select value={playerId} disabled={fightId === OVERALL} onChange={(e) => setPlayerId(e.target.value === '' ? '' : Number(e.target.value))}>
+                <option value="">{fightId === OVERALL ? 'Whole raid' : 'Whole raid (fight breakdown)'}</option>
                 {fightPlayers.map((p) => (
                   <option key={p.id} value={p.id}>{p.name} ({cls(p.className)})</option>
                 ))}
@@ -316,7 +367,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
             </label>
             <label>
               Compare
-              <select value={compareWith} onChange={(e) => setCompareWith(e.target.value)} disabled={playerId === ''}>
+              <select value={compareWith} onChange={(e) => setCompareWith(e.target.value)} disabled={playerId === '' || fightId === OVERALL}>
                 <option value="none">No comparison: just my stats</option>
                 <optgroup label="Someone in this fight">
                   {fightPlayers
@@ -407,6 +458,25 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
         {error && <p className="error">{error}</p>}
       </section>
 
+      {night && !result && !breakdown && (
+        <NightView
+          data={night}
+          refreshing={nightBusy}
+          onRefresh={() => runNight(true)}
+          onBoss={(id) => {
+            setFightId(id);
+            setPlayerId('');
+            setAutoBreakdown(true);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onPlayer={(id, pid) => {
+            setFightId(id);
+            setPlayerId(pid);
+            setCompareWith('none');
+            setPendingPick(true);
+          }}
+        />
+      )}
       {breakdown && !result && (
         <Breakdown
           data={breakdown}

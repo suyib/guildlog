@@ -448,3 +448,29 @@ export interface ProfileData {
   signIns: number | null;
   characters: ProfileCharacter[];
 }
+
+/** The whole night: the raid card plus everyone's numbers across all the boss kills. */
+export interface RaidOverview {
+  host: string;
+  code: string;
+  title: string;
+  startTime: number;
+  card: RaidCard;
+  players: {
+    id: number;
+    name: string;
+    className: string;
+    specName: string;
+    role: 'tank' | 'healer' | 'dps';
+    healer: boolean;
+    bosses: number;
+    avgParse: number | null;
+    /** DPS, or HPS for healers. */
+    perSecond: number;
+    deaths: number;
+    itemLevel: number | null;
+    best: { fightId: number; playerId: number; boss: string; parse: number | null };
+  }[];
+  /** Kills not read yet; asking again fills them in. */
+  pending: number;
+}

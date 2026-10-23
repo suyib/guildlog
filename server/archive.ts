@@ -169,6 +169,12 @@ async function saveRaid(raid: RaidRow, deadline: number): Promise<{ done: number
     });
   }
   const kills = meta.fights.filter((f) => f.encounterID > 0 && f.kill);
+  // Put the raid on the calendar straight away (a long run can be cut off before the end)
+  if (!raid.card && meta.fights.some((f) => f.encounterID > 0)) {
+    const digests = (await storedFights(code).catch(() => [])).map((s) => s.data as FightDigest).filter((d) => (d.v ?? 0) >= 3 && kills.some((k) => k.id === d.id));
+    raid.card = buildCard(meta, digests);
+    await patchRaid(code, { card: raid.card, status: 'saving' });
+  }
   if (!meta.fights.some((f) => f.encounterID > 0)) {
     await patchRaid(code, { status: 'empty' });
     return { done, stop: false };
@@ -263,6 +269,16 @@ export async function archiveTick(deadline: number): Promise<{ saved: number; fi
     if (r.stop) break; // Warcraft Logs is down: try again next run
   }
   return { saved, finished };
+}
+
+/** Update a saved raid's card from fresh summaries (used by the whole-night view). No-op for raids not on Past raids. */
+export async function refreshCard(code: string, meta: ReportMeta, digests: FightDigest[]) {
+  if (!dbEnabled()) return;
+  const raid: { card: RaidCard | null } | undefined = (await rest(`guild_raids?report_code=eq.${q(code)}&select=card`).catch(() => null))?.[0];
+  if (!raid) return;
+  const card = buildCard(meta, digests);
+  if ((raid.card?.summarized ?? -1) > (card.summarized ?? 0)) return; // the saved one already knows more
+  await patchRaid(code, { card });
 }
 
 /** Save one raid straight away (used right after it's added), within the time given. */
