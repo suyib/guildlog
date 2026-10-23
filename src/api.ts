@@ -94,21 +94,19 @@ export async function runAnalysis(
   };
 
   const notes: string[] = [];
-  const rows = await step('Reading the fight', post<FightPlayerRow[]>('/api/fight', { host: p.host, code: p.code, fightId: p.fight.id }));
+  const rows = await step('Reading the fight', post<FightPlayerRow[]>('/api/fight', { host: p.host, code: p.code, fightId: p.fight.id, fight: p.fight }));
   const rowFor = (a: ActorRef) => rows.find((r) => r.id === a.id || r.name === a.name);
   const myRow = rowFor(p.actor);
 
-  const snap = (t: { host: string; code: string; fight: FightRef; actor: ActorRef; row?: FightPlayerRow }) =>
-    post<PlayerSnapshot>('/api/snapshot', { host: t.host, code: t.code, fight: t.fight, actor: t.actor, row: t.row });
+  const snap = (t: { host: string; code: string; fight: FightRef; actor: ActorRef }) =>
+    post<PlayerSnapshot>('/api/snapshot', { host: t.host, code: t.code, fight: t.fight, actor: t.actor });
 
-  const mePromise = step(p.actor.name, snap({ host: p.host, code: p.code, fight: p.fight, actor: p.actor, row: myRow }));
+  const mePromise = step(p.actor.name, snap({ host: p.host, code: p.code, fight: p.fight, actor: p.actor }));
 
   // Gear, stats and DPS over time load alongside, for every kind of analysis
-  const fightSeconds = (p.fight.endTime - p.fight.startTime) / 1000;
-  const myDps = myRow && fightSeconds > 0 ? myRow.total / fightSeconds : 0;
   const dashboardPromise = step(
     'Gear, stats and DPS over time',
-    post<Dashboard>('/api/dashboard', { host: p.host, code: p.code, fightId: p.fight.id, sourceId: p.actor.id, fightSeconds, dps: myDps, startTime: p.fight.startTime, endTime: p.fight.endTime }),
+    post<Dashboard>('/api/dashboard', { host: p.host, code: p.code, fight: p.fight, sourceId: myRow?.id ?? p.actor.id }),
   ).catch((e) => {
     notes.push(`Couldn\u2019t load gear and stats: ${(e as Error).message}`);
     return undefined;
@@ -128,7 +126,6 @@ export async function runAnalysis(
       label: `${p.chosen.name} (${p.chosen.className}, same raid)`,
       host: p.host, code: p.code, fight: p.fight, actor: p.chosen,
       sameClass: p.chosen.className === p.actor.className,
-      row: rowFor(p.chosen),
     });
   }
   if (p.compare.kind === 'log') {
@@ -136,10 +133,10 @@ export async function runAnalysis(
     const label = p.otherLabel ?? `${o.actor.name} (other log)`;
     // Read the other log's fight first so the comparison gets their parse and item level too
     comparisonJobsPre.push(
-      step(`${o.actor.name}: reading the other log`, post<FightPlayerRow[]>('/api/fight', { host: o.host, code: o.code, fightId: o.fight.id }))
+      step(`${o.actor.name}: reading the other log`, post<FightPlayerRow[]>('/api/fight', { host: o.host, code: o.code, fightId: o.fight.id, fight: o.fight }))
         .then((otherRows) => {
           const row = otherRows.find((r) => r.id === o.actor.id || r.name === o.actor.name);
-          return step(o.actor.name, snap({ host: o.host, code: o.code, fight: o.fight, actor: o.actor, row }));
+          return step(o.actor.name, snap({ host: o.host, code: o.code, fight: o.fight, actor: row ? { ...o.actor, id: row.id } : o.actor }));
         })
         .then((snapshot) => ({ kind: 'other-log' as const, label, snapshot, sameClass: snapshot.className === p.actor.className })),
     );

@@ -1,7 +1,8 @@
 // Turns raw Warcraft Logs data into the personal dashboard shown when nothing is compared.
-import { rankingRows } from './pipeline.js';
+import type { FightPack } from './pack.js';
+import { detailRoles, num as num0, rankingRows } from './tables.js';
 import type { Dashboard, GearItem, Healing, HealingAbility, SeriesPoint, Survival } from './types.js';
-import { type AmountEvent, type DashboardRaw, getDashboardRaw } from './wcl.js';
+import type { AmountEvent } from './wcl.js';
 
 const SLOT_NAMES = [
   'Head', 'Neck', 'Shoulder', 'Shirt', 'Chest', 'Waist', 'Legs', 'Feet', 'Wrist', 'Hands',
@@ -63,11 +64,6 @@ export function statsFrom(raw: Record<string, any> | null | undefined): Dashboar
 }
 
 /**
- * DPS over the fight, built from the player's own damage events: damage is added up per second,
- * then averaged over a 5-second window (like Warcraft Logs' graph). Pet damage isn't in these
- * events, so the line is scaled so its average matches the player's real DPS.
- */
-/**
  * Per-second values across the fight from individual events, smoothed over 5 seconds and scaled
  * so the line averages the real figure. With `notes`, each point names what contributed most
  * around then (used for "what hit you" on damage taken).
@@ -83,6 +79,13 @@ export function seriesFrom(events: AmountEvent[], start: number, fightSeconds: n
     perSecond[i] += e.amount;
     if (notes && e.ability) byAbility[i].set(e.ability, (byAbility[i].get(e.ability) ?? 0) + e.amount);
   }
+  return seriesFromSeconds(perSecond, average, notes ? byAbility : undefined);
+}
+
+/** The same line from amounts already added up per second (as stored for each fight). */
+export function seriesFromSeconds(perSecond: number[], average: number, byAbility?: Map<string, number>[]): SeriesPoint[] {
+  const secs = perSecond.length;
+  if (secs < 3 || !perSecond.some((v) => v > 0)) return [];
   const half = 2;
   const smooth = perSecond.map((_, i) => {
     const a = Math.max(0, i - half);
@@ -93,10 +96,10 @@ export function seriesFrom(events: AmountEvent[], start: number, fightSeconds: n
   const scale = mean > 0 && average > 0 ? average / mean : 1;
   return smooth.map((v, i) => {
     const point: SeriesPoint = { t: i, dps: Math.round(v * scale) };
-    if (notes) {
+    if (byAbility) {
       // The biggest hitter within the same 5-second window the line is smoothed over
       const window = new Map<string, number>();
-      for (let j = Math.max(0, i - half); j < Math.min(secs, i + half + 1); j++) for (const [n, a] of byAbility[j]) window.set(n, (window.get(n) ?? 0) + a);
+      for (let j = Math.max(0, i - half); j < Math.min(secs, i + half + 1); j++) for (const [n, a] of byAbility[j] ?? []) window.set(n, (window.get(n) ?? 0) + a);
       const top = [...window].sort((x, y) => y[1] - x[1])[0];
       if (top) point.note = `Mostly ${top[0]}`;
     }
@@ -104,13 +107,11 @@ export function seriesFrom(events: AmountEvent[], start: number, fightSeconds: n
   });
 }
 
-/** DPS across the fight (kept for older callers). */
-export const dpsSeriesFrom = (events: AmountEvent[], start: number, fightSeconds: number, dps: number) => seriesFrom(events, start, fightSeconds, dps);
-
-const num0 = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+/** What healingFrom reads: the player's healing by spell, everyone's healing table, the healing rankings, and healing per second. */
+export interface HealingRaw { mine: any; everyone: any; rankings: any; perSecond?: number[] }
 
 /** The player's healing: totals, overheal, parse, place among the raid's healers, and by spell. */
-export function healingFrom(raw: DashboardRaw['healing'] | undefined, sourceId: number, fightSeconds: number, start: number): Healing | undefined {
+export function healingFrom(raw: HealingRaw | undefined, sourceId: number, fightSeconds: number): Healing | undefined {
   if (!raw) return undefined;
   const entries: any[] = raw.mine?.data?.entries ?? [];
   const total = entries.reduce((t, e) => t + num0(e?.total), 0);
@@ -160,7 +161,7 @@ export function healingFrom(raw: DashboardRaw['healing'] | undefined, sourceId: 
     activePct: typeof meRow?.activeTime === 'number' ? Math.round(Math.min(100, (meRow.activeTime / (seconds * 1000)) * 100) * 10) / 10 : null,
     rank: place > 0 ? { place, of: sorted.length } : null,
     abilities,
-    hpsSeries: seriesFrom(raw.events, start, seconds, total / seconds),
+    hpsSeries: raw.perSecond ? seriesFromSeconds(raw.perSecond, total / seconds) : [],
   };
 }
 
@@ -228,21 +229,57 @@ export function survivalFrom(taken: any, sourceId: number, tankIds: number[], ra
   };
 }
 
-export async function buildDashboard(host: string, code: string, fightId: number, sourceId: number, fightSeconds: number, dps: number, start: number, end: number): Promise<Dashboard> {
-  const raw = await getDashboardRaw(host, code, fightId, sourceId, start, end);
-  const summaryGear: any[] = raw.summary?.data?.gear ?? raw.summary?.gear ?? [];
-  const combatGear: any[] = raw.combatant?.gear ?? [];
-  // The summary table usually has item and enchant names; combatant info is the fallback.
-  const byId = new Map(combatGear.filter((g) => g?.id).map((g) => [g.id, g]));
-  const merged = (summaryGear.length ? summaryGear : combatGear).map((g) => ({ ...(byId.get(g?.id) ?? {}), ...g }));
-  const survival = survivalFrom(raw.taken, sourceId, raw.tankIds, raw.raidIds);
+/** One player's healing by spell, in the shape of Warcraft Logs' healing table, from a stored fight. */
+export function healingTableFromPack(pack: FightPack, sourceId: number) {
+  const p = pack.full?.players[sourceId];
+  const names = pack.full?.names ?? {};
+  const uses = new Map<number, number>();
+  for (const [, a] of p?.casts ?? []) uses.set(a, (uses.get(a) ?? 0) + 1);
   return {
-    gear: gearFrom(merged),
-    stats: statsFrom(raw.combatant?.stats ?? raw.summary?.data?.stats),
-    dpsSeries: seriesFrom(raw.damageEvents, start, fightSeconds, dps),
+    data: {
+      entries: (p?.heal ?? []).map(([id, total, overheal, hits, crits]) => ({
+        name: names[id]?.[0] ?? `Spell ${id}`, guid: id, total, overheal, hitCount: hits, critHitCount: crits, uses: uses.get(id) ?? 0, abilityIcon: names[id]?.[1],
+      })),
+    },
+  };
+}
+
+/** The player's healing for a stored fight, or undefined if they didn't heal. */
+export function healingFromPack(pack: FightPack, sourceId: number, withLine: boolean): Healing | undefined {
+  const seconds = (pack.fight.endTime - pack.fight.startTime) / 1000;
+  const p = pack.full?.players[sourceId];
+  // Before the whole fight has been read, the fight-wide table gives the totals by spell
+  const mine = p ? healingTableFromPack(pack, sourceId) : { data: { entries: ((pack.t.healing?.data?.entries ?? []) as any[]).find((e) => e.id === sourceId)?.abilities ?? [] } };
+  return healingFrom({ mine, everyone: pack.t.healing, rankings: pack.t.hps, perSecond: withLine ? p?.hb : undefined }, sourceId, seconds);
+}
+
+/** The personal dashboard (gear, stats, lines over time, survival, healing) from a stored fight. */
+export function dashboardFromPack(pack: FightPack, sourceId: number): Dashboard {
+  const seconds = (pack.fight.endTime - pack.fight.startTime) / 1000 || 1;
+  const roles = detailRoles(pack.t.details);
+  const everyone = [...roles.tanks, ...roles.healers, ...roles.dps];
+  const det = everyone.find((x) => x.id === sourceId);
+  const p = pack.full?.players[sourceId];
+  const names = pack.full?.names ?? {};
+  const survival = survivalFrom(pack.t.taken, sourceId, roles.tanks.map((x) => x.id), everyone.map((x) => x.id));
+  const row = ((pack.t.damage?.data?.entries ?? []) as any[]).find((e) => e.id === sourceId);
+  // Damage taken per second, with what hit hardest each second
+  const secs = Math.max(1, Math.ceil(seconds));
+  const taken = new Array<number>(secs).fill(0);
+  const byAbility: Map<string, number>[] = Array.from({ length: secs }, () => new Map());
+  for (const [s, id, amount] of p?.tb ?? []) {
+    if (s < 0 || s >= secs) continue;
+    taken[s] += amount;
+    const n = names[id]?.[0] ?? 'Unknown';
+    byAbility[s].set(n, (byAbility[s].get(n) ?? 0) + amount);
+  }
+  return {
+    gear: p?.gear?.length ? p.gear : gearFrom(det?.combatantInfo?.gear ?? []),
+    stats: statsFrom(det?.combatantInfo?.stats),
+    dpsSeries: p ? seriesFromSeconds(p.db, num0(row?.total) / seconds) : [],
     survival,
-    healing: healingFrom(raw.healing, sourceId, fightSeconds, start),
+    healing: healingFromPack(pack, sourceId, true),
     // Scaled to the damage taken the table reports, so the line matches the Survival numbers
-    takenSeries: seriesFrom(raw.takenEvents, start, fightSeconds, survival ? survival.total / (fightSeconds || 1) : 0, true),
+    takenSeries: p ? seriesFromSeconds(taken, survival ? survival.total / seconds : 0, byAbility) : [],
   };
 }

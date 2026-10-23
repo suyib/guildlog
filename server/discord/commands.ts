@@ -5,7 +5,8 @@ import { characterLevel } from '../blizzard.js';
 import { registerRaid } from '../archive.js';
 import { level, siteAdminIds, storedPerson } from '../ranks.js';
 import { rest } from '../db.js';
-import { getReportMeta, getReportRegion, parseReportUrl } from '../wcl.js';
+import { getReportMeta, parseReportUrl } from '../wcl.js';
+import { reportRegion, storedDigests } from '../pack.js';
 import {
   BRAND, bugButton, EPHEMERAL, type Embed, type MessageBody, button, discord, editReply, env, linkButton, memberRoles, postToChannel, row, sendDm,
 } from './api.js';
@@ -14,7 +15,7 @@ import { RAID_CHECKLIST, ROLE_CHOICES, type Role, consumablesMessage, lookupMess
 import { PAGES, type Page, pageButtons, personalPage, raidSummary, siteLink } from './pages.js';
 import {
   type Claim, approvedClaimsFor, claimOnCharacter, claimsFor, createClaim, createRaid, createReminder, decideClaim, endRaid, getClaim, lastSeen,
-  latestOpenRaid, latestRaidStartedBy, raidByCode, recentRaids, removeClaim, storedFights,
+  latestOpenRaid, latestRaidStartedBy, raidByCode, recentRaids, removeClaim,
 } from './store.js';
 import { parseWhen } from './time.js';
 
@@ -303,7 +304,7 @@ async function raidEnd(i: Interaction): Promise<Outcome> {
     }
     const channelId = env.raidChannel() || (i.guild_id ? i.channel_id! : '');
     if (!channelId) return { content: 'No raid channel is set up yet (DISCORD_RAID_CHANNEL_ID in Vercel).' };
-    const digest = await raidDigest(raid.host, raid.report_code, 40_000);
+    const digest = await raidDigest(raid.host, raid.report_code, 40_000, { fresh: true });
     await postToChannel(channelId, raidSummary(digest, raid.logger_id));
     await endRaid(raid.report_code);
     // Add it to Past raids on the site, which saves it in full over the next hour or so
@@ -427,7 +428,7 @@ async function check(i: Interaction): Promise<Outcome> {
 async function characterCard(c: Claim): Promise<Embed> {
   // Latest raid this character appears in
   for (const r of await recentRaids(10)) {
-    const fights = (await storedFights(r.report_code).catch(() => [])).map((f) => f.data as RaidDigest['fights'][number]);
+    const fights = await storedDigests(r.report_code).catch(() => []);
     const digest = { host: r.host, code: r.report_code, meta: { title: r.title ?? r.report_code, startTime: Date.parse(r.started_at) } as RaidDigest['meta'], fights, pending: 0 };
     const rows = playerFights(digest as RaidDigest, c.character, c.realm);
     if (!rows.length) continue;
@@ -435,7 +436,7 @@ async function characterCard(c: Claim): Promise<Embed> {
     const withGear = [...rows].reverse().find((x) => x.p.gear?.length)?.p;
     const levels = withGear?.gear?.map((g) => g.itemLevel).filter((v): v is number => !!v) ?? [];
     const parses = rows.map((x) => x.p.parse).filter((v): v is number => v !== null);
-    const region = await getReportRegion(r.host, r.report_code).catch(() => null);
+    const region = await reportRegion(r.host, r.report_code).catch(() => null);
     const level = region && (c.realm || last.server) ? await characterLevel(region, (c.realm || last.server)!, c.character).catch(() => null) : null;
     const fields = [
       { name: 'Class', value: `${last.specName.replace(/([a-z])([A-Z])/g, '$1 $2')} ${last.className}`.trim() || '–', inline: true },

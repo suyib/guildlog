@@ -1,71 +1,19 @@
 // Whole-raid breakdown of one fight: everyone's damage and healing, deaths, damage taken by ability,
-// Bloodlust timing, interrupts and dispels. Built from fight-wide Warcraft Logs tables (a handful of
-// queries, not one per player). Everyone's per-player numbers come from the same summary the Discord
-// bot uses, so a fight read here is instant for the bot afterwards, and the other way round.
-import { type FightDigest, DIGEST_VERSION, buildFightDigest } from './discord/digest.js';
-import { storeFight, storedFights } from './discord/store.js';
-import { dbEnabled } from './db.js';
-import { rankingRows } from './pipeline.js';
+// Bloodlust timing, interrupts and dispels. Worked out from the stored fight (see pack.ts), the
+// same one the Discord bot reads, so the site and Discord always agree.
+import { seriesFromSeconds } from './dashboard.js';
+import { digestFromPack } from './fightDigest.js';
+import type { FightPack } from './pack.js';
 import { raidFeedback } from './raidFeedback.js';
-import type { FightBreakdown, FightRef } from './types.js';
-import { type Fight, gql } from './wcl.js';
+import { num, rankingRows } from './tables.js';
+import type { FightBreakdown } from './types.js';
 
-const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 const MELEE = /^(melee|auto attack|attack)$/i;
 
-async function report(host: string, code: string, fightId: number, fields: string, timeoutMs: number, extra: Record<string, unknown> = {}, extraDecl = '') {
-  const d = await gql<{ reportData: { report: Record<string, any> } }>(
-    host,
-    `query($code:String!,$fid:[Int]!${extraDecl}){reportData{report(code:$code){ ${fields} }}}`,
-    { code, fid: [fightId], ...extra },
-    timeoutMs,
-  );
-  return d.reportData.report;
-}
-const optional = (p: Promise<Record<string, any>>) => p.catch(() => ({}) as Record<string, any>);
-
-/** Who did something to which ability, from a nested Interrupts or Dispels table: name -> count. */
-function countsFrom(table: any): Map<string, number> {
-  const out = new Map<string, number>();
-  const walk = (entries: any[]) => {
-    for (const e of entries ?? []) {
-      for (const d of (e?.details ?? []) as any[]) if (d?.name) out.set(d.name, (out.get(d.name) ?? 0) + num(d.total));
-      if (Array.isArray(e?.entries)) walk(e.entries);
-    }
-  };
-  walk(table?.data?.entries ?? []);
-  return out;
-}
-
-export async function fightBreakdown(host: string, code: string, ref: FightRef): Promise<FightBreakdown> {
-  const fight: Fight = { ...ref, size: null, difficulty: null };
-
-  // Everyone's numbers: reuse the stored summary if this fight has been read before
-  const digestPromise = (async (): Promise<FightDigest> => {
-    if (dbEnabled()) {
-      const stored = (await storedFights(code).catch(() => [])).find((s) => s.fight_id === ref.id && (s.data as FightDigest).v === DIGEST_VERSION);
-      if (stored) return stored.data as FightDigest;
-    }
-    const built = await buildFightDigest(host, code, fight);
-    if (dbEnabled()) await storeFight(code, ref.id, built).catch(() => undefined);
-    return built;
-  })();
-
-  const [digest, heal, utility, lust, graph, perSecond] = await Promise.all([
-    digestPromise,
-    optional(report(host, code, ref.id, 'healing: table(dataType:Healing, fightIDs:$fid) taken: table(dataType:DamageTaken, fightIDs:$fid)', 25_000)),
-    optional(report(host, code, ref.id, 'interrupts: table(dataType:Interrupts, fightIDs:$fid) dispels: table(dataType:Dispels, fightIDs:$fid) hpsRanks: rankings(fightIDs:$fid, playerMetric:hps)', 20_000)),
-    optional(report(
-      host, code, ref.id,
-      'events(dataType:Casts, fightIDs:$fid, filterExpression:$filter, limit:50){data} masterData{actors(type:"Player"){id name}}',
-      15_000,
-      { filter: 'ability.id in (2825, 32182)' },
-      ',$filter:String',
-    )),
-    optional(report(host, code, ref.id, 'graph: graph(dataType:DamageDone, fightIDs:$fid)', 20_000)),
-    raidDamagePerSecond(host, code, ref).catch(() => null),
-  ]);
-
+export function breakdownFromPack(host: string, pack: FightPack): FightBreakdown {
+  const ref = pack.fight;
+  const digest = digestFromPack(host, pack);
+  const heal = { healing: pack.t.healing, taken: pack.t.taken };
   const seconds = (ref.endTime - ref.startTime) / 1000 || 1;
   // Healing per player. Pets and totems are added to their owner when Warcraft Logs lists them separately.
   const healBy = new Map<number, { total: number; overheal: number; name: string; type: string }>();
@@ -87,9 +35,9 @@ export async function fightBreakdown(host: string, code: string, ref: FightRef):
       abilities: [], casts: [], cooldowns: [], deaths: [], taken: 0, avoidable: 0, avoidableTop: [],
     });
   }
-  const hpsParse = new Map(rankingRows(utility.hpsRanks).map((r: any) => [r.name, r.rankPercent]));
-  const interrupts = countsFrom(utility.interrupts);
-  const dispels = countsFrom(utility.dispels);
+  const hpsParse = new Map(rankingRows(pack.t.hps).map((r: any) => [r.name, r.rankPercent]));
+  const interrupts = new Map(Object.entries(pack.t.interrupts ?? {}));
+  const dispels = new Map(Object.entries(pack.t.dispels ?? {}));
 
   const players = digest.players.map((p) => {
     const h = healBy.get(p.id);
@@ -149,14 +97,12 @@ export async function fightBreakdown(host: string, code: string, ref: FightRef):
     .flatMap((p) => p.deaths.map((d) => ({ seconds: d.seconds, name: p.name, className: p.className, by: d.by })))
     .sort((a, b) => a.seconds - b.seconds);
 
-  const actorName = new Map<number, string>(((lust.masterData?.actors ?? []) as any[]).map((a) => [a.id, a.name]));
-  const bloodlust = ((lust.events?.data ?? []) as any[])
-    .filter((e) => e?.type === 'cast')
-    .map((e) => ({ seconds: Math.round((num(e.timestamp) - ref.startTime) / 100) / 10, by: actorName.get(e.sourceID) ?? 'Unknown', name: e.abilityGameID === 32182 ? 'Heroism' : 'Bloodlust' }));
+  const nameOf = new Map(digest.players.map((p) => [p.id, p.name]));
+  const bloodlust = (pack.full?.lust ?? []).map(([cs, by, a]) => ({ seconds: Math.round(cs / 10) / 10, by: nameOf.get(by) ?? 'Unknown', name: pack.full?.names[a]?.[0] ?? 'Bloodlust' }));
 
   const totalDamage = players.reduce((t, p) => t + p.total, 0);
-  // Prefer the raid's own damage events; fall back to Warcraft Logs' graph if they couldn't all be read in time
-  const dpsSeries = perSecond ? smoothed(perSecond, totalDamage / seconds) : seriesOverTime(graph.graph, ref.startTime, seconds, totalDamage / seconds);
+  // The raid's damage per second, once the whole fight has been read
+  const dpsSeries = pack.full ? seriesFromSeconds(pack.full.raid, totalDamage / seconds) : [];
   const totalHealing = players.reduce((t, p) => t + p.healing, 0);
   const ilvls = players.map((p) => p.itemLevel).filter((v): v is number => !!v);
 
@@ -181,89 +127,3 @@ export async function fightBreakdown(host: string, code: string, ref: FightRef):
   };
 }
 
-/**
- * Raid DPS across the fight from Warcraft Logs' damage graph, totalled per second, smoothed over
- * 5 seconds and scaled so its average is the raid's real DPS. Each series' own start time and step
- * are used, so the line lines up with the fight even when the graph covers a wider stretch of the log.
- */
-export function seriesOverTime(graph: any, fightStart: number, seconds: number, avgDps: number): { t: number; dps: number }[] {
-  const series: any[] = graph?.data?.series ?? graph?.series ?? [];
-  if (!series.length || seconds < 3) return [];
-  const total = series.find((x) => /^total$/i.test(String(x?.name)));
-  const used = total ? [total] : series;
-  const secs = Math.ceil(seconds);
-
-  const bucket = (base: number) => {
-    const b = new Array<number>(secs).fill(0);
-    let inside = 0;
-    let all = 0;
-    for (const s of used) {
-      const start = num(s?.pointStart);
-      const step = num(s?.pointInterval) || 1000;
-      (s?.data ?? []).forEach((p: any, i: number) => {
-        let t: number, v: number;
-        if (Array.isArray(p)) [t, v] = [num(p[0]), num(p[1])];
-        else if (p && typeof p === 'object') [t, v] = [num(p.x), num(p.y)];
-        else [t, v] = [start + i * step, num(p)];
-        all++;
-        const sec = Math.floor((t - base) / 1000);
-        if (sec >= 0 && sec < secs) { b[sec] += v; inside++; }
-      });
-    }
-    return { b, share: all ? inside / all : 0 };
-  };
-  // Times are usually from the start of the log; if most points don't land in the fight, they're from the pull
-  let { b, share } = bucket(fightStart);
-  if (share < 0.5) {
-    const alt = bucket(0);
-    if (alt.share > share) b = alt.b;
-  }
-  const smooth = b.map((_, i) => {
-    const a = Math.max(0, i - 2);
-    const z = Math.min(secs, i + 3);
-    return b.slice(a, z).reduce((t, v) => t + v, 0) / (z - a);
-  });
-  const mean = smooth.reduce((t, v) => t + v, 0) / secs;
-  if (!(mean > 0)) return [];
-  const scale = avgDps > 0 ? avgDps / mean : 1;
-  return smooth.map((v, i) => ({ t: i, dps: Math.round(v * scale) }));
-}
-
-/**
- * The raid's damage per second, from every damage event in the fight (players and pets).
- * Returns null if the events can't all be read in time, since a partial line would be misleading.
- */
-async function raidDamagePerSecond(host: string, code: string, ref: FightRef): Promise<number[] | null> {
-  const q = `query($code:String!,$fid:[Int]!,$st:Float,$et:Float){reportData{report(code:$code){
-    events(dataType:DamageDone, fightIDs:$fid, startTime:$st, endTime:$et, limit:10000){data nextPageTimestamp}
-  }}}`;
-  const secs = Math.max(1, Math.ceil((ref.endTime - ref.startTime) / 1000));
-  const b = new Array<number>(secs).fill(0);
-  let st: number | null = ref.startTime;
-  const deadline = Date.now() + 40_000;
-  for (let page = 0; st !== null; page++) {
-    const left = deadline - Date.now();
-    if (left < 3_000 || page >= 20) return null;
-    const d: any = await gql(host, q, { code, fid: [ref.id], st, et: ref.endTime }, Math.min(20_000, left));
-    for (const e of d.reportData.report.events?.data ?? []) {
-      if (e?.type !== 'damage') continue;
-      const i = Math.floor((num(e.timestamp) - ref.startTime) / 1000);
-      if (i >= 0 && i < secs) b[i] += num(e.amount) + num(e.absorbed);
-    }
-    st = d.reportData.report.events?.nextPageTimestamp ?? null;
-  }
-  return b.some((v) => v > 0) ? b : null;
-}
-
-/** 5-second smoothing, scaled so the average matches the raid's real DPS. */
-function smoothed(perSecond: number[], avgDps: number): { t: number; dps: number }[] {
-  const n = perSecond.length;
-  const sm = perSecond.map((_, i) => {
-    const a = Math.max(0, i - 2);
-    const z = Math.min(n, i + 3);
-    return perSecond.slice(a, z).reduce((t, v) => t + v, 0) / (z - a);
-  });
-  const mean = sm.reduce((t, v) => t + v, 0) / n;
-  const scale = mean > 0 && avgDps > 0 ? avgDps / mean : 1;
-  return sm.map((v, i) => ({ t: i, dps: Math.round(v * scale) }));
-}

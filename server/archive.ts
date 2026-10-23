@@ -1,24 +1,20 @@
-// Past raids: which of the guild's raids are kept, and saving each one in full a little at a time.
+// Past raids: which of the guild's raids are kept, and storing each one a fight at a time.
 //
 // A raid is added by /raidend, by "Add a past raid" on the site, or (optionally) picked up from
-// the guild's uploads on Warcraft Logs. The every-5-minutes job then works through it: the report,
-// each boss kill's whole-raid breakdown, and every player's analysis and gear. One run does what
-// fits in its time limit and the next carries on, so a night is usually fully saved within an hour.
-import { fightBreakdown } from './breakdown.js';
-import { buildDashboard } from './dashboard.js';
+// the guild's uploads on Warcraft Logs. The every-5-minutes job then reads each boss kill once and
+// stores it whole (see pack.ts); every analysis, breakdown and Discord DM is worked out from that.
+// One run does what fits in its time limit and the next carries on.
 import { dbEnabled, rest } from './db.js';
 import type { FightDigest } from './discord/digest.js';
-import { storedFights } from './discord/store.js';
 import { GAME } from './game.js';
-import { fightRows, snapshotOne } from './pipeline.js';
+import { digestRows, getMeta, getPack, storedDigests, trimPack } from './pack.js';
 import { raidFeedback } from './raidFeedback.js';
-import { type SavedKind, getSaved, putSaved, savedKey, savedKeys } from './saved.js';
-import type { FightBreakdown, FightPlayerRow, FightRef, RaidCard, RaidsList, SavedRaid } from './types.js';
-import { type ReportMeta, WclTimeout, getReportMeta, gql } from './wcl.js';
+import type { FightRef, RaidCard, RaidsList, SavedRaid } from './types.js';
+import { type ReportMeta, WclTimeout, gql } from './wcl.js';
 
 const q = encodeURIComponent;
 
-/** How long full detail (every player's analysis) is kept. Summaries, breakdowns and raid cards stay. */
+/** How long each fight is kept whole (every event). After that only its tables and summary stay. */
 export const archiveDays = () => Math.max(7, Number(process.env.ARCHIVE_DAYS) || 90);
 /** Give up on pieces that keep failing after this many runs (the raid is then marked "partial"). */
 const MAX_RUNS = 40;
@@ -137,88 +133,57 @@ export function buildCard(meta: ReportMeta, digests: FightDigest[]): RaidCard {
   };
 }
 
-// ---------- Saving a raid, a piece at a time ----------
+// ---------- Storing a raid, a fight at a time ----------
 
-type Piece = { kind: SavedKind; fightId: number; playerId: number; run: () => Promise<unknown> };
-
-/** Warcraft Logs itself is down or overloaded: stop this run rather than fail every piece. */
+/** Warcraft Logs itself is down or overloaded: stop this run rather than fail every fight. */
 const wclDown = (e: unknown) => e instanceof WclTimeout || /having trouble right now|API error 5\d\d|rejected the site/i.test((e as Error)?.message ?? '');
+
+const killsOf = (meta: ReportMeta) => meta.fights.filter((f) => f.encounterID > 0 && f.kill);
+const refOf = (f: ReportMeta['fights'][number]): FightRef => ({ id: f.id, encounterID: f.encounterID, name: f.name, startTime: f.startTime, endTime: f.endTime, kill: !!f.kill });
 
 async function saveRaid(raid: RaidRow, deadline: number): Promise<{ done: number; stop: boolean }> {
   const { host, report_code: code } = raid;
-  const have = await savedKeys(code);
   let done = 0;
 
-  // The report's fights and players come first: everything else is planned from them
-  let meta = (await getSaved<ReportMeta>(code, 'meta'))?.data ?? null;
-  if (!meta) {
-    try {
-      meta = await getReportMeta(host, code, 20_000);
-    } catch (e) {
-      await patchRaid(code, { runs: raid.runs + 1, ...(raid.runs + 1 >= MAX_RUNS ? { status: 'partial' } : {}) });
-      return { done, stop: wclDown(e) };
-    }
-    await putSaved(code, 'meta', meta);
-    have.add(savedKey('meta'));
-    done++;
-    const end = meta.fights.at(-1)?.endTime ?? 0;
-    await patchRaid(code, {
-      title: meta.title,
-      start_time: new Date(meta.startTime).toISOString(),
-      end_time: new Date(meta.startTime + end).toISOString(),
-    });
+  // The report's fights and players come first (stored, so a finished log is only read once)
+  let meta: ReportMeta;
+  try {
+    meta = (await getMeta(host, code, { timeoutMs: 20_000 })).meta;
+  } catch (e) {
+    await patchRaid(code, { runs: raid.runs + 1, ...(raid.runs + 1 >= MAX_RUNS ? { status: 'partial' } : {}) });
+    return { done, stop: wclDown(e) };
   }
-  const kills = meta.fights.filter((f) => f.encounterID > 0 && f.kill);
-  // Put the raid on the calendar straight away (a long run can be cut off before the end)
-  if (!raid.card && meta.fights.some((f) => f.encounterID > 0)) {
-    const digests = (await storedFights(code).catch(() => [])).map((s) => s.data as FightDigest).filter((d) => (d.v ?? 0) >= 3 && kills.some((k) => k.id === d.id));
-    raid.card = buildCard(meta, digests);
-    await patchRaid(code, { card: raid.card, status: 'saving' });
+  if (!raid.title) {
+    const end = meta.fights.at(-1)?.endTime ?? 0;
+    await patchRaid(code, { title: meta.title, start_time: new Date(meta.startTime).toISOString(), end_time: new Date(meta.startTime + end).toISOString() });
   }
   if (!meta.fights.some((f) => f.encounterID > 0)) {
     await patchRaid(code, { status: 'empty' });
     return { done, stop: false };
   }
-  const refs: FightRef[] = kills.map((f) => ({ id: f.id, encounterID: f.encounterID, name: f.name, startTime: f.startTime, endTime: f.endTime, kill: true }));
-  const fullDetail = Date.now() - meta.startTime < archiveDays() * 86_400_000;
-
-  // Breakdowns and fight rows for each kill, then each player's analysis and gear
-  const pieces: Piece[] = [];
-  const total = { n: 1 }; // pieces in the whole raid, for the progress shown on the page
-  for (const ref of refs) {
-    pieces.push({ kind: 'breakdown', fightId: ref.id, playerId: 0, run: () => fightBreakdown(host, code, ref) });
-    total.n++;
-    if (!fullDetail) continue; // older than the keep-full-detail window: summaries only
-    pieces.push({ kind: 'rows', fightId: ref.id, playerId: 0, run: () => fightRows(host, code, ref.id) });
-    total.n++;
-    const breakdown = (await getSaved<FightBreakdown>(code, 'breakdown', ref.id))?.data;
-    if (!breakdown) {
-      total.n += 2 * (meta.fights.find((f) => f.id === ref.id)?.friendlyPlayers?.length || 25); // an estimate until it's read
-      continue;
-    }
-    const rows = (await getSaved<FightPlayerRow[]>(code, 'rows', ref.id))?.data ?? [];
-    const seconds = (ref.endTime - ref.startTime) / 1000 || 1;
-    for (const p of breakdown.players) {
-      const actor = { id: p.id, name: p.name, className: p.className };
-      const row = rows.find((r) => r.id === p.id || r.name === p.name);
-      pieces.push({ kind: 'snapshot', fightId: ref.id, playerId: p.id, run: () => snapshotOne(host, code, ref, actor, row) });
-      pieces.push({ kind: 'dashboard', fightId: ref.id, playerId: p.id, run: () => buildDashboard(host, code, ref.id, p.id, seconds, (row?.total ?? p.total) / seconds, ref.startTime, ref.endTime) });
-      total.n += 2;
-    }
+  const kills = killsOf(meta);
+  // Put the raid on the calendar straight away (a long run can be cut off before the end)
+  if (!raid.card) {
+    raid.card = buildCard(meta, (await storedDigests(code).catch(() => [])).filter((d) => kills.some((k) => k.id === d.id)));
+    await patchRaid(code, { card: raid.card, status: 'saving' });
   }
-  const todo = pieces.filter((x) => !have.has(savedKey(x.kind, x.fightId, x.playerId)));
 
-  // Two at a time, starting new pieces only while there's time to finish them
+  // Each kill read whole while it's within the keep window, or just its tables after that
+  const want = Date.now() - meta.startTime < archiveDays() * 86_400_000 ? 'full' : 'tables';
+  const stages = new Map((await digestRows(code).catch(() => [])).map((r) => [r.fightId, r.stage]));
+  const ready = (id: number) => stages.get(id) === 'full' || (want === 'tables' && stages.get(id) === 'tables');
+  const todo = kills.filter((k) => !ready(k.id));
+
+  // Two fights at a time, starting new ones only while there's time to finish them
   let next = 0;
   let stop = false;
   const worker = async () => {
     while (!stop && next < todo.length && Date.now() < deadline - 25_000) {
-      const piece = todo[next++];
+      const f = todo[next++];
       try {
-        const data = await piece.run();
-        await putSaved(code, piece.kind, data, piece.fightId, piece.playerId);
-        have.add(savedKey(piece.kind, piece.fightId, piece.playerId));
-        done++;
+        const pack = await getPack(host, code, refOf(f), want, deadline - 5_000);
+        stages.set(f.id, pack.stage);
+        if (ready(f.id)) done++;
       } catch (e) {
         if (wclDown(e)) stop = true;
         // otherwise left for the next run
@@ -227,21 +192,14 @@ async function saveRaid(raid: RaidRow, deadline: number): Promise<{ done: number
   };
   await Promise.all([worker(), worker()]);
 
-  const saved = [savedKey('meta'), ...pieces.map((x) => savedKey(x.kind, x.fightId, x.playerId))].filter((k) => have.has(k)).length;
-  const missing = pieces.some((x) => !have.has(savedKey(x.kind, x.fightId, x.playerId)));
-  // The card is built from the start (bosses, wipes and who was there come from the report itself)
-  // and filled in as each kill's summary is read: deaths, item level, roles and feedback
-  let card = raid.card;
-  if (!card || done > 0 || !missing || (card.summarized ?? card.kills) < card.kills) {
-    const digests = (await storedFights(code).catch(() => []))
-      .map((s) => s.data as FightDigest)
-      .filter((d) => (d.v ?? 0) >= 3 && kills.some((k) => k.id === d.id)); // any summary with roles will do for the card
-    card = buildCard(meta, digests);
-  }
+  const saved = 1 + kills.filter((k) => ready(k.id)).length;
+  const missing = saved < kills.length + 1;
+  // The card is filled in as each kill's summary is read: deaths, item level, roles and feedback
+  const card = buildCard(meta, (await storedDigests(code).catch(() => [])).filter((d) => kills.some((k) => k.id === d.id)));
   const runs = raid.runs + 1;
   await patchRaid(code, {
     saved,
-    total: Math.max(saved, total.n),
+    total: kills.length + 1,
     runs,
     card,
     status: !missing ? 'saved' : runs >= MAX_RUNS ? 'partial' : 'saving',
@@ -287,15 +245,32 @@ export async function archiveNow(code: string, deadline: number) {
   if (raid && (raid.status === 'queued' || raid.status === 'saving')) await saveRaid(raid, deadline);
 }
 
-/** Drop full detail for raids older than the keep window. Summaries and raid cards stay. */
+/**
+ * Keep the database lean, once an hour (the job runs every 5 minutes):
+ *  - fights from logs that aren't on Past raids (other guilds' logs used for comparisons) go after a week
+ *  - Past raids older than the keep window keep only each fight's tables and summary
+ */
 async function pruneOld() {
-  // Once an hour is plenty (the job runs every 5 minutes)
   if (new Date().getUTCMinutes() >= 5) return;
-  const before = new Date(Date.now() - archiveDays() * 86_400_000).toISOString();
-  const old: { report_code: string }[] = (await rest(`guild_raids?start_time=lt.${q(before)}&select=report_code`)) ?? [];
-  for (const { report_code } of old) {
-    await rest(`saved_data?report_code=eq.${q(report_code)}&kind=in.(rows,snapshot,dashboard)`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+  const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  const old: { report_code: string }[] = (await rest(`fight_packs?updated_at=lt.${q(weekAgo)}&select=report_code&limit=2000`)) ?? [];
+  const codes = [...new Set(old.map((r) => r.report_code))];
+  if (codes.length) {
+    const list = codes.map((c) => q(c)).join(',');
+    const [kept, bot]: { report_code: string }[][] = await Promise.all([
+      rest(`guild_raids?report_code=in.(${list})&select=report_code`),
+      rest(`bot_raids?report_code=in.(${list})&select=report_code`),
+    ]);
+    const keep = new Set([...(kept ?? []), ...(bot ?? [])].map((r) => r.report_code));
+    const drop = codes.filter((c) => !keep.has(c));
+    if (drop.length) await rest(`fight_packs?report_code=in.(${drop.map((c) => q(c)).join(',')})`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
   }
+  const before = new Date(Date.now() - archiveDays() * 86_400_000).toISOString();
+  const aged: { report_code: string }[] = (await rest(`guild_raids?start_time=lt.${q(before)}&select=report_code`)) ?? [];
+  if (!aged.length) return;
+  const full: { report_code: string; fight_id: number }[] =
+    (await rest(`fight_packs?report_code=in.(${aged.map((r) => q(r.report_code)).join(',')})&stage=eq.full&select=report_code,fight_id&limit=20`)) ?? [];
+  for (const f of full) await trimPack(f.report_code, f.fight_id).catch(() => undefined);
 }
 
 /**

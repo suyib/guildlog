@@ -36,10 +36,10 @@ function outcome(r: SavedRaid): 'full' | 'partial' | 'none' | 'pending' {
 function statusText(r: SavedRaid, archiveDays: number): string {
   const old = r.startTime && Date.now() - new Date(r.startTime).getTime() > archiveDays * 86_400_000;
   switch (r.status) {
-    case 'saved': return old ? `Summary saved (full detail is kept for ${archiveDays} days)` : 'Saved: opens even when Warcraft Logs is down';
-    case 'saving': return `Saving for when Warcraft Logs is down: ${r.saved} of ${r.total || '…'}`;
-    case 'queued': return 'Waiting to be saved (within a few minutes)';
-    case 'partial': return 'Partly saved: some parts couldn’t be read from Warcraft Logs';
+    case 'saved': return old ? `Summary stored (each fight is kept whole for ${archiveDays} days)` : 'Stored: opens even when Warcraft Logs is down';
+    case 'saving': return `Reading the boss kills: ${Math.max(0, r.saved - 1)} of ${r.total ? r.total - 1 : '…'}`;
+    case 'queued': return 'Waiting to be read (within a few minutes)';
+    case 'partial': return 'Partly stored: some boss kills couldn’t be read from Warcraft Logs';
     default: return '';
   }
 }

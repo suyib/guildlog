@@ -6,10 +6,10 @@ import { characterLevel } from './blizzard.js';
 import { dbEnabled, listHistory, rest } from './db.js';
 import { discord, env } from './discord/api.js';
 import { type FightDigest, type PlayerDigest, healsMost } from './discord/digest.js';
-import { claimsFor, recentRaids, storedFights } from './discord/store.js';
+import { claimsFor, recentRaids } from './discord/store.js';
+import { reportRegion, storedDigests } from './pack.js';
 import type { Session } from './auth.js';
 import type { HomeData, ProfileCharacter, ProfileData, SavedRaid } from './types.js';
-import { getReportRegion } from './wcl.js';
 import { membership } from './officers.js';
 import { discordRank, effectiveRank } from './ranks.js';
 
@@ -93,7 +93,7 @@ export async function profileData(session: Session): Promise<ProfileData> {
   // Each raid's stored summaries, read once and shared by all of this person's characters
   const fightsByCode = new Map<string, Promise<FightDigest[]>>();
   const fightsOf = (code: string) => {
-    if (!fightsByCode.has(code)) fightsByCode.set(code, storedFights(code).then((rows) => rows.map((r) => r.data as FightDigest)).catch(() => []));
+    if (!fightsByCode.has(code)) fightsByCode.set(code, storedDigests(code).catch(() => []));
     return fightsByCode.get(code)!;
   };
   const cards = list.raids.filter((r) => r.startTime && r.card);
@@ -125,7 +125,7 @@ export async function profileData(session: Session): Promise<ProfileData> {
       const best = [...rows].sort((a, b) => (parseOf(b.p) ?? -1) - (parseOf(a.p) ?? -1))[0];
       const seconds = rows.reduce((t, x) => t + x.f.seconds, 0) || 1;
       const realm = c.realm || last.server;
-      const region = realm ? await getReportRegion(r.host, r.code).catch(() => null) : null;
+      const region = realm ? await reportRegion(r.host, r.code).catch(() => null) : null;
       const level = region && realm ? await characterLevel(region, realm, c.character).catch(() => null) : null;
       const withStats = [...rows].reverse().find((x) => x.p.stats?.length)?.p;
       return {

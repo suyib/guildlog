@@ -27,14 +27,6 @@ create index if not exists analyses_player_encounter on public.analyses (player_
 -- Lock the table down: only the server (service role key) can read or write.
 alter table public.analyses enable row level security;
 
--- Caches that make repeat analyses fast. Safe to clear at any time.
-create table if not exists public.snapshot_cache (
-  key text primary key,
-  created_at timestamptz not null default now(),
-  snapshot jsonb not null
-);
-alter table public.snapshot_cache enable row level security;
-
 -- ---------- Discord bot ----------
 
 -- Characters people have claimed. An officer approves each claim.
@@ -68,15 +60,6 @@ create table if not exists public.bot_raids (
   ended_at timestamptz
 );
 
--- Everyone's numbers for one boss fight, built once so button clicks are instant.
-create table if not exists public.bot_raid_fights (
-  report_code text not null,
-  fight_id int not null,
-  created_at timestamptz not null default now(),
-  data jsonb not null,
-  primary key (report_code, fight_id)
-);
-
 -- Reminders posted by the scheduled job.
 create table if not exists public.bot_reminders (
   id uuid primary key default gen_random_uuid(),
@@ -91,7 +74,6 @@ create index if not exists bot_reminders_due on public.bot_reminders (sent, send
 
 alter table public.bot_claims enable row level security;
 alter table public.bot_raids enable row level security;
-alter table public.bot_raid_fights enable row level security;
 alter table public.bot_reminders enable row level security;
 
 
@@ -119,19 +101,42 @@ create table if not exists public.guild_raids (
 create index if not exists guild_raids_start on public.guild_raids (start_time desc);
 create index if not exists guild_raids_status on public.guild_raids (status);
 
--- Saved copies of each raid (report, breakdowns, every player's analysis), used when Warcraft Logs is down.
-create table if not exists public.saved_data (
+alter table public.guild_raids enable row level security;
+
+-- ---------- Stored fights (v0.23.0) ----------
+
+-- Each boss fight read once from Warcraft Logs and kept here; every analysis, breakdown and Discord
+-- message is worked out from it. fight_id 0 is the report itself (its fights and players).
+--   stage   meta-live / meta-final (fight 0), tables (fight-wide tables only), full (every event
+--           boiled down per player), legacy (a summary kept from before v0.23.0)
+--   digest  everyone's summary for the fight (fight 0: the report's fights and players)
+--   pack    the stored fight, compressed (gzip, base64)
+create table if not exists public.fight_packs (
   report_code text not null,
-  kind text not null check (kind in ('meta', 'breakdown', 'rows', 'snapshot', 'dashboard')),
-  fight_id int not null default 0,
-  player_id int not null default 0,
+  fight_id int not null,
+  host text not null,
+  stage text not null check (stage in ('meta-live', 'meta-final', 'tables', 'full', 'legacy')),
+  digest jsonb,
+  pack text,
   created_at timestamptz not null default now(),
-  data jsonb not null,
-  primary key (report_code, kind, fight_id, player_id)
+  updated_at timestamptz not null default now(),
+  primary key (report_code, fight_id)
+);
+create index if not exists fight_packs_updated on public.fight_packs (updated_at);
+
+-- Item and enchant names, learned once and shared, so gear shows names without asking Warcraft
+-- Logs again. GAME CONTENT
+create table if not exists public.item_names (
+  kind text not null check (kind in ('item', 'enchant')),
+  id int not null,
+  name text not null,
+  icon text,
+  quality int,
+  primary key (kind, id)
 );
 
-alter table public.guild_raids enable row level security;
-alter table public.saved_data enable row level security;
+alter table public.fight_packs enable row level security;
+alter table public.item_names enable row level security;
 
 -- ---------- Site sign-ins (Admin page) ----------
 

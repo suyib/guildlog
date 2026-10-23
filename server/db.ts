@@ -1,5 +1,5 @@
 // Minimal Supabase (PostgREST) access using the service role key. Server-side only.
-import type { AnalysisResult, HistoryRow, PlayerSnapshot } from './types.js';
+import type { AnalysisResult, HistoryRow } from './types.js';
 
 function cfg() {
   const url = process.env.SUPABASE_URL?.trim();
@@ -95,30 +95,4 @@ export async function getAnalysis(id: string): Promise<AnalysisResult | null> {
   const rows = await rest(`analyses?id=eq.${id}&select=id,created_at,result`);
   if (!rows?.[0]) return null;
   return { ...rows[0].result, id: rows[0].id, createdAt: rows[0].created_at };
-}
-
-// ---------- Caches (make repeat analyses fast) ----------
-
-/** A finished fight doesn't change, so a player's snapshot for it can be reused. */
-export async function getCachedSnapshot(key: string): Promise<PlayerSnapshot | null> {
-  if (!dbEnabled()) return null;
-  try {
-    const rows = await rest(`snapshot_cache?key=eq.${encodeURIComponent(key)}&select=snapshot`);
-    return rows?.[0]?.snapshot ?? null;
-  } catch {
-    return null; // cache is optional
-  }
-}
-
-export async function putCachedSnapshot(key: string, snapshot: PlayerSnapshot): Promise<void> {
-  if (!dbEnabled()) return;
-  try {
-    await rest('snapshot_cache?on_conflict=key', {
-      method: 'POST',
-      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ key, snapshot }),
-    });
-  } catch {
-    /* cache is optional */
-  }
 }

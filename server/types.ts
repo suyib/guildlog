@@ -86,7 +86,7 @@ export interface FightPlayerRow {
 }
 
 /** A player whose snapshot the browser should fetch as a comparison. */
-export interface SnapshotTarget { kind: ComparisonKind; label: string; host: string; code: string; fight: FightRef; actor: ActorRef; sameClass: boolean; row?: FightPlayerRow }
+export interface SnapshotTarget { kind: ComparisonKind; label: string; host: string; code: string; fight: FightRef; actor: ActorRef; sameClass: boolean }
 
 export interface Comparison {
   kind: ComparisonKind;
@@ -217,8 +217,11 @@ export interface ReportSummary {
   title: string;
   /** When the log started, ms since epoch. */
   startTime?: number;
-  /** playerIds: who was in that fight (empty when Warcraft Logs doesn't say, so everyone is shown). */
-  fights: { id: number; name: string; encounterId: number; kill: boolean; seconds: number; startTime: number; endTime: number; playerIds: number[] }[];
+  /**
+   * playerIds: who was in that fight (empty when Warcraft Logs doesn't say, so everyone is shown).
+   * stored: read in full already, so picking it shows the analysis straight away.
+   */
+  fights: { id: number; name: string; encounterId: number; kill: boolean; seconds: number; startTime: number; endTime: number; playerIds: number[]; stored?: boolean }[];
   players: { id: number; name: string; className: string; server: string | null }[];
   suggestedFight?: number;
   suggestedPlayer?: number;
@@ -310,7 +313,6 @@ export interface FightBreakdown {
   dpsSeries: { t: number; dps: number }[];
   /** Plain-language "what went well / what to work on" for the whole raid. */
   feedback: RaidFeedback;
-  offline?: Offline;
 }
 
 export interface RaidPoint {

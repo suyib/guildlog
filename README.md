@@ -89,17 +89,25 @@ The bot runs on the same Vercel project (no extra server) as a single function, 
 
 **Activity log (optional).** Set `DISCORD_LOG_CHANNEL_ID` to a private channel and the bot posts one line per command or button press: who, what (command and which options were used, never what was typed), where, when, and whether it worked or the error if not. Failed reminders and command registration are logged too. Mentions in the log don't ping anyone. To check it's set up, open `https://guildlog.uk/api/discord?task=logtest&key=YOUR_CRON_SECRET`: it posts a test line, or says what's wrong.
 
-Raid summaries are built once per boss kill (a few fight-wide Warcraft Logs queries) and stored in `bot_raid_fights`, so button presses are instant afterwards.
+The bot reads the same stored fights as the site (see **Stored fights** below), so its DMs and raid summary always match what the site shows, and button presses are instant.
 
 ## Past raids
 
 The **Past raids** page shows a calendar of raid nights, a card for each (bosses, kill times, wipes, deaths, what went well and what to work on, and who was there), attendance over time and kill times per boss.
 
 - Raids are added by `/raidend`, by **Add a past raid** on the page, or automatically from the guild's uploads if `GUILD_NAME`, `GUILD_REALM` and `GUILD_REGION` are set.
-- Each raid is then saved in full by the every-5-minutes job (`?task=reminders`, the same one that posts reminders): the report, each boss kill's breakdown, and every player's analysis and gear. A night is usually done within an hour.
-- When Warcraft Logs is down, saved raids load from that copy on the site and in the bot. Comparing with another log still needs Warcraft Logs.
-- Full player detail is kept for `ARCHIVE_DAYS` (default 90); summaries, breakdowns and raid cards stay. A full raid is roughly 3–5 MB.
-- Needs the `guild_raids` and `saved_data` tables: run `supabase/schema.sql` again (it's safe to re-run).
+- Each raid is then stored by the every-5-minutes job (`?task=reminders`, the same one that posts reminders): one read per boss kill. A night is usually done within the hour.
+- When Warcraft Logs is down, stored raids still load on the site and in the bot. Comparing with a log that's never been read still needs Warcraft Logs.
+
+## Stored fights
+
+Each boss fight is read from Warcraft Logs **once** and kept in `fight_packs` (compressed). Every player's analysis, gear and charts, the whole-raid breakdown, Whole night, raid cards and the Discord DMs and raid summary are worked out from that one copy, so they always agree and Warcraft Logs isn't asked again.
+
+- A read is about 15–30 requests per boss (fight-wide tables, every event in a few time slices, buffs, gear), instead of 8–12 per player per boss before.
+- A stored kill is roughly 60–120 KB; a raid night roughly 1 MB.
+- A finished log's fight list is reused too (3 hours after its last fight). Item and enchant names are learned once into `item_names`.
+- Logs that aren't on Past raids (comparisons with other guilds' logs) are removed after a week unused. Past raids keep each kill whole for `ARCHIVE_DAYS` (default 90), then just its tables and summary (about a fifth of the size): breakdowns, cards and the bot still work; a player's cast timeline would need a fresh read.
+- Upgrading from v0.22 or earlier: run `supabase/migrate-0.23.sql` once after deploying. It keeps the bot's summaries, removes `snapshot_cache`, `saved_data` and `bot_raid_fights`, and queues Past raids to be read once into the new format.
 
 ## Releases
 
@@ -112,6 +120,6 @@ Every version bump in `package.json` gets a short entry at the top of `src/chang
 
 ## Notes
 
-- Report data comes from the Warcraft Logs API, so a report must be public or unlisted, and the analysis has to run before the report is archived. After that, the saved copy here is permanent.
+- Report data comes from the Warcraft Logs API, so a report must be public or unlisted, and a fight has to be read before the report is archived. After that, the stored copy here is permanent (for Past raids).
 - The top-parse comparison uses Warcraft Logs rankings for the same encounter, class and spec.
 - Check the Warcraft Logs API terms before sharing the site beyond your guild.

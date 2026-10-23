@@ -2,10 +2,9 @@
 import assert from 'node:assert/strict';
 import { buildFindings, buildSnapshot, findGaps, healingFeedback, possibleUses } from '../server/analysis';
 import type { Fight, PlayerTables } from '../server/wcl';
-import { dpsSeriesFrom, healingFrom, seriesFrom, survivalFrom } from '../server/dashboard';
+import { healingFrom, seriesFrom, seriesFromSeconds, survivalFrom } from '../server/dashboard';
 import { statTooltip } from '../src/statInfo';
 import { cooldownFor } from '../server/cooldowns';
-import { seriesOverTime } from '../server/breakdown';
 
 const fight: Fight = { id: 11, encounterID: 651, name: 'Magtheridon', startTime: 0, endTime: 177_000, kill: true, size: 25, difficulty: 3 };
 const abilities = new Map<number, string>([[1, 'Steady Shot'], [2, 'Bestial Wrath'], [3, 'Blood Fury'], [4, 'Auto Shot'], [5, 'Arcane Shot']]);
@@ -75,7 +74,7 @@ assert.ok(cross.some((f) => f.title.startsWith('Bestial Wrath: 1 of 2')), 'own c
 // DPS over time from damage events: report-relative timestamps, aligned to the fight start
 const start = 5_000_000;
 const events = Array.from({ length: 120 }, (_, i) => ({ timestamp: start + i * 1000, amount: i < 60 ? 2000 : 1000 }));
-const series = dpsSeriesFrom(events, start, 120, 1500);
+const series = seriesFrom(events, start, 120, 1500);
 assert.equal(series.length, 120);
 assert.ok(series[10].dps > series[100].dps, 'busy first half shows higher DPS');
 assert.ok(Math.abs(series.reduce((t, p) => t + p.dps, 0) / 120 - 1500) < 2, 'average matches real DPS');
@@ -111,12 +110,12 @@ assert.equal(cooldownFor('Celestial Alignment', 'classic.warcraftlogs.com'), 180
 assert.equal(cooldownFor('Arcane Power', 'classic.warcraftlogs.com'), 90);
 assert.equal(cooldownFor('Arcane Power', 'fresh.warcraftlogs.com'), 180);
 
-// Raid DPS graph: a series that starts 30s before the pull still lines up with the fight
-const g = { data: { series: [{ name: 'Total', pointStart: 970_000, pointInterval: 1000, data: [...new Array(30).fill(0), ...new Array(60).fill(0).map((_, i) => (i < 30 ? 2000 : 1000))] }] } };
-const line = seriesOverTime(g, 1_000_000, 60, 1500);
-assert.equal(line.length, 60);
-assert.ok(line[5].dps > line[50].dps, 'busy first half shows higher raid DPS');
-assert.ok(Math.abs(line.reduce((t, p) => t + p.dps, 0) / 60 - 1500) < 2);
+// The same line from stored per-second amounts
+const stored = seriesFromSeconds(Array.from({ length: 60 }, (_, i) => (i < 30 ? 2000 : 1000)), 1500);
+assert.equal(stored.length, 60);
+assert.ok(stored[5].dps > stored[50].dps, 'busy first half shows higher raid DPS');
+assert.ok(Math.abs(stored.reduce((t, p) => t + p.dps, 0) / 60 - 1500) < 2);
+assert.deepEqual(seriesFromSeconds(new Array(60).fill(0), 1500), [], 'nothing done: no line');
 
 // Pet damage folded into the hunter's table ("Melee", "Gore") is split back out and labeled as the pet's
 const withPet = buildSnapshot({
@@ -148,8 +147,7 @@ const heal = healingFrom({
   ] } },
   everyone: { data: { entries: [{ id: 28, name: 'Suy', type: 'Priest', total: 400_000, activeTime: 160_000 }, { id: 5, name: 'Other', type: 'Druid', total: 500_000 }, { id: 9, name: 'Dps', type: 'Rogue', total: 1_000 }] } },
   rankings: { data: [{ roles: { healers: { characters: [{ name: 'Suy', rankPercent: 81 }, { name: 'Other', rankPercent: 90 }] } } }] },
-  events: [],
-}, 28, 200, 0)!;
+}, 28, 200)!;
 assert.equal(heal.total, 400_000);
 assert.equal(heal.hps, 2000);
 assert.equal(heal.overhealPct, 47.4);
@@ -167,7 +165,7 @@ const meHealer: any = { ...me, total: 10_000, healing: heal };
 const vs = healingFeedback(meHealer, heal, refHealer);
 assert.ok(vs.work.some((f) => f.title === '33% less healing per second than Other' && f.detail.includes('Prayer of Mending is 40% of their healing and 0% of yours')));
 assert.ok(vs.work.some((f) => f.title === 'More overhealing than Other'));
-assert.equal(healingFrom({ mine: { data: { entries: [] } }, everyone: null, rankings: null, events: [] }, 28, 200, 0), undefined, 'no healing: no Healing tab');
+assert.equal(healingFrom({ mine: { data: { entries: [] } }, everyone: null, rankings: null }, 28, 200), undefined, 'no healing: no Healing tab');
 
 // Damage taken over time names what hit hardest
 const takenLine = seriesFrom([

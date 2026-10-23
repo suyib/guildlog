@@ -1,14 +1,14 @@
 {
   "name": "guild-logs",
   "private": true,
-  "version": "0.22.0",
+  "version": "0.23.0",
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
     "dev:ui": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "tsx scripts/test-analysis.ts && tsx scripts/test-bot.ts"
+    "test": "tsx scripts/test-analysis.ts && tsx scripts/test-bot.ts && tsx scripts/test-pack.ts"
   },
   "dependencies": {
     "@vercel/functions": "3.9.11",

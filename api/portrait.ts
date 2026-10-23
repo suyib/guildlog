@@ -1,6 +1,6 @@
 import { json, requireSession } from '../server/auth.js';
 import { characterPortrait, portraitsEnabled } from '../server/blizzard.js';
-import { getReportRegion } from '../server/wcl.js';
+import { reportRegion } from '../server/pack.js';
 
 const regionCache = new Map<string, string | null>();
 
@@ -14,7 +14,7 @@ export async function GET(req: Request): Promise<Response> {
   const server = q.get('server') ?? '';
   if (!portraitsEnabled() || !host || !code || !name || !server) return json({ url: null });
   try {
-    if (!regionCache.has(code)) regionCache.set(code, await getReportRegion(host, code));
+    if (!regionCache.has(code)) regionCache.set(code, await reportRegion(host, code));
     const region = regionCache.get(code);
     const url = region ? await characterPortrait(region, server, name) : null;
     // Portraits rarely change; let the browser keep the answer for a day.

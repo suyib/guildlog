@@ -10,7 +10,6 @@ import { auditLine, describe } from '../server/discord/audit';
 import { rest } from '../server/db';
 import { gql } from '../server/wcl';
 import { buildCard } from '../server/archive';
-import { liveOrSaved } from '../server/saved';
 import { forThisGuild, readSession, sessionCookie, sign as signValue } from '../server/auth';
 import { isSiteAdmin } from '../server/officers';
 import { assignable, canEdit, discordRank, effectiveRank } from '../server/ranks';
@@ -227,25 +226,6 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
   assert.equal(early.kills, 2);
   assert.deepEqual(early.raiders.map((r) => r.name), ['Alt', 'Luke', 'Suy']);
   assert.deepEqual(early.feedback, { good: [], work: [] });
-}
-
-// When Warcraft Logs is down, a saved raid answers from its saved copy (marked offline)
-{
-  const realFetch = globalThis.fetch;
-  process.env.SUPABASE_URL = 'https://db.example';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
-  globalThis.fetch = (async (url: string) => {
-    if (String(url).includes('saved_data') && String(url).includes('fight_id=eq.3')) return new Response(JSON.stringify([{ data: { fight: { id: 3 } }, created_at: '2026-10-21T20:00:00Z' }]), { status: 200 });
-    return new Response('[]', { status: 200 });
-  }) as typeof fetch;
-  const down = async () => { throw new Error('Warcraft Logs is having trouble right now'); };
-  const got: any = await liveOrSaved('ABC', 'breakdown', 3, 0, down);
-  assert.deepEqual(got, { fight: { id: 3 }, offline: { savedAt: '2026-10-21T20:00:00Z' } });
-  await assert.rejects(liveOrSaved('ABC', 'breakdown', 4, 0, down), /having trouble/, 'not saved: the real error');
-  assert.equal(await liveOrSaved('ABC', 'breakdown', 3, 0, async () => 'live'), 'live', 'live answer wins when it works');
-  globalThis.fetch = realFetch;
-  delete process.env.SUPABASE_URL;
-  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 }
 
 // Healers: DM pages in terms of healing

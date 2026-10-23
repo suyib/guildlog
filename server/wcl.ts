@@ -174,46 +174,80 @@ export interface ReportMeta {
   zone: { id: number; name: string } | null;
   fights: Fight[];
   masterData: { actors: Actor[] };
+  /** The report's region slug ("eu", "us"), for character portraits and levels. */
+  region?: string | null;
 }
 
 export async function getReportMeta(host: string, code: string, timeoutMs?: number): Promise<ReportMeta> {
-  const q = `query($code:String!){reportData{report(code:$code){
-    code title startTime zone{id name}
+  const q = (withRegion: boolean) => `query($code:String!){reportData{report(code:$code){
+    code title startTime zone{id name} ${withRegion ? 'region{slug}' : ''}
     fights{id encounterID name startTime endTime kill size difficulty friendlyPlayers}
     masterData{actors{id name type subType petOwner server}}
   }}}`;
-  const d = await gql<{ reportData: { report: ReportMeta | null } }>(host, q, { code }, timeoutMs);
-  if (!d.reportData.report) throw new Error('Report not found (it may be private or archived).');
-  return d.reportData.report;
+  type Raw = Omit<ReportMeta, 'region'> & { region?: { slug?: string } | null };
+  // The region is a nice-to-have: if asking for it fails, read the report without it
+  const d = await gql<{ reportData: { report: Raw | null } }>(host, q(true), { code }, timeoutMs).catch((e) => {
+    if (/region/i.test((e as Error).message)) return gql<{ reportData: { report: Raw | null } }>(host, q(false), { code }, timeoutMs);
+    throw e;
+  });
+  const r = d.reportData.report;
+  if (!r) throw new Error('Report not found (it may be private or archived).');
+  return { ...r, region: r.region?.slug?.toLowerCase() ?? null };
 }
 
-export interface FightData { damage: any; rankings?: any; details?: any }
+/** Several tables (or rankings) for one fight in a single request, each under its own alias. */
+export async function getTables(host: string, code: string, fightId: number, fields: string, timeoutMs = 25_000): Promise<Record<string, any>> {
+  const d = await gql<{ reportData: { report: Record<string, any> } }>(
+    host,
+    `query($code:String!,$fid:[Int]!){reportData{report(code:$code){ ${fields} }}}`,
+    { code, fid: [fightId] },
+    timeoutMs,
+  );
+  return d.reportData.report ?? {};
+}
+
+/** Every ability's name and icon in the report, for naming events. */
+export async function getAbilities(host: string, code: string, timeoutMs = 20_000): Promise<Map<number, { name: string; icon?: string }>> {
+  const d = await gql<any>(host, 'query($code:String!){reportData{report(code:$code){masterData{abilities{gameID name icon}}}}}', { code }, timeoutMs);
+  return new Map(((d.reportData?.report?.masterData?.abilities ?? []) as any[]).map((a) => [a.gameID, { name: String(a.name), icon: typeof a.icon === 'string' ? a.icon : undefined }]));
+}
+
+export type EventKind = 'DamageDone' | 'Healing' | 'DamageTaken' | 'Casts';
 
 /**
- * Fight-wide tables, fetched once per fight. The damage table is required. Rankings and
- * player details (parse %, item level, realm) are often the slowest things Warcraft Logs
- * computes, so they run as separate requests with a shorter time limit and are left out
- * if they don't arrive in time.
+ * Every event of one kind in a fight (everyone on the raid's side), read as several time slices
+ * at once so even a long fight arrives within one function call. `run` limits how many requests
+ * are open at the same time. Throws WclTimeout if it can't all be read before the deadline: a
+ * partial set would give wrong totals.
  */
-export async function getFightData(host: string, code: string, fightId: number, opts: { rankings?: boolean } = { rankings: true }): Promise<FightData> {
-  const vars = { code, fid: [fightId] };
-  const one = (field: string, timeoutMs: number) =>
-    gql<{ reportData: { report: Record<string, any> } }>(
-      host,
-      `query($code:String!,$fid:[Int]!){reportData{report(code:$code){ ${field} }}}`,
-      vars,
-      timeoutMs,
-    ).then((d) => d.reportData.report);
-  const optional = (field: string) => one(field, 15_000).catch(() => ({}) as Record<string, any>);
-
-  const [damage, rankings, details] = await Promise.all([
-    one('damage: table(dataType:DamageDone, fightIDs:$fid)', 40_000),
-    opts.rankings ? optional('rankings(fightIDs:$fid, playerMetric:dps)') : Promise.resolve({} as Record<string, any>),
-    opts.rankings ? optional('details: playerDetails(fightIDs:$fid)') : Promise.resolve({} as Record<string, any>),
-  ]);
-  return { damage: damage.damage, rankings: rankings.rankings, details: details.details };
+export async function getFightEvents(
+  host: string, code: string, fight: { id: number; startTime: number; endTime: number }, kind: EventKind,
+  deadline: number, run: <T>(job: () => Promise<T>) => Promise<T>,
+): Promise<any[]> {
+  const q = `query($code:String!,$fid:[Int]!,$st:Float,$et:Float){reportData{report(code:$code){
+    events(dataType:${kind}, fightIDs:$fid, startTime:$st, endTime:$et, limit:10000){data nextPageTimestamp}
+  }}}`;
+  const length = fight.endTime - fight.startTime;
+  const slices = Math.min(8, Math.max(1, Math.ceil(length / 90_000)));
+  const step = Math.ceil(length / slices);
+  const parts = await Promise.all(Array.from({ length: slices }, (_, i) => run(async () => {
+    const from = fight.startTime + i * step;
+    const to = i === slices - 1 ? fight.endTime + 1 : from + step;
+    const out: any[] = [];
+    let st: number | null = from;
+    for (let page = 0; st !== null && st < to; page++) {
+      const left = deadline - Date.now();
+      if (left < 3_000 || page >= 25) throw new WclTimeout('Warcraft Logs was too slow sending this fight. Try again in a minute.');
+      const d: any = await gql(host, q, { code, fid: [fight.id], st, et: to }, Math.min(25_000, left));
+      for (const e of d.reportData.report.events?.data ?? []) if (e && e.timestamp >= from && e.timestamp < to) out.push(e);
+      st = d.reportData.report.events?.nextPageTimestamp ?? null;
+    }
+    return out;
+  })));
+  return parts.flat();
 }
 
+/** The shape analysis.ts reads a player's tables in (rebuilt from the stored fight). */
 export interface PlayerTables {
   dmg: any;
   casts: any;
@@ -224,212 +258,6 @@ export interface PlayerTables {
   pets?: { name: string; entries: any[] }[];
 }
 
-/** One player's tables, split into two smaller queries that run at the same time, plus their pets' damage. */
-export async function getPlayerTables(host: string, code: string, fightId: number, sourceId: number): Promise<PlayerTables> {
-  const vars = { code, fid: [fightId], sid: sourceId };
-  const q1 = `query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){
-    dmg: table(dataType:DamageDone, fightIDs:$fid, sourceID:$sid)
-    casts: table(dataType:Casts, fightIDs:$fid, sourceID:$sid)
-    masterData{actors(type:"Pet"){id name petOwner}}
-  }}}`;
-  const q2 = `query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){
-    buffs: table(dataType:Buffs, fightIDs:$fid, sourceID:$sid)
-    taken: table(dataType:DamageTaken, fightIDs:$fid, sourceID:$sid)
-    deaths: table(dataType:Deaths, fightIDs:$fid, sourceID:$sid)
-  }}}`;
-  const [a, b] = await Promise.all([
-    gql<{ reportData: { report: any } }>(host, q1, vars),
-    gql<{ reportData: { report: any } }>(host, q2, vars),
-  ]);
-  const { masterData, ...first } = a.reportData.report;
-  const owned = ((masterData?.actors ?? []) as { id: number; name: string; petOwner: number | null }[]).filter((x) => x.petOwner === sourceId).slice(0, 6);
-  const pets = owned.length ? await getPetTables(host, code, fightId, owned) : [];
-  return { ...first, ...b.reportData.report, pets };
-}
-
-/** Each pet's own damage table in one query. Optional: without it, pet damage just isn't labeled. */
-async function getPetTables(host: string, code: string, fightId: number, pets: { id: number; name: string }[]) {
-  const fields = pets.map((p, i) => `p${i}: table(dataType:DamageDone, fightIDs:$fid, sourceID:${Math.trunc(p.id)})`).join('\n');
-  try {
-    const d = await gql<{ reportData: { report: Record<string, any> } }>(host, `query($code:String!,$fid:[Int]!){reportData{report(code:$code){ ${fields} }}}`, { code, fid: [fightId] }, 15_000);
-    return pets.map((p, i) => ({ name: p.name, entries: (d.reportData.report[`p${i}`]?.data?.entries ?? []) as any[] })).filter((p) => p.entries.length);
-  } catch {
-    return [];
-  }
-}
-
 export interface CastEvent { timestamp: number; type: string; abilityGameID: number; sourceID: number; targetID?: number }
-
-export async function getCastEvents(host: string, code: string, fight: Fight, sourceId: number): Promise<{ events: CastEvent[]; abilities: Map<number, string> }> {
-  const q = `query($code:String!,$fid:[Int]!,$sid:Int!,$st:Float,$et:Float){reportData{report(code:$code){
-    events(dataType:Casts, fightIDs:$fid, sourceID:$sid, startTime:$st, endTime:$et, limit:10000){data nextPageTimestamp}
-    masterData{abilities{gameID name}}
-  }}}`;
-  const events: CastEvent[] = [];
-  let start: number | null = fight.startTime;
-  let abilities = new Map<number, string>();
-  const deadline = Date.now() + 45_000; // all pages together must fit inside one 60s function
-  for (let page = 0; start !== null && page < 10; page++) {
-    const left = deadline - Date.now();
-    if (left < 3_000) throw new WclTimeout('Warcraft Logs was too slow sending the cast events for this player. Try again in a minute.');
-    const d: any = await gql(host, q, { code, fid: [fight.id], sid: sourceId, st: start, et: fight.endTime }, Math.min(25_000, left));
-    const rep = d.reportData.report;
-    if (page === 0) abilities = new Map((rep.masterData?.abilities ?? []).map((a: any) => [a.gameID, a.name]));
-    events.push(...(rep.events?.data ?? []));
-    start = rep.events?.nextPageTimestamp ?? null;
-  }
-  return { events: events.filter((e) => e.type === 'cast'), abilities };
-}
-
-/**
- * Auto attacks (Auto Shot, Melee) as cast-like events, read from the player's damage events.
- * Warcraft Logs doesn't always include auto attacks in a player's cast events, but every swing,
- * hit or miss, shows up as a damage event. Optional: returns nothing if it's slow or fails.
- */
-export async function getAutoAttackEvents(host: string, code: string, fight: Fight, sourceId: number, abilityId: number): Promise<CastEvent[]> {
-  const q = `query($code:String!,$fid:[Int]!,$sid:Int!,$ab:Float,$st:Float,$et:Float){reportData{report(code:$code){
-    events(dataType:DamageDone, fightIDs:$fid, sourceID:$sid, abilityID:$ab, startTime:$st, endTime:$et, limit:10000){data nextPageTimestamp}
-  }}}`;
-  const out: CastEvent[] = [];
-  let start: number | null = fight.startTime;
-  const deadline = Date.now() + 25_000;
-  try {
-    for (let page = 0; start !== null && page < 5; page++) {
-      const left = deadline - Date.now();
-      if (left < 3_000) break;
-      const d: any = await gql(host, q, { code, fid: [fight.id], sid: sourceId, ab: abilityId, st: start, et: fight.endTime }, Math.min(15_000, left));
-      for (const e of d.reportData.report.events?.data ?? []) {
-        // One swing can log more than one damage event; keep one per swing
-        if (e?.type === 'damage' && e.sourceID === sourceId && !(out.length && e.timestamp - out[out.length - 1].timestamp < 50)) {
-          out.push({ timestamp: e.timestamp, type: 'cast', abilityGameID: abilityId, sourceID: sourceId });
-        }
-      }
-      start = d.reportData.report.events?.nextPageTimestamp ?? null;
-    }
-  } catch {
-    return [];
-  }
-  return out;
-}
-
-/** The report's region slug (e.g. "eu", "us"), for character portraits. Separate query so it can't break report loading. */
-export async function getReportRegion(host: string, code: string): Promise<string | null> {
-  try {
-    const d = await gql<any>(host, `query($code:String!){reportData{report(code:$code){region{slug}}}}`, { code });
-    return d.reportData?.report?.region?.slug?.toLowerCase() ?? null;
-  } catch {
-    return null;
-  }
-}
-
-// ---------- Personal dashboard (no comparison) ----------
-
-export interface DashboardRaw {
-  summary: any;
-  combatant: any;
-  damageEvents: AmountEvent[];
-  /** Damage the player took, one event per hit. */
-  takenEvents: AmountEvent[];
-  taken: any;
-  tankIds: number[];
-  raidIds: number[];
-  /** Healing: the player's own table (by ability), everyone's (active time, ranks), the hps rankings, and heals over time. */
-  healing: { mine: any; everyone: any; rankings: any; events: AmountEvent[] };
-}
-
-export type AmountKind = 'damage' | 'healing' | 'taken';
 export interface AmountEvent { timestamp: number; amount: number; ability?: string }
 
-/**
- * One player's damage done, healing done or damage taken across the fight, paged, within a time
- * budget. Damage taken events carry the ability's name (for "what hit you" on the chart).
- */
-async function getAmountEvents(host: string, code: string, fightId: number, sourceId: number, start: number, end: number, kind: AmountKind): Promise<AmountEvent[]> {
-  const dataType = kind === 'damage' ? 'DamageDone' : kind === 'healing' ? 'Healing' : 'DamageTaken';
-  const who = kind === 'taken' ? 'targetID:$sid' : 'sourceID:$sid';
-  const q = (withNames: boolean) => `query($code:String!,$fid:[Int]!,$sid:Int!,$st:Float,$et:Float){reportData{report(code:$code){
-    events(dataType:${dataType}, fightIDs:$fid, ${who}, startTime:$st, endTime:$et, limit:10000){data nextPageTimestamp}
-    ${withNames ? 'masterData{abilities{gameID name}}' : ''}
-  }}}`;
-  // Damage is "damage" events; healing is "heal" plus shields soaking damage ("absorbed")
-  const types = kind === 'healing' ? new Set(['heal', 'absorbed']) : new Set(['damage']);
-  const out: AmountEvent[] = [];
-  let names = new Map<number, string>();
-  let st: number | null = start;
-  const deadline = Date.now() + 35_000;
-  for (let page = 0; st !== null && page < 8; page++) {
-    const left = deadline - Date.now();
-    if (left < 3_000) break; // keep what we have; the chart is scaled to the real average anyway
-    const withNames = kind === 'taken' && page === 0;
-    const d: any = await gql(host, q(withNames), { code, fid: [fightId], sid: sourceId, st, et: end }, Math.min(20_000, left));
-    const rep = d.reportData.report;
-    if (withNames) names = new Map(((rep.masterData?.abilities ?? []) as any[]).map((a) => [a.gameID, a.name]));
-    for (const e of rep.events?.data ?? []) {
-      if (!types.has(e?.type) || typeof e.timestamp !== 'number') continue;
-      if (kind === 'taken' && e.targetID !== sourceId) continue;
-      // Damage (done or taken) counts what shields absorbed too; healing counts only what landed, not overheal
-      const amount = kind === 'healing' ? Number(e.amount) || 0 : (Number(e.amount) || 0) + (Number(e.absorbed) || 0);
-      if (amount <= 0) continue;
-      out.push(kind === 'taken' ? { timestamp: e.timestamp, amount, ability: names.get(e.abilityGameID) ?? 'Unknown' } : { timestamp: e.timestamp, amount });
-    }
-    st = rep.events?.nextPageTimestamp ?? null;
-  }
-  return out;
-}
-
-/**
- * A player's healing tables for a fight: their own (by spell), everyone's (active time, place among
- * the healers) and the healing rankings (parse). Empty parts when Warcraft Logs doesn't answer.
- */
-export async function getHealingTables(host: string, code: string, fightId: number, sourceId: number): Promise<{ mine: any; everyone: any; rankings: any }> {
-  const d = await gql<{ reportData: { report: Record<string, any> } }>(
-    host,
-    `query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){
-      mine: table(dataType:Healing, fightIDs:$fid, sourceID:$sid)
-      everyone: table(dataType:Healing, fightIDs:$fid)
-      rankings(fightIDs:$fid, playerMetric:hps)
-    }}}`,
-    { code, fid: [fightId], sid: sourceId },
-    20_000,
-  ).catch(() => null);
-  const r = d?.reportData.report ?? {};
-  return { mine: r.mine, everyone: r.everyone, rankings: r.rankings };
-}
-
-/**
- * One player's gear, stats, damage done, healing and damage taken over time, and the raid's damage taken. Each part is its own
- * request with a time limit, and any part that fails or is slow is simply left out.
- */
-export async function getDashboardRaw(host: string, code: string, fightId: number, sourceId: number, start: number, end: number): Promise<DashboardRaw> {
-  const report = (query: string, vars: Record<string, unknown>) =>
-    gql<{ reportData: { report: Record<string, any> } }>(host, query, vars, 20_000)
-      .then((d) => d.reportData.report)
-      .catch(() => ({}) as Record<string, any>);
-  // Healing: the tables first (cheap); heals over time only for players who actually healed
-  const healing = getHealingTables(host, code, fightId, sourceId).then(async (h) => {
-    const mineTotal = ((h.mine?.data?.entries ?? []) as any[]).reduce((t, e) => t + (Number(e?.total) || 0), 0);
-    const events = mineTotal > 0 ? await getAmountEvents(host, code, fightId, sourceId, start, end, 'healing').catch(() => []) : [];
-    return { ...h, events };
-  });
-  const [summary, details, damageEvents, taken, heal, takenEvents] = await Promise.all([
-    report(`query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){ summary: table(dataType:Summary, fightIDs:$fid, sourceID:$sid) }}}`, { code, fid: [fightId], sid: sourceId }),
-    report(`query($code:String!,$fid:[Int]!){reportData{report(code:$code){ details: playerDetails(fightIDs:$fid, includeCombatantInfo:true) }}}`, { code, fid: [fightId] }),
-    getAmountEvents(host, code, fightId, sourceId, start, end, 'damage').catch(() => []),
-    report(`query($code:String!,$fid:[Int]!){reportData{report(code:$code){ taken: table(dataType:DamageTaken, fightIDs:$fid) }}}`, { code, fid: [fightId] }),
-    healing,
-    getAmountEvents(host, code, fightId, sourceId, start, end, 'taken').catch(() => []),
-  ]);
-  const d = details.details?.data?.playerDetails ?? details.details?.playerDetails ?? {};
-  const everyone = ['tanks', 'healers', 'dps'].flatMap((r) => (d[r] ?? []) as any[]);
-  const mine = everyone.find((p) => p.id === sourceId);
-  return {
-    summary: summary.summary,
-    combatant: mine?.combatantInfo ?? null,
-    damageEvents,
-    takenEvents,
-    taken: taken.taken,
-    tankIds: ((d.tanks ?? []) as any[]).map((p) => p.id),
-    raidIds: everyone.map((p) => p.id),
-    healing: heal,
-  };
-}

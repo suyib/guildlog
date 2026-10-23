@@ -101,22 +101,6 @@ export async function recentRaids(limit = 5): Promise<Raid[]> {
   return (await rest(`bot_raids?order=started_at.desc&limit=${limit}`)) ?? [];
 }
 
-// ---------- Per-fight raid summaries (built once, reused for every button click) ----------
-
-export interface StoredFight { report_code: string; fight_id: number; data: unknown }
-
-export async function storedFights(code: string): Promise<StoredFight[]> {
-  return (await rest(`bot_raid_fights?report_code=eq.${q(code)}&select=report_code,fight_id,data`)) ?? [];
-}
-
-export async function storeFight(code: string, fightId: number, data: unknown) {
-  await rest('bot_raid_fights?on_conflict=report_code,fight_id', {
-    method: 'POST',
-    headers: { Prefer: 'resolution=merge-duplicates' },
-    body: JSON.stringify({ report_code: code, fight_id: fightId, data }),
-  });
-}
-
 /** Has this character been seen in any saved raid or analysis? Shown to officers when approving claims. */
 export async function lastSeen(character: string): Promise<string | null> {
   const a = (await rest(`analyses?player_name=ilike.${q(character)}&select=created_at,encounter_name&order=created_at.desc&limit=1`).catch(() => null))?.[0];

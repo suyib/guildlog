@@ -1,18 +1,21 @@
-// The analysis runs as several short requests so no single one hits Vercel's time limit:
-//   1. fight    -> the fight-wide table for everyone (damage, rankings, item levels), fetched ONCE
-//   2. snapshot -> one player's own tables + casts (called for you and each comparison, in parallel)
+// An analysis reads the fight once ("Reading the fight" stores the whole fight, see pack.ts), then:
+//   1. fight    -> everyone's fight-wide numbers (and the whole fight is read and stored)
+//   2. snapshot -> one player's analysis data, from the stored fight
 //   3. finish   -> builds the findings and saves the result
 import { buildFindings, buildSnapshot, buildStrengths } from './analysis.js';
-import { getCachedSnapshot, putCachedSnapshot, saveAnalysis } from './db.js';
-import type { ActorRef, AnalysisResult, Comparison, Dashboard, FightPlayerRow, FightRef, PlayerSnapshot, ReportSummary } from './types.js';
-import { metaLiveOrSaved } from './saved.js';
-import { healingFrom } from './dashboard.js';
-import { type Actor, type Fight, getAutoAttackEvents, getCastEvents, getFightData, getHealingTables, getPlayerTables, parseReportUrl } from './wcl.js';
+import { saveAnalysis } from './db.js';
+import { healingFromPack } from './dashboard.js';
+import { type FightPack, getMeta, storedStages } from './pack.js';
+import { detailRows, num, rankingRows } from './tables.js';
+import type { ActorRef, AnalysisResult, Comparison, Dashboard, FightPlayerRow, PlayerSnapshot, ReportSummary } from './types.js';
+import { type CastEvent, type Fight, parseReportUrl } from './wcl.js';
 
 export async function reportSummary(url: string): Promise<ReportSummary> {
   const parsed = parseReportUrl(url);
-  // Our own saved raids still load when Warcraft Logs is down
-  const { meta, offline } = await metaLiveOrSaved(parsed.host, parsed.code);
+  // A finished log comes from the stored copy; a live one from Warcraft Logs (or the stored copy if it's down)
+  const [{ meta, offline }, stages] = await Promise.all([getMeta(parsed.host, parsed.code), storedStages(parsed.code).catch(() => new Map<number, string>())]);
+  // Fights already read in full open without asking Warcraft Logs, so the page can show them straight away
+  const stored = new Set([...stages].filter(([, stage]) => stage === 'full').map(([id]) => id));
   const encounters = meta.fights.filter((f) => f.encounterID > 0);
   // Only people who were in at least one boss fight. A report's actor list also holds everyone the
   // logger saw (other raids, people in town), which is where "Unknown" class entries come from.
@@ -37,6 +40,7 @@ export async function reportSummary(url: string): Promise<ReportSummary> {
       startTime: f.startTime,
       endTime: f.endTime,
       playerIds: f.friendlyPlayers ?? [],
+      ...(stored.has(f.id) ? { stored: true } : {}),
     })),
     players: players
       .map((p) => ({ id: p.id, name: p.name, className: p.subType, server: p.server ?? null }))
@@ -47,24 +51,13 @@ export async function reportSummary(url: string): Promise<ReportSummary> {
   };
 }
 
-export function rankingRows(rankings: any): any[] {
-  const roles = rankings?.data?.[0]?.roles ?? {};
-  return ['tanks', 'healers', 'dps'].flatMap((r) => roles[r]?.characters ?? []);
-}
-
-export function detailRows(details: any): any[] {
-  const d = details?.data?.playerDetails ?? details?.playerDetails ?? {};
-  return ['tanks', 'healers', 'dps'].flatMap((r) => d[r] ?? []);
-}
-
-/** Step 1: everyone's fight-wide numbers in one query. */
-export async function fightRows(host: string, code: string, fightId: number, withRankings = true): Promise<FightPlayerRow[]> {
-  const fd = await getFightData(host, code, fightId, { rankings: withRankings });
-  const ranks = rankingRows(fd.rankings);
-  const details = detailRows(fd.details);
-  return (fd.damage?.data?.entries ?? [])
-    .filter((e: any) => e.type !== 'Pet' && e.type !== 'NPC')
-    .map((e: any): FightPlayerRow => {
+/** Step 1: everyone's fight-wide numbers, from the stored fight. */
+export function rowsFromPack(pack: FightPack): FightPlayerRow[] {
+  const ranks = rankingRows(pack.t.rankings);
+  const details = detailRows(pack.t.details);
+  return ((pack.t.damage?.data?.entries ?? []) as any[])
+    .filter((e) => e.type !== 'Pet' && e.type !== 'NPC')
+    .map((e): FightPlayerRow => {
       const rank = ranks.find((r) => r.name === e.name);
       const det = details.find((x) => x.id === e.id || x.name === e.name);
       const [iconClass, iconSpec] = String(e.icon ?? '').split('-');
@@ -84,60 +77,71 @@ export async function fightRows(host: string, code: string, fightId: number, wit
     });
 }
 
-/** Each class's auto attack (ability ID and name in the log). Casters' wand shots aren't shown. */
-const AUTO_ATTACK: Record<string, { id: number; name: string } | null> = {
-  Hunter: { id: 75, name: 'Auto Shot' },
-  Mage: null, Priest: null, Warlock: null,
-  default: { id: 1, name: 'Melee' },
-};
-
-const toFight = (f: FightRef): Fight => ({ ...f, size: null, difficulty: null });
-const toActor = (a: ActorRef): Actor => ({ id: a.id, name: a.name, type: 'Player', subType: a.className, petOwner: null });
+/** Each class's auto attack (ability ID in the log). Casters' wand shots aren't shown. GAME CONTENT */
+const AUTO_ATTACK: Record<string, number | null> = { Hunter: 75, Mage: null, Priest: null, Warlock: null, default: 1 };
 
 /**
- * Step 2: one player's snapshot. Pass the player's fight row from step 1 so the fight-wide
- * table isn't fetched again; without it only the damage table is fetched.
+ * Step 2: one player's analysis data from the stored fight. Before the whole fight has been read
+ * (Warcraft Logs down or slow), it falls back to the fight-wide numbers, without the cast timeline.
  */
-export async function snapshotOne(host: string, code: string, fightRef: FightRef, actorRef: ActorRef, row?: FightPlayerRow): Promise<PlayerSnapshot> {
-  // v5: auto attacks are also read from damage events when the cast events leave them out
-  const cacheKey = `v7:${host}:${code}:${fightRef.id}:${fightRef.endTime}:${actorRef.id}`;
-  const cached = await getCachedSnapshot(cacheKey);
-  if (cached) return cached;
-  const fresh = await buildFreshSnapshot(host, code, fightRef, actorRef, row);
-  await putCachedSnapshot(cacheKey, fresh);
-  return fresh;
-}
+export function snapshotFromPack(host: string, code: string, pack: FightPack, actorRef: ActorRef): PlayerSnapshot {
+  const fight: Fight = { ...pack.fight, size: null, difficulty: null };
+  const row = rowsFromPack(pack).find((x) => x.id === actorRef.id || x.name === actorRef.name);
+  const id = row?.id ?? actorRef.id;
+  const p = pack.full?.players[id];
+  const names = pack.full?.names ?? {};
+  const nameOf = (a: number) => names[a]?.[0] ?? `Spell ${a}`;
+  const iconOf = (a: number) => names[a]?.[1];
+  const tableRow = (tbl: any) => ((tbl?.data?.entries ?? []) as any[]).find((e) => e.id === id);
 
-async function buildFreshSnapshot(host: string, code: string, fightRef: FightRef, actorRef: ActorRef, row?: FightPlayerRow): Promise<PlayerSnapshot> {
-  const fight = toFight(fightRef);
-  const actor = toActor(actorRef);
-  const auto = AUTO_ATTACK[actorRef.className] ?? AUTO_ATTACK.default;
-  const [r, tables, casts, autos, healTables] = await Promise.all([
-    row ? Promise.resolve(row) : fightRows(host, code, fight.id, false).then((rows) => rows.find((x) => x.id === actor.id || x.name === actor.name)),
-    getPlayerTables(host, code, fight.id, actor.id),
-    getCastEvents(host, code, fight, actor.id),
-    auto ? getAutoAttackEvents(host, code, fight, actor.id, auto.id) : Promise.resolve([]),
-    getHealingTables(host, code, fight.id, actor.id),
-  ]);
-  // If the cast events left out auto attacks, add them from the damage events for the timeline
-  if (auto && autos.length && !casts.events.some((e) => casts.abilities.get(e.abilityGameID) === auto.name)) {
-    if (!casts.abilities.has(auto.id)) casts.abilities.set(auto.id, auto.name);
-    casts.events = [...casts.events, ...autos.map((e) => ({ ...e, abilityGameID: auto.id }))].sort((a, b) => a.timestamp - b.timestamp);
+  // Damage by ability: the player's own, and each pet's separately
+  const dmgRow = ([a, total, hits, crits, misses, uses]: number[]) => ({ name: nameOf(a), guid: a, total, hitCount: hits, critHitCount: crits, missCount: misses, uses, abilityIcon: iconOf(a) });
+  const dmg = p
+    ? { data: { entries: p.dmg.map(dmgRow) } }
+    : { data: { entries: ((tableRow(pack.t.damage)?.abilities ?? []) as any[]).filter((a) => a.type !== 'Pet').map((a) => ({ name: a.name, total: a.total })) } };
+  const pets = p
+    ? p.pets.map((x) => ({ name: x.name, entries: x.dmg.map(dmgRow) }))
+    : ((tableRow(pack.t.damage)?.pets ?? []) as any[]).map((x) => ({ name: x.name, entries: [{ name: x.name, total: x.total }] }));
+  const casts = { data: { entries: ((tableRow(pack.t.casts)?.abilities ?? []) as any[]).map((a) => ({ name: a.name, total: a.total, abilityIcon: a.abilityIcon })) } };
+  const buffs = p
+    ? { data: { totalTime: p.buffs.total, auras: p.buffs.auras.map(([a, up, n, bands]) => ({ name: nameOf(a), guid: a, totalUptime: up, totalUses: n, abilityIcon: iconOf(a), bands: (bands ?? []).map(([s, e]) => ({ startTime: s + fight.startTime, endTime: e + fight.startTime })) })) } }
+    : { data: { auras: [] } };
+  const taken = { data: { entries: ((tableRow(pack.t.taken)?.abilities ?? []) as any[]).map((a) => ({ name: a.name, total: a.total })) } };
+  const deaths = { data: { entries: ((pack.t.deaths?.data?.entries ?? []) as any[]).filter((d) => d.id === id).map((d) => ({ timestamp: num(d.deathTime ?? d.timestamp), killingBlow: d.killingBlow })) } };
+
+  // The cast timeline, with auto attacks added from the swings when the casts leave them out
+  const abilities = new Map<number, string>();
+  const events: CastEvent[] = (p?.casts ?? []).map(([t, a]) => {
+    abilities.set(a, nameOf(a));
+    return { timestamp: fight.startTime + t * 10, type: 'cast', abilityGameID: a, sourceID: id };
+  });
+  const auto = AUTO_ATTACK[actorRef.className] === undefined ? AUTO_ATTACK.default : AUTO_ATTACK[actorRef.className];
+  const swings = auto ? p?.autos[auto] ?? [] : [];
+  if (auto && swings.length && !events.some((e) => e.abilityGameID === auto)) {
+    abilities.set(auto, nameOf(auto));
+    events.push(...swings.map((t) => ({ timestamp: fight.startTime + t * 10, type: 'cast', abilityGameID: auto, sourceID: id })));
+    events.sort((a, b) => a.timestamp - b.timestamp);
   }
+
   const snapshot = buildSnapshot({
     host,
     code,
     fight,
-    actor,
-    fightRow: r ? { icon: r.icon, activeTime: r.activeTime } : undefined,
-    rankingRow: r ? { rankPercent: r.rankPercent, class: r.className, spec: r.specName } : undefined,
-    itemLevel: r?.itemLevel ?? null,
-    tables,
-    casts,
+    actor: { id, name: actorRef.name, type: 'Player', subType: actorRef.className, petOwner: null },
+    fightRow: row ? { icon: row.icon, activeTime: row.activeTime } : undefined,
+    rankingRow: row ? { rankPercent: row.rankPercent, class: row.className, spec: row.specName } : undefined,
+    itemLevel: row?.itemLevel ?? null,
+    tables: { dmg, casts, buffs, taken, deaths, pets },
+    casts: { events, abilities },
   });
-  snapshot.server = r?.server ?? null;
+  // The headline total is Warcraft Logs' own (it's what the parse is based on)
+  if (row && row.total > 0) {
+    snapshot.total = row.total;
+    snapshot.dps = Math.round(row.total / (snapshot.fightSeconds || 1));
+  }
+  snapshot.server = row?.server ?? null;
   // Healing totals, parse and spells, so two healers can be compared on healing
-  const healing = healingFrom({ ...healTables, events: [] }, actor.id, (fight.endTime - fight.startTime) / 1000, fight.startTime);
+  const healing = healingFromPack(pack, id, false);
   if (healing) snapshot.healing = healing;
   return snapshot;
 }

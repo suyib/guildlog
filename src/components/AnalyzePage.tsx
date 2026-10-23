@@ -60,6 +60,8 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
   // Clicking a player in the breakdown picks them and analyzes their fight
   const [pendingPick, setPendingPick] = useState(false);
   const [autoBreakdown, setAutoBreakdown] = useState(false);
+  // A choice was changed: show it straight away if the fight has already been read (no Analyze click)
+  const [autoRun, setAutoRun] = useState(false);
   const nav = useNav();
   // Tell the sidebar which analysis is on screen, so it can list its sections.
   useEffect(() => {
@@ -255,6 +257,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
     try {
       setBreakdown(await loadBreakdown({ host: report.host, code: report.code, fight: fightRef(f) }));
       setProgress([]);
+      markStored(f.id);
     } catch (err) {
       setProgress([{ label: 'Reading the whole raid', state: 'failed', seconds: Math.round((performance.now() - started) / 100) / 10 }]);
       setError((err as Error).message);
@@ -262,6 +265,33 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
       setBusy(null);
     }
   }
+
+  /** A fight that's been read in full, so it opens without asking Warcraft Logs. */
+  const isStored = (r: ReportSummary | null, fid: number | '') => {
+    if (!r || fid === '') return false;
+    if (fid === OVERALL) {
+      const kills = r.fights.filter((f) => f.kill);
+      return kills.length > 0 && kills.every((f) => f.stored);
+    }
+    return !!r.fights.find((f) => f.id === fid)?.stored;
+  };
+  const markStored = (fid: number, which: 'main' | 'other' = 'main') => {
+    const mark = (r: ReportSummary | null) => (r ? { ...r, fights: r.fights.map((f) => (f.id === fid ? { ...f, stored: true } : f)) } : r);
+    if (which === 'main') setReport(mark);
+    else setOther(mark);
+  };
+
+  useEffect(() => {
+    if (!autoRun || busy !== null || !report || fightId === '') return;
+    // A short pause, so picking a boss and then a player straight after runs once
+    const t = window.setTimeout(() => {
+      setAutoRun(false);
+      const ready = isStored(report, fightId) && (playerId === '' || compareWith !== 'log' || (!!otherMe && isStored(other, otherFightId)));
+      if (ready) onAnalyze();
+    }, 300);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRun, busy, report, other, fightId, playerId, compareWith, otherFightId, otherPlayerId]);
 
   async function onAnalyze() {
     if (fightId === OVERALL) return runNight();
@@ -294,6 +324,8 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
         setProgress,
       );
       setResult(res);
+      markStored(f.id);
+      if (compare.kind === 'log') markStored(compare.fight.id, 'other');
       if (res.id) history.replaceState(null, '', `/a/${res.id}`);
     } catch (err) {
       setError((err as Error).message);
@@ -348,6 +380,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
                 const id = Number(e.target.value);
                 setFightId(id);
                 if (id === OVERALL) setPlayerId('');
+                setAutoRun(true);
               }}>
                 <option value="" disabled>Choose a boss</option>
                 <option value={OVERALL}>Whole night (every boss)</option>
@@ -358,7 +391,10 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
             </label>
             <label>
               Player
-              <select value={playerId} disabled={fightId === OVERALL} onChange={(e) => setPlayerId(e.target.value === '' ? '' : Number(e.target.value))}>
+              <select value={playerId} disabled={fightId === OVERALL} onChange={(e) => {
+                setPlayerId(e.target.value === '' ? '' : Number(e.target.value));
+                setAutoRun(true);
+              }}>
                 <option value="">{fightId === OVERALL ? 'Whole raid' : 'Whole raid (fight breakdown)'}</option>
                 {fightPlayers.map((p) => (
                   <option key={p.id} value={p.id}>{p.name} ({cls(p.className)})</option>
@@ -367,7 +403,10 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
             </label>
             <label>
               Compare
-              <select value={compareWith} onChange={(e) => setCompareWith(e.target.value)} disabled={playerId === '' || fightId === OVERALL}>
+              <select value={compareWith} onChange={(e) => {
+                setCompareWith(e.target.value);
+                setAutoRun(true);
+              }} disabled={playerId === '' || fightId === OVERALL}>
                 <option value="none">No comparison: just my stats</option>
                 <optgroup label="Someone in this fight">
                   {fightPlayers
@@ -413,7 +452,10 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
                     <div className="report-title small-title">{other.title} • {dateOf(other)}</div>
                     <label>
                       Encounter
-                      <select value={otherFightId} onChange={(e) => setOtherFightId(Number(e.target.value))}>
+                      <select value={otherFightId} onChange={(e) => {
+                        setOtherFightId(Number(e.target.value));
+                        setAutoRun(true);
+                      }}>
                         <option value="" disabled>Choose a boss</option>
                         {other.fights.map((f) => (
                           <option key={f.id} value={f.id}>{f.name} – {f.kill ? 'Kill' : 'Wipe'} ({mmss(f.seconds)})</option>
@@ -422,7 +464,10 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
                     </label>
                     <label>
                       Player
-                      <select value={otherPlayerId} onChange={(e) => setOtherPlayerId(Number(e.target.value))}>
+                      <select value={otherPlayerId} onChange={(e) => {
+                        setOtherPlayerId(Number(e.target.value));
+                        setAutoRun(true);
+                      }}>
                         <option value="" disabled>Choose a player</option>
                         {[...otherPlayers].sort(byClassThenName(me?.className)).map((p) => (
                           <option key={p.id} value={p.id}>{p.name} ({cls(p.className)})</option>

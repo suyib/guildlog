@@ -37,10 +37,6 @@ export default function Breakdown({ data, onPick }: { data: FightBreakdown; onPi
         <span className="muted small">Click anyone to analyze their fight.</span>
       </header>
 
-      {data.offline && (
-        <p className="warning">Saved copy from {new Date(data.offline.savedAt).toLocaleDateString('en-US', { dateStyle: 'medium' })}: Warcraft Logs isn&rsquo;t answering right now.</p>
-      )}
-
       <div className="kpis">
         <Kpi glyph="bolt" label="Raid DPS" value={n0(totals.dps)} sub={`${compact(totals.damage)} damage`} />
         <Kpi glyph="pulse" label="Raid HPS" value={n0(totals.hps)} sub={`${compact(totals.healing)} healing`} />

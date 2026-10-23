@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.23.0',
+    date: '2026-10-23',
+    changes: [
+      'Each boss fight is read from Warcraft Logs once and stored. Analyses, gear and charts, breakdowns, Whole night and the Discord DMs and raid summary all come from that copy, so the site and Discord always match, and fights already read open instantly.',
+      'About a tenth of the Warcraft Logs requests and database space of before. Gear keeps item names, the cast timeline keeps auto attacks, and pet damage stays labeled.',
+      'Once a fight has been read, picking it (or a player, or who to compare with) shows the analysis straight away, with no need to click Analyze. Fights not read yet still wait for the click.',
+    ],
+  },
+  {
     version: '0.22.0',
     date: '2026-10-23',
     changes: [
