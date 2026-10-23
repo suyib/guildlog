@@ -1,4 +1,5 @@
--- v0.23.0: stored fights. Run once in Supabase -> SQL Editor, after deploying v0.23.0.
+-- v0.23.0 to v0.25.0: stored fights and guild benchmarks. Run once in Supabase -> SQL Editor, after
+-- deploying. Running it again is safe.
 -- Moves what's worth keeping into the new fight_packs table, then removes the three tables it
 -- replaces (snapshot_cache, saved_data, bot_raid_fights). Safe to run more than once.
 
@@ -28,6 +29,34 @@ create table if not exists public.item_names (
 
 alter table public.fight_packs enable row level security;
 alter table public.item_names enable row level security;
+
+-- Everyone's numbers per boss kill of the guild's own raids (Past raids), one small row each, for
+-- guild benchmarks per spec and trends over weeks (v0.25.0).
+create table if not exists public.kill_stats (
+  report_code text not null,
+  fight_id int not null,
+  name_key text not null,              -- lower-case name, for matching
+  encounter_id int not null,
+  encounter_name text not null,
+  start_time timestamptz not null,
+  seconds int not null,
+  name text not null,
+  realm text,
+  class_name text not null default '',
+  spec_name text not null default '',
+  role text,
+  healer boolean not null default false,
+  dps int not null default 0,
+  hps int not null default 0,
+  parse numeric,
+  hps_parse numeric,
+  deaths int not null default 0,
+  item_level numeric,
+  primary key (report_code, fight_id, name_key)
+);
+create index if not exists kill_stats_spec on public.kill_stats (encounter_id, class_name, spec_name);
+create index if not exists kill_stats_player on public.kill_stats (name_key, start_time);
+alter table public.kill_stats enable row level security;
 
 do $$
 begin
@@ -63,4 +92,5 @@ commit;
 
 -- What's there now
 select 'fight_packs' as table_name, count(*) from public.fight_packs
+union all select 'kill_stats', count(*) from public.kill_stats
 union all select 'guild_raids queued again', count(*) from public.guild_raids where status = 'queued';

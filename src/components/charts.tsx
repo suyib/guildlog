@@ -21,6 +21,7 @@ const CHART_KIND = {
   dps: { unit: 'DPS', key: 'DPS, smoothed', line: 'dps-line', aria: 'DPS over the fight' },
   hps: { unit: 'HPS', key: 'Healing per second, smoothed', line: 'dps-line heal-line', aria: 'Healing per second over the fight' },
   taken: { unit: 'taken per second', key: 'Damage taken per second, smoothed', line: 'dps-line taken-line', aria: 'Damage taken per second over the fight' },
+  mana: { unit: '% mana', key: 'Mana, every 5 seconds', line: 'dps-line mana-line', aria: 'Mana over the fight' },
 } as const;
 
 export function DpsChart({ series, average, snapshot, marks, markLabel = 'cooldown used', kind = 'dps', wide = false }: {

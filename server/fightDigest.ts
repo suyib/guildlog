@@ -6,7 +6,8 @@ import { IGNORE_FOR_GAPS, cooldownFor } from './cooldowns.js';
 import { gearFrom, statsFrom, survivalFrom } from './dashboard.js';
 import type { FightPack } from './pack.js';
 import { detailRows, num, rankingRows } from './tables.js';
-import type { GearItem } from './types.js';
+import { deathRecaps, dotsFor, manaFor, mitigationFor, potionsFor, raidDebuffs } from './insights.js';
+import type { DeathRecap, DotUptime, GearItem, ManaInfo, Mitigation, PotionUse, RaidDebuff } from './types.js';
 
 export interface PlayerDigest {
   id: number;
@@ -23,7 +24,7 @@ export interface PlayerDigest {
   abilities: { name: string; total: number }[];
   casts: { name: string; count: number }[];
   cooldowns: { name: string; uses: number; possible: number }[];
-  deaths: { seconds: number; by: string }[];
+  deaths: DeathRecap[];
   taken: number;
   avoidable: number;
   avoidableTop: { name: string; total: number }[];
@@ -39,10 +40,15 @@ export interface PlayerDigest {
     activePct: number | null;
     abilities: { name: string; total: number; overhealPct: number | null }[];
   };
+  /** From v0.25.0, once the fight has been read in full. */
+  potions?: PotionUse;
+  dots?: DotUptime[];
+  mana?: Omit<ManaInfo, 'series'>;
+  mitigation?: Mitigation;
 }
 
 /** Bump when what's in a digest changes; stored digests are then worked out again from the stored fight. */
-export const DIGEST_VERSION = 6; // 6: from stored fights; 5: healing; 4: pet damage as "<pet> (pet)"; 3: roles
+export const DIGEST_VERSION = 7; // 7: potions, DoTs, mana, mitigation, death recaps, boss debuffs; 6: from stored fights; 5: healing; 4: pet damage as "<pet> (pet)"; 3: roles
 
 export interface FightDigest {
   v?: number;
@@ -54,6 +60,8 @@ export interface FightDigest {
   endTime: number;
   seconds: number;
   players: PlayerDigest[];
+  /** Debuffs the raid kept on the boss (once read in full). */
+  debuffs?: RaidDebuff[];
 }
 
 /** A healer on this fight: healing well above their damage. Their DM pages are about healing. */
@@ -135,6 +143,7 @@ export function digestFromPack(host: string, pack: FightPack): FightDigest {
   // Healing: everyone's from one fight-wide table, parses from the healing rankings
   const healRows = new Map<number, any>(((t.healing?.data?.entries ?? []) as any[]).filter((e) => e?.id && e.type !== 'Pet' && e.type !== 'NPC').map((e) => [e.id, e]));
   const hpsRanks = rankingRows(t.hps);
+  const recaps = deathRecaps(pack);
   const players = entries.map((e): PlayerDigest => {
     const rank = rankRows.find((r) => r.name === e.name);
     const det = detail.find((x) => x.id === e.id || x.name === e.name);
@@ -165,8 +174,8 @@ export function digestFromPack(host: string, pack: FightPack): FightDigest {
       cooldowns: castList
         .filter((c) => cooldownFor(c.name, host) !== undefined)
         .map((c) => ({ name: c.name, uses: c.count, possible: possibleUses(seconds, cooldownFor(c.name, host)!) })),
-      deaths: deathEntries
-        .filter((x) => x.id === e.id || x.name === e.name)
+      deaths: recaps.get(e.id) ?? deathEntries
+        .filter((x) => x.name === e.name)
         .map((x) => ({ seconds: Math.round((num(x.deathTime ?? x.timestamp) - fight.startTime) / 1000), by: x.killingBlow?.name ?? x.ability?.name ?? 'Unknown' })),
       taken: sv?.total ?? 0,
       avoidable: sv?.avoidableTotal ?? 0,
@@ -174,8 +183,25 @@ export function digestFromPack(host: string, pack: FightPack): FightDigest {
       gear: gear?.length ? gear : undefined,
       stats: det?.combatantInfo?.stats ? statsFrom(det.combatantInfo.stats) : undefined,
       healing: healingOf(e, healRows, hpsRanks, seconds),
+      ...extras(pack, e.id),
     };
   });
 
-  return { v: DIGEST_VERSION, id: fight.id, name: fight.name, encounterID: fight.encounterID, kill: !!fight.kill, startTime: fight.startTime, endTime: fight.endTime, seconds, players };
+  const debuffs = raidDebuffs(pack);
+  return { v: DIGEST_VERSION, id: fight.id, name: fight.name, encounterID: fight.encounterID, kill: !!fight.kill, startTime: fight.startTime, endTime: fight.endTime, seconds, players, ...(debuffs ? { debuffs } : {}) };
+}
+
+/** Potions, DoTs, mana and mitigation, once the fight has been read in full. */
+function extras(pack: FightPack, id: number): Partial<PlayerDigest> {
+  if (!pack.full?.players[id]) return {};
+  const mana = manaFor(pack, id);
+  const out: Partial<PlayerDigest> = {};
+  const potions = potionsFor(pack, id);
+  if (potions) out.potions = potions;
+  const dots = dotsFor(pack, id);
+  if (dots?.length) out.dots = dots;
+  if (mana) out.mana = { endPct: mana.endPct, lowSeconds: mana.lowSeconds, oomAt: mana.oomAt };
+  const mitigation = mitigationFor(pack, id);
+  if (mitigation) out.mitigation = mitigation;
+  return out;
 }

@@ -51,8 +51,19 @@ export interface PlayerSnapshot {
   casts?: { t: number; name: string; auto?: boolean }[];
   /** When Bloodlust/Heroism and your own big cooldowns were up, seconds from pull. */
   windows?: BuffWindow[];
-  deaths: { seconds: number; by: string }[];
+  deaths: DeathRecap[];
   damageTaken: { name: string; total: number }[];
+  /** Potions and runes used (missing before v0.25.0, and for fights read before then). */
+  potions?: PotionUse;
+  /** Your damage-over-time spells' uptime on their main target. */
+  dots?: DotUptime[];
+  /** Mana across the fight, for anyone who uses mana. */
+  mana?: ManaInfo;
+  /** The boss's melee swings at you (tanks). */
+  mitigation?: Mitigation;
+  /** Debuffs the raid kept on the boss. */
+  raidDebuffs?: RaidDebuff[];
+
   /** Healing for the fight (no over-time line), so healers can be compared on healing. Missing before v0.17.0. */
   healing?: Healing;
 }
@@ -208,6 +219,8 @@ export interface AnalysisResult {
   findings: Finding[];
   /** What went well. Missing on analyses saved before v0.7.0. */
   strengths?: Strength[];
+  /** How you compare with the guild's other kills of this boss in your spec (Past raids only). */
+  guild?: GuildContext;
   notes: string[]; // non-fatal problems (e.g. a comparison that couldn't be loaded)
 }
 
@@ -306,7 +319,9 @@ export interface FightBreakdown {
     interrupts: number;
     dispels: number;
   }[];
-  deaths: { seconds: number; name: string; className: string; by: string }[];
+  deaths: (DeathRecap & { name: string; className: string })[];
+  /** Debuffs the raid kept on the boss (missing for fights read before v0.25.0). */
+  debuffs?: RaidDebuff[];
   takenByAbility: { name: string; icon?: string; total: number; playersHit: number; avoidable: boolean }[];
   bloodlust: { seconds: number; by: string; name: string }[];
   /** Raid DPS across the fight, seconds from the pull (empty if Warcraft Logs didn't return a graph). */
@@ -438,6 +453,8 @@ export interface ProfileCharacter {
     bosses: number; avgParse: number | null; perSecond: number; deaths: number;
     best: { fightId: number; playerId: number; boss: string; parse: number | null };
   } | null;
+  /** Week by week over the last 8 weeks of guild raids (missing before v0.25.0). */
+  trend?: TrendWeek[];
 }
 
 export interface ProfileData {
@@ -476,3 +493,69 @@ export interface RaidOverview {
   /** Kills not read yet; asking again fills them in. */
   pending: number;
 }
+
+// ---------- Insights from the stored fight (v0.25.0) ----------
+
+/** A death, with what happened in the 10 seconds before it (missing for fights read before v0.25.0). */
+export interface DeathRecap {
+  seconds: number;
+  by: string;
+  /** The last hits taken, oldest first. t: seconds from the pull. */
+  hits?: { t: number; name: string; amount: number; from: string }[];
+  /** Healing received in those 10 seconds. */
+  healed?: number;
+}
+
+export interface PotionUse {
+  /** Used during the fight (seconds from the pull). */
+  used: { name: string; seconds: number }[];
+  /** A potion was already running at the pull. */
+  prePot: boolean;
+}
+
+export interface DotUptime { name: string; uptimePct: number; sharePct: number }
+
+export interface ManaInfo {
+  /** Mana in percent every 5 seconds. */
+  series: { t: number; pct: number }[];
+  endPct: number | null;
+  /** Seconds spent under 10% mana. */
+  lowSeconds: number;
+  /** When mana first ran out (under 5%) with the fight still going, seconds from the pull. */
+  oomAt: number | null;
+}
+
+export interface Mitigation {
+  swings: number;
+  dodged: number;
+  parried: number;
+  missed: number;
+  blocked: number;
+  crits: number;
+  /** Dodged, parried or missed, in percent of swings. */
+  avoidPct: number;
+}
+
+export interface RaidDebuff { label: string; uptimePct: number }
+
+/** One kill in the guild's record (Past raids): for benchmarks and trends. */
+export interface GuildKill { date: string; name: string; perSecond: number; parse: number | null; code: string; fightId: number }
+
+export interface GuildContext {
+  unit: 'DPS' | 'HPS';
+  spec: string;
+  encounter: string;
+  /** Guild kills of this boss in this spec. */
+  kills: number;
+  /** Players of this spec who've killed it. */
+  players: number;
+  best: GuildKill | null;
+  median: number | null;
+  /** Your place among them (by each player's best), 1 = best. */
+  place: number | null;
+  /** Your own kills of this boss, newest first. */
+  mine: GuildKill[];
+}
+
+/** A character's raids week by week. */
+export interface TrendWeek { week: string; parse: number | null; perSecond: number | null; kills: number }

@@ -2,10 +2,12 @@
 //   1. fight    -> everyone's fight-wide numbers (and the whole fight is read and stored)
 //   2. snapshot -> one player's analysis data, from the stored fight
 //   3. finish   -> builds the findings and saves the result
-import { buildFindings, buildSnapshot, buildStrengths } from './analysis.js';
+import { buildFindings, buildSnapshot, buildStrengths, isHealerSnapshot } from './analysis.js';
+import { guildContext } from './benchmarks.js';
 import { saveAnalysis } from './db.js';
 import { healingFromPack } from './dashboard.js';
 import { type FightPack, getMeta, storedStages } from './pack.js';
+import { deathRecaps, dotsFor, manaFor, mitigationFor, potionsFor, raidDebuffs } from './insights.js';
 import { detailRows, num, rankingRows } from './tables.js';
 import type { ActorRef, AnalysisResult, Comparison, Dashboard, FightPlayerRow, PlayerSnapshot, ReportSummary } from './types.js';
 import { type CastEvent, type Fight, parseReportUrl } from './wcl.js';
@@ -140,6 +142,19 @@ export function snapshotFromPack(host: string, code: string, pack: FightPack, ac
     snapshot.dps = Math.round(row.total / (snapshot.fightSeconds || 1));
   }
   snapshot.server = row?.server ?? null;
+  // Deaths with the 10 seconds before them; potions, DoTs, mana, mitigation and the boss's debuffs
+  const recaps = deathRecaps(pack).get(id);
+  if (recaps) snapshot.deaths = recaps;
+  const potions = potionsFor(pack, id);
+  if (potions) snapshot.potions = potions;
+  const dots = dotsFor(pack, id);
+  if (dots?.length) snapshot.dots = dots;
+  const mana = manaFor(pack, id);
+  if (mana) snapshot.mana = mana;
+  const mitigation = mitigationFor(pack, id);
+  if (mitigation) snapshot.mitigation = mitigation;
+  const debuffs = raidDebuffs(pack);
+  if (debuffs?.length) snapshot.raidDebuffs = debuffs;
   // Healing totals, parse and spells, so two healers can be compared on healing
   const healing = healingFromPack(pack, id, false);
   if (healing) snapshot.healing = healing;
@@ -163,6 +178,18 @@ export async function finish(input: { player: PlayerSnapshot; comparisons: Compa
     .map((c) => ({ ...c, sameClass: sameSpec(c.snapshot) }));
 
   const result: AnalysisResult = { player, comparisons, findings: buildFindings(player, comparisons), strengths: buildStrengths(player, comparisons, input.dashboard?.gear), notes, compareKey, ...(input.dashboard ? { dashboard: input.dashboard } : {}) };
+  // Against the guild's own kills of this boss in the same spec (Past raids)
+  const healer = isHealerSnapshot(player);
+  const guild = await guildContext({ encounterId: player.encounterId, encounter: player.encounterName, className: player.className, specName: player.specName, name: player.name, healer }).catch(() => null);
+  if (guild) {
+    result.guild = guild;
+    const mine = healer ? player.healing?.hps ?? 0 : player.dps;
+    if (guild.players >= 2 && guild.best && mine >= guild.best.perSecond) {
+      result.strengths = [{ title: `Best ${guild.spec} in the guild on ${guild.encounter}`, detail: `${Math.round(mine).toLocaleString('en-US')} ${guild.unit}, the guild's highest of ${guild.kills} kills.` }, ...(result.strengths ?? [])].slice(0, 6);
+    } else if (guild.players >= 3 && guild.median && mine < guild.median * 0.8) {
+      result.findings.push({ severity: 'low', title: `Below the guild's typical ${guild.spec}`, detail: `${Math.round(mine).toLocaleString('en-US')} ${guild.unit} against a typical ${Math.round(guild.median).toLocaleString('en-US')} for your spec on ${guild.encounter}. The points above show where to start.` });
+    }
+  }
   try {
     const saved = await saveAnalysis(result);
     if (saved) {

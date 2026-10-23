@@ -94,7 +94,7 @@ export function breakdownFromPack(host: string, pack: FightPack): FightBreakdown
     .slice(0, 15);
 
   const deaths = digest.players
-    .flatMap((p) => p.deaths.map((d) => ({ seconds: d.seconds, name: p.name, className: p.className, by: d.by })))
+    .flatMap((p) => p.deaths.map((d) => ({ ...d, name: p.name, className: p.className })))
     .sort((a, b) => a.seconds - b.seconds);
 
   const nameOf = new Map(digest.players.map((p) => [p.id, p.name]));
@@ -122,6 +122,7 @@ export function breakdownFromPack(host: string, pack: FightPack): FightBreakdown
     deaths,
     takenByAbility,
     bloodlust,
+    ...(digest.debuffs ? { debuffs: digest.debuffs } : {}),
     dpsSeries,
     feedback: raidFeedback([digest], { bloodlust: bloodlust.map((b) => b.seconds) }),
   };

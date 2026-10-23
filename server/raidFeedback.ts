@@ -116,6 +116,24 @@ export function raidFeedback(fights: FightDigest[], opts: RaidFeedbackOptions = 
     if (weak.length) work.push({ title: `${plural(weak.length, 'player')} well below their spec`, detail: 'Parsed under 25. A look at their own summary (or a chat about rotation and gear) will help most.' });
   }
 
+  // ---- Potions (kills of 90 seconds or more, once read in full) ----
+  const potionRows = rows.filter(({ f, p }) => p.potions && f.seconds >= 90);
+  if (potionRows.length) {
+    const without = people((p, f) => !!p.potions && f.seconds >= 90 && !p.potions.used.length && !p.potions.prePot);
+    if (!without.length) good.push({ title: 'Everyone used a potion', detail: `On every boss${where} long enough to need one.` });
+    else work.push({ title: `${plural(without.length, 'player')} skipped potions`, detail: 'A combat potion before the pull and another during the fight is free damage and healing.' });
+  }
+
+  // ---- Debuffs on the boss ----
+  const debuffs = new Map<string, number[]>();
+  for (const f of fights) for (const d of f.debuffs ?? []) debuffs.set(d.label, [...(debuffs.get(d.label) ?? []), d.uptimePct]);
+  if (debuffs.size) {
+    const avgUp = [...debuffs].map(([label, ups]) => ({ label, up: Math.round(ups.reduce((t, v) => t + v, 0) / ups.length) }));
+    const low = avgUp.filter((d) => d.up < 80).sort((a, b) => a.up - b.up);
+    if (low.length) work.push({ title: 'Boss debuffs dropping off', detail: `${low.slice(0, 3).map((d) => `${d.label} ${d.up}%`).join(', ')} of the time${single ? '' : ' on average'}. Whoever applies them should keep them up all fight.` });
+    else if (avgUp.every((d) => d.up >= 90)) good.push({ title: 'Boss debuffs kept up', detail: avgUp.slice(0, 4).map((d) => `${d.label} ${d.up}%`).join(', ') + '.' });
+  }
+
   // ---- Bloodlust (single fight) ----
   if (opts.bloodlust) {
     if (!opts.bloodlust.length) work.push({ title: 'No Bloodlust or Heroism', detail: 'Using it at the pull (or the hardest phase) is one of the biggest damage boosts available.' });

@@ -4,6 +4,7 @@
 // the guild's uploads on Warcraft Logs. The every-5-minutes job then reads each boss kill once and
 // stores it whole (see pack.ts); every analysis, breakdown and Discord DM is worked out from that.
 // One run does what fits in its time limit and the next carries on.
+import { forgetKills, recordKills } from './benchmarks.js';
 import { dbEnabled, rest } from './db.js';
 import type { FightDigest } from './discord/digest.js';
 import { GAME } from './game.js';
@@ -195,7 +196,10 @@ async function saveRaid(raid: RaidRow, deadline: number): Promise<{ done: number
   const saved = 1 + kills.filter((k) => ready(k.id)).length;
   const missing = saved < kills.length + 1;
   // The card is filled in as each kill's summary is read: deaths, item level, roles and feedback
-  const card = buildCard(meta, (await storedDigests(code).catch(() => [])).filter((d) => kills.some((k) => k.id === d.id)));
+  const digests = (await storedDigests(code).catch(() => [])).filter((d) => kills.some((k) => k.id === d.id));
+  const card = buildCard(meta, digests);
+  // Everyone's numbers per kill, for guild benchmarks and trends
+  await recordKills(code, meta, digests).catch((e) => console.error('couldn\u2019t record kills', e));
   const runs = raid.runs + 1;
   await patchRaid(code, {
     saved,
@@ -237,6 +241,37 @@ export async function refreshCard(code: string, meta: ReportMeta, digests: Fight
   const card = buildCard(meta, digests);
   if ((raid.card?.summarized ?? -1) > (card.summarized ?? 0)) return; // the saved one already knows more
   await patchRaid(code, { card });
+}
+
+/**
+ * Remove a raid completely: its Past raids entry, every stored fight and the report's fight list,
+ * saved analyses of it, and the bot's record once the raid has ended. Added again later, it's read
+ * from Warcraft Logs as if it were new. Returns the title, for the activity log.
+ */
+export async function deleteRaid(code: string): Promise<string | null> {
+  if (!dbEnabled()) throw new Error('Past raids need the database (Supabase) to be set up.');
+  const row: { title: string | null } | undefined = (await rest(`guild_raids?report_code=eq.${q(code)}&select=title`))?.[0];
+  if (!row) throw new Error('That raid isn\u2019t on Past raids.');
+  const gone = { method: 'DELETE', headers: { Prefer: 'return=minimal' } };
+  await rest(`guild_raids?report_code=eq.${q(code)}`, gone);
+  await Promise.all([
+    forgetFights(code),
+    rest(`analyses?report_code=eq.${q(code)}`, gone),
+    forgetKills(code),
+    // A raid still in progress keeps its /raidstart record, so /raidend still works
+    rest(`bot_raids?report_code=eq.${q(code)}&ended_at=not.is.null`, gone),
+  ]);
+  return row.title;
+}
+
+/** Every stored fight of a report, and its fight list. */
+export async function forgetFights(code: string) {
+  await rest(`fight_packs?report_code=eq.${q(code)}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+}
+
+/** True while a raid is on Past raids. */
+export async function isListed(code: string): Promise<boolean> {
+  return !!(await rest(`guild_raids?report_code=eq.${q(code)}&select=report_code`))?.[0];
 }
 
 /** Save one raid straight away (used right after it's added), within the time given. */

@@ -53,6 +53,7 @@ export const loadHome = () => call<HomeData>('/api/raids?view=home');
 export const loadProfile = () => call<ProfileData>('/api/raids?view=profile');
 export const loadRaids = () => call<RaidsList>('/api/raids');
 export const addRaid = (url: string) => post<SavedRaid>('/api/raids', { url });
+export const deleteRaid = (code: string) => post<{ ok: true }>('/api/raids', { delete: code });
 export const loadSaved = (id: string) => call<AnalysisResult>(`/api/history?id=${encodeURIComponent(id)}`);
 
 export interface Progress { label: string; state: 'loading' | 'done' | 'failed'; seconds?: number }

@@ -8,6 +8,10 @@ import { personalPage, raidSummary } from '../server/discord/pages';
 import { overallRaid } from '../server/overall';
 import { getMeta, getPack, readPack, reportRegion, storedDigests, trimPack } from '../server/pack';
 import { rowsFromPack, snapshotFromPack } from '../server/pipeline';
+import { deleteRaid, registerRaid } from '../server/archive';
+import { buildFindings, buildStrengths, healingFeedback } from '../server/analysis';
+import { guildContext, recordKills, trendFor } from '../server/benchmarks';
+import { finish } from '../server/pipeline';
 
 const HOST = 'fresh.warcraftlogs.com';
 const CODE = 'PackTest1';
@@ -29,7 +33,7 @@ const meta = {
   ] },
 };
 const ability = (id: number, name: string) => ({ gameID: id, name, icon: `${name.toLowerCase().replace(/ /g, '_')}.jpg` });
-const abilities = [ability(34120, 'Steady Shot'), ability(75, 'Auto Shot'), ability(1, 'Melee'), ability(25213, 'Greater Heal'), ability(25222, 'Renew'), ability(16, 'Gruul Slam'), ability(99, 'Cave In'), ability(2825, 'Bloodlust'), ability(3045, 'Rapid Fire'), ability(17, 'Bite')];
+const abilities = [ability(34120, 'Steady Shot'), ability(75, 'Auto Shot'), ability(1, 'Melee'), ability(25213, 'Greater Heal'), ability(25222, 'Renew'), ability(16, 'Gruul Slam'), ability(99, 'Cave In'), ability(2825, 'Bloodlust'), ability(3045, 'Rapid Fire'), ability(17, 'Bite'), ability(27016, 'Serpent Sting'), ability(28507, 'Haste')];
 
 const ev: Record<string, any[]> = { DamageDone: [], Healing: [], DamageTaken: [], Casts: [] };
 for (let s = 0; s < 120; s++) {
@@ -47,8 +51,16 @@ for (let s = 0; s < 120; s++) {
   ev.DamageDone.push({ timestamp: t + 100, type: 'damage', sourceID: 3, targetID: 90, abilityGameID: 1, hitType: 1, amount: 300, absorbed: 0 });
   ev.DamageTaken.push({ timestamp: t + 200, type: 'damage', sourceID: 90, targetID: 3, abilityGameID: 16, hitType: 1, amount: 2000, absorbed: 500 });
   // Healz: Greater Heal every 3s (overhealing a bit), Renew ticks every second
+  // Suy's Serpent Sting ticks every 3s for the first minute only (about half the fight)
+  if (s % 3 === 0 && s < 60) ev.DamageDone.push({ timestamp: t + 50, type: 'damage', sourceID: 1, targetID: 90, abilityGameID: 27016, hitType: 1, amount: 600, tick: true });
+  // Gruul swings at Tanky every 2s: some dodged, parried, blocked, and a few crits
+  if (s % 2 === 0) {
+    const k = (s / 2) % 10;
+    ev.DamageTaken.push({ timestamp: t + 900, type: 'damage', sourceID: 90, targetID: 3, abilityGameID: 1, hitType: k === 0 ? 7 : k === 1 ? 8 : k === 2 ? 2 : 1, amount: k < 2 ? 0 : 1500, ...(k === 4 ? { blocked: 300 } : {}) });
+  }
   if (s % 3 === 0) {
-    ev.Casts.push({ timestamp: t, type: 'cast', sourceID: 2, abilityGameID: 25213 });
+    // Healz runs out of mana around 1:17
+    ev.Casts.push({ timestamp: t, type: 'cast', sourceID: 2, abilityGameID: 25213, classResources: [{ amount: Math.max(0, 10_000 - s * 130), max: 10_000, type: 0 }] });
     ev.Healing.push({ timestamp: t + 1500, type: 'heal', sourceID: 2, targetID: 3, abilityGameID: 25213, hitType: 1, amount: 3000, overheal: 1000 });
   }
   ev.Healing.push({ timestamp: t + 700, type: 'heal', sourceID: 2, targetID: 3, abilityGameID: 25222, hitType: 1, amount: 400, tick: true });
@@ -57,6 +69,11 @@ ev.DamageTaken.push({ timestamp: START + 30_200, type: 'damage', sourceID: 90, t
 ev.Casts.push({ timestamp: START + 5_000, type: 'cast', sourceID: 4, abilityGameID: 2825 });
 ev.Casts.push({ timestamp: START + 6_000, type: 'cast', sourceID: 1, abilityGameID: 3045 });
 ev.Casts.push({ timestamp: START + 1_000, type: 'begincast', sourceID: 2, abilityGameID: 25213 });
+ev.Casts.push({ timestamp: START + 20_000, type: 'cast', sourceID: 1, abilityGameID: 28507 });
+// The last seconds before Suy dies at 1:40
+ev.DamageTaken.push({ timestamp: START + 98_000, type: 'damage', sourceID: 90, targetID: 1, abilityGameID: 1, hitType: 1, amount: 3000 });
+ev.DamageTaken.push({ timestamp: START + 99_500, type: 'damage', sourceID: 90, targetID: 1, abilityGameID: 99, hitType: 1, amount: 9000 });
+ev.Healing.push({ timestamp: START + 97_000, type: 'heal', sourceID: 2, targetID: 1, abilityGameID: 25213, hitType: 1, amount: 1500 });
 
 const total = (src: number) => ev.DamageDone.filter((e) => e.sourceID === src || (src === 1 && e.sourceID === 50)).reduce((t, e) => t + e.amount + (e.absorbed ?? 0), 0);
 const gear = [{ id: 28275, slot: 0, quality: 4, itemLevel: 120, permanentEnchant: 3003 }, { id: 29381, slot: 1, quality: 4, itemLevel: 115 }];
@@ -79,6 +96,7 @@ const tables = {
   deaths: { data: { entries: [{ id: 1, name: 'Suy', deathTime: START + 100_000, killingBlow: { name: 'Cave In', guid: 99 }, events: new Array(50).fill({ big: 'payload' }) }] } },
   healing: { data: { entries: [{ id: 2, name: 'Healz', type: 'Priest', total: 168_000, overheal: 40_000, activeTime: 110_000, abilities: [{ name: 'Greater Heal', total: 120_000, overheal: 40_000 }, { name: 'Renew', total: 48_000 }] }] } },
   interrupts: { data: { entries: [{ entries: [{ details: [{ name: 'Tanky', total: 2 }] }] }] } },
+  debuffs: { data: { auras: [{ guid: 25225, name: 'Sunder Armor', totalUptime: 110_000, totalUses: 5, bands: [] }, { guid: 26993, name: 'Faerie Fire', totalUptime: 60_000, totalUses: 1 }, { guid: 1, name: 'Something Else', totalUptime: 5_000 }] } },
   dispels: { data: { entries: [] } },
   rankings: { data: [{ roles: {
     tanks: { characters: [{ name: 'Tanky', class: 'Warrior', spec: 'Protection', rankPercent: 55, server: { name: 'Spineshatter', id: 7 } }] },
@@ -112,10 +130,10 @@ function wcl(query: string, vars: any) {
   }
   if (query.includes('masterData{abilities')) return { reportData: { report: { masterData: { abilities } } } };
   if (query.includes('code title startTime')) return { reportData: { report: meta } };
-  for (const m of query.matchAll(/(\w+): table\(dataType:(\w+), fightIDs:\$fid(?:, sourceID:(\d+))?\)/g)) {
+  for (const m of query.matchAll(/(\w+): table\(dataType:(\w+), fightIDs:\$fid(?:, sourceID:(\d+))?[^)]*\)/g)) {
     const [, alias, kind, source] = m;
     if (kind === 'Buffs') report[alias] = { data: { totalTime: 120_000, auras: Number(source) === 1
-      ? [{ name: 'Rapid Fire', guid: 3045, totalUptime: 15_000, totalUses: 1, bands: [{ startTime: START + 6_000, endTime: START + 21_000 }] }, { name: 'Bloodlust', guid: 2825, totalUptime: 40_000, totalUses: 1, bands: [{ startTime: START + 5_000, endTime: START + 45_000 }] }, { name: 'Leader of the Pack', guid: 24932, totalUptime: 120_000, totalUses: 1, bands: [{ startTime: START, endTime: END }] }]
+      ? [{ name: 'Rapid Fire', guid: 3045, totalUptime: 15_000, totalUses: 1, bands: [{ startTime: START + 6_000, endTime: START + 21_000 }] }, { name: 'Bloodlust', guid: 2825, totalUptime: 40_000, totalUses: 1, bands: [{ startTime: START + 5_000, endTime: START + 45_000 }] }, { name: 'Leader of the Pack', guid: 24932, totalUptime: 120_000, totalUses: 1, bands: [{ startTime: START, endTime: END }] }, { name: 'Haste', guid: 28507, totalUptime: 30_000, totalUses: 2, bands: [{ startTime: START, endTime: START + 14_000 }, { startTime: START + 20_000, endTime: START + 35_000 }] }]
       : [] } };
     else if (kind === 'Summary') {
       summaryCalls++;
@@ -130,6 +148,9 @@ function wcl(query: string, vars: any) {
 
 // ---------- A fake database (just what the packs use) ----------
 const packs = new Map<string, any>();
+const raidRows = new Map<string, any>();
+const kills = new Map<string, any>();
+const deletedAnalyses: string[] = [];
 const names: any[] = [];
 const dbAsk: string[] = [];
 function db(url: URL, init: RequestInit) {
@@ -139,6 +160,10 @@ function db(url: URL, init: RequestInit) {
   dbAsk.push(`${method} ${path}`);
   const eq = (k: string) => p.get(k)?.replace(/^eq\./, '');
   if (path === 'fight_packs') {
+    if (method === 'DELETE') {
+      for (const [k, r] of packs) if (r.report_code === eq('report_code')) packs.delete(k);
+      return [];
+    }
     if (method === 'POST') {
       const row = JSON.parse(String(init.body));
       packs.set(`${row.report_code}:${row.fight_id}`, { created_at: '2026-10-01T00:00:00Z', ...(packs.get(`${row.report_code}:${row.fight_id}`) ?? {}), ...row });
@@ -153,6 +178,32 @@ function db(url: URL, init: RequestInit) {
     }
     return rows.map((r) => ({ ...r }));
   }
+  if (path === 'guild_raids') {
+    const code = eq('report_code');
+    if (method === 'POST') {
+      const row = { status: 'queued', runs: 0, saved: 0, total: 0, card: null, title: null, start_time: null, end_time: null, logger_name: null, ...JSON.parse(String(init.body)) };
+      raidRows.set(row.report_code, row);
+      return [row];
+    }
+    if (method === 'DELETE') { raidRows.delete(code!); return []; }
+    if (method === 'PATCH') { Object.assign(raidRows.get(code!) ?? {}, JSON.parse(String(init.body))); return []; }
+    return code ? [...raidRows.values()].filter((r) => r.report_code === code) : [...raidRows.values()];
+  }
+  if (path === 'kill_stats') {
+    if (method === 'POST') {
+      for (const row of JSON.parse(String(init.body))) kills.set(`${row.report_code}:${row.fight_id}:${row.name_key}`, row);
+      return [];
+    }
+    let rows = [...kills.values()];
+    for (const [k, v] of p) {
+      if (k === 'select' || k === 'order' || k === 'limit') continue;
+      const [op, val] = [v.slice(0, v.indexOf('.')), v.slice(v.indexOf('.') + 1)];
+      rows = rows.filter((r) => (op === 'eq' ? String(r[k]) === val : op === 'gte' ? String(r[k]) >= val : true));
+    }
+    if (method === 'DELETE') { for (const r of rows) kills.delete(`${r.report_code}:${r.fight_id}:${r.name_key}`); return []; }
+    return rows.sort((a, b) => (p.get('order')?.endsWith('desc') ? b.start_time.localeCompare(a.start_time) : a.start_time.localeCompare(b.start_time)));
+  }
+  if (path === 'analyses' && method === 'DELETE') { deletedAnalyses.push(eq('report_code')!); return []; }
   if (path === 'item_names') {
     if (method === 'POST') names.push(...JSON.parse(String(init.body)));
     return method === 'GET' ? names.filter((n) => n.kind === eq('kind')) : [];
@@ -215,7 +266,27 @@ assert.equal(bite.casts, 30, 'pet uses from its own casts');
 assert.ok(suy.casts!.some((c) => c.name === 'Auto Shot' && c.auto), 'auto shots on the timeline from the swings');
 assert.equal(suy.casts!.filter((c) => c.name === 'Auto Shot').length, 120);
 assert.deepEqual(suy.windows!.map((w) => [w.name, w.start, w.end, w.kind]).sort(), [['Bloodlust', 5, 45, 'lust'], ['Rapid Fire', 6, 21, 'cooldown']]);
-assert.deepEqual(suy.deaths, [{ seconds: 100, by: 'Cave In' }]);
+assert.equal(suy.deaths.length, 1);
+assert.equal(suy.deaths[0].by, 'Cave In');
+assert.deepEqual(suy.deaths[0].hits!.map((h) => [h.t, h.name, h.amount, h.from]), [[98, 'Melee', 3000, 'Gruul'], [99.5, 'Cave In', 9000, 'Gruul']], 'the last hits before dying');
+assert.equal(suy.deaths[0].healed, 1500);
+assert.deepEqual(suy.potions, { used: [{ name: 'Haste', seconds: 20 }], prePot: true }, 'pre-pot and one during the fight');
+const sting = suy.dots!.find((d) => d.name === 'Serpent Sting')!;
+assert.ok(sting.uptimePct >= 45 && sting.uptimePct <= 55, `Serpent Sting up about half the fight (${sting.uptimePct}%)`);
+assert.ok(!suy.dots!.some((d) => d.name === 'Steady Shot'), 'only ticking spells');
+assert.deepEqual(suy.raidDebuffs, [{ label: 'Armor reduction (Sunder / Expose Armor)', uptimePct: 92 }, { label: 'Faerie Fire', uptimePct: 50 }]);
+const suyFindings = buildFindings(suy, []);
+assert.ok(suyFindings.some((f) => f.title === `Serpent Sting up ${sting.uptimePct}% of the fight`));
+assert.ok(suyFindings.some((f) => f.title === 'Died at 1:40' && f.detail.includes('Cave In 9k, Melee 3k')), 'death recap in the finding');
+assert.ok(buildStrengths(suy, []).some((g) => g.title === 'Pre-potted and used a potion'));
+const tanky = snapshotFromPack(HOST, CODE, pack, { id: 3, name: 'Tanky', className: 'Warrior' });
+assert.deepEqual(tanky.mitigation, { swings: 60, dodged: 6, parried: 6, missed: 0, blocked: 6, crits: 6, avoidPct: 20 });
+assert.ok(buildFindings(tanky, []).some((f) => f.title === 'Crit by the boss 6×' && f.detail.includes('490 defense')));
+assert.ok(buildFindings(tanky, []).some((f) => f.title === 'No potion used'));
+const healz = snapshotFromPack(HOST, CODE, pack, { id: 2, name: 'Healz', className: 'Priest' });
+assert.ok(healz.mana!.oomAt !== null && healz.mana!.oomAt >= 70 && healz.mana!.oomAt <= 80, `out of mana around 1:17 (${healz.mana!.oomAt})`);
+assert.equal(healz.mana!.series.length, 24);
+assert.ok(healingFeedback(healz, healz.healing!).work.some((f) => f.title.startsWith('Ran out of mana')));
 assert.ok(suy.buffs.some((b) => b.name === 'Leader of the Pack' && b.uptimePct === 100));
 
 const dash = dashboardFromPack(pack, 1);
@@ -226,7 +297,7 @@ assert.equal(dash.takenSeries![30].note, 'Mostly Cave In');
 assert.equal(dash.stats[0].name, 'Agility');
 
 const healer = dashboardFromPack(pack, 2).healing!;
-assert.equal(healer.total, 40 * 3000 + 120 * 400);
+assert.equal(healer.total, 40 * 3000 + 120 * 400 + 1500);
 assert.equal(healer.parse, 77);
 assert.equal(healer.abilities[0].name, 'Greater Heal');
 assert.equal(healer.abilities[0].casts, 40);
@@ -291,6 +362,58 @@ await assert.rejects(getPack(HOST, CODE, fightRef, 'tables'), /Warcraft Logs/);
 // A request can't store a fight under times the report doesn't have
 await assert.rejects(getPack(HOST, CODE, { ...fightRef, id: 9 }, 'tables'), /isn\u2019t in this report/);
 wclDown = false;
+
+// ---------- Discord DMs say the same as the site ----------
+const dmText = JSON.stringify(personalPage('summary', raid, 'Suy', null));
+assert.ok(dmText.includes('Serpent Sting'), 'DoT uptime in the DM');
+assert.ok(dmText.includes('Potions'), 'potions in the DM');
+const healDm = JSON.stringify(personalPage('summary', raid, 'Healz', null));
+assert.ok(healDm.includes('Ran out of mana'), 'mana in the healer DM');
+const tankDm = JSON.stringify(personalPage('survival', raid, 'Tanky', null));
+assert.ok(tankDm.includes('avoided 20% of 60 swings') && tankDm.includes('crit 6'), 'tank mitigation in the DM');
+assert.match(JSON.stringify(personalPage('survival', raid, 'Suy', null)), /Cave In 9.0k, Melee 3.0k/, 'death recap in the DM');
+const channel = JSON.stringify(raidSummary(raid, null));
+assert.ok(channel.includes('Boss debuffs dropping off') && channel.includes('Faerie Fire 50%'), 'boss debuffs in the raid summary');
+assert.ok(!channel.includes('Tanky') && !channel.includes('Healz'), 'the channel summary names nobody');
+const bdNow = breakdownFromPack(HOST, pack);
+assert.ok(bdNow.deaths[0].hits?.length === 2 && bdNow.debuffs?.length === 2);
+
+// ---------- Guild benchmarks and trends ----------
+const raidDay = (daysAgo: number) => ({ ...meta, startTime: Date.now() - daysAgo * 86_400_000 }) as any;
+const thisKill = raid.fights[0];
+const variant = (dps: Record<string, number>, parse: number) => ({ ...thisKill, players: [...thisKill.players.map((p) => ({ ...p, dps: dps[p.name] ?? p.dps, parse })), { ...thisKill.players[0], id: 99, name: 'Muddy', dps: 2000, parse: 99 }] });
+await recordKills('OLD1', raidDay(21), [variant({ Suy: 900 }, 40)]);
+await recordKills('OLD2', raidDay(14), [variant({ Suy: 1000 }, 55)]);
+await recordKills(CODE, raidDay(0), raid.fights);
+const g = (await guildContext({ encounterId: 649, encounter: 'Gruul', className: 'Hunter', specName: 'BeastMastery', name: 'Suy', healer: false }))!;
+assert.equal(g.players, 2);
+assert.equal(g.best!.name, 'Muddy');
+assert.equal(g.place, 2);
+assert.equal(g.mine.length, 3, 'all three of your kills');
+assert.equal(g.mine[0].code, CODE, 'newest first');
+const done = await finish({ player: suy, comparisons: [], compareKey: 'none', notes: [] });
+assert.equal(done.guild?.best?.name, 'Muddy', 'against the guild on the site');
+const lines = JSON.stringify(personalPage('summary', raid, 'Suy', null, ['• **Gruul**: #2 of 2']));
+assert.ok(lines.includes('Against the guild'));
+const trend = await trendFor('Suy');
+assert.equal(trend.length, 3, 'three raid weeks');
+assert.deepEqual(trend.map((w) => w.parse), [40, 55, 91], 'oldest first');
+
+// ---------- Deleting a raid leaves nothing behind; adding it again reads it as new ----------
+await getPack(HOST, CODE, fightRef, 'full');
+await registerRaid({ host: HOST, code: CODE, source: 'site' });
+assert.ok(packs.size > 0 && raidRows.has(CODE));
+assert.equal(await deleteRaid(CODE), null);
+assert.equal(raidRows.has(CODE), false, 'off Past raids');
+assert.equal([...packs.values()].filter((r) => r.report_code === CODE).length, 0, 'no stored fights or fight list left');
+assert.deepEqual(deletedAnalyses, [CODE], 'saved analyses of the log removed');
+assert.equal([...kills.values()].filter((k) => k.report_code === CODE).length, 0, 'its kills are out of the benchmarks');
+await assert.rejects(deleteRaid(CODE), /isn\u2019t on Past raids/);
+const readBefore = wclCalls;
+const added = await registerRaid({ host: HOST, code: CODE, source: 'site' });
+assert.equal(added.status, 'queued', 'added again as a new raid');
+await getPack(HOST, CODE, fightRef, 'full');
+assert.ok(wclCalls - readBefore >= callsForOneFight - 1, 'read from Warcraft Logs again, not from anything left over');
 
 globalThis.fetch = realFetch;
 console.log('\nAll fight pack checks passed.');

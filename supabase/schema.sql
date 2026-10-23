@@ -138,6 +138,34 @@ create table if not exists public.item_names (
 alter table public.fight_packs enable row level security;
 alter table public.item_names enable row level security;
 
+-- Everyone's numbers per boss kill of the guild's own raids (Past raids), one small row each, for
+-- guild benchmarks per spec and trends over weeks (v0.25.0).
+create table if not exists public.kill_stats (
+  report_code text not null,
+  fight_id int not null,
+  name_key text not null,              -- lower-case name, for matching
+  encounter_id int not null,
+  encounter_name text not null,
+  start_time timestamptz not null,
+  seconds int not null,
+  name text not null,
+  realm text,
+  class_name text not null default '',
+  spec_name text not null default '',
+  role text,
+  healer boolean not null default false,
+  dps int not null default 0,
+  hps int not null default 0,
+  parse numeric,
+  hps_parse numeric,
+  deaths int not null default 0,
+  item_level numeric,
+  primary key (report_code, fight_id, name_key)
+);
+create index if not exists kill_stats_spec on public.kill_stats (encounter_id, class_name, spec_name);
+create index if not exists kill_stats_player on public.kill_stats (name_key, start_time);
+alter table public.kill_stats enable row level security;
+
 -- ---------- Site sign-ins (Admin page) ----------
 
 -- Everyone who has signed in with Discord: which server, officer or not, first and last sign-in.

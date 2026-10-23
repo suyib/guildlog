@@ -1,6 +1,8 @@
 // What the bot posts: the raid summary in the channel, and each person's own summaries by DM.
 import { BRAND, CREDIT, type Embed, type MessageBody, bugButton, button, env, linkButton, row } from './api.js';
 import { activeOver, raidFeedback } from '../raidFeedback.js';
+import { DEFENSE_CAP_NOTE, tankCanBeCritCapped } from '../gameData.js';
+import { recapLine } from '../insights.js';
 import type { RaidPoint } from '../types.js';
 import { type FightDigest, type PlayerDigest, type RaidDigest, healsMost, playerFights } from './digest.js';
 
@@ -189,7 +191,12 @@ function headline(rows: Rows) {
 
 const missingEnchants = (p?: PlayerDigest) => (p?.gear ?? []).filter((g) => g.enchantable && !g.enchant && !g.enchantId).map((g) => g.slotName.toLowerCase());
 
-export function personalPage(page: Page, digest: RaidDigest, character: string, realm: string | null): MessageBody | null {
+/** The Warcraft Logs site of the page being built (game-version rules depend on it). */
+let pageHost = '';
+
+/** guild: "against the guild" lines for the quick summary (from the guild's Past raids). */
+export function personalPage(page: Page, digest: RaidDigest, character: string, realm: string | null, guild?: string[]): MessageBody | null {
+  pageHost = digest.host;
   const rows = playerFights(digest, character, realm);
   if (rows.length === 0) return null;
   const me = rows[0].p;
@@ -207,7 +214,7 @@ export function personalPage(page: Page, digest: RaidDigest, character: string, 
   // Healers (healing well above their damage on most bosses) get their pages in terms of healing
   const healer = rows.filter((r) => healsMost(r.p)).length * 2 > rows.length;
   const build: Record<Page, () => Embed> = {
-    summary: () => ({ ...base, title: `Quick summary: ${head}`, description: intro, fields: healer ? healerSummaryFields(rows) : summaryFields(rows) }),
+    summary: () => ({ ...base, title: `Quick summary: ${head}`, description: intro, fields: [...(healer ? healerSummaryFields(rows) : summaryFields(rows)), ...(guild?.length ? chunked('Against the guild', guild) : [])] }),
     overview: () => ({ ...base, title: `Your raid: ${head}`, description: intro, fields: healer ? healerOverviewFields(rows) : overviewFields(rows) }),
     damage: () => (healer
       ? { ...base, title: `Healing breakdown: ${head}`, description: intro, fields: healingFields(rows) }
@@ -281,6 +288,9 @@ function quickSummary(rows: Rows): { good: Point[]; work: Point[] } {
   const under = [...cds].filter(([, c]) => c.uses < c.possible);
   if (cds.size && !under.length) good.push({ title: 'Cooldowns on time', detail: 'Every tracked cooldown used as often as the fights allowed.' });
   if (under.length) work.push({ title: 'Use cooldowns more', detail: `${under.slice(0, 3).map(([n, c]) => `${n} ${c.uses}/${c.possible}`).join(', ')}. Use them at the pull and again as soon as they’re ready.` });
+  const extra = insightPoints(rows, false);
+  work.push(...extra.work);
+  good.push(...extra.good);
 
   // Avoidable damage against the rest of the raid (non-tanks)
   if (me.role !== 'tank') {
@@ -304,6 +314,47 @@ function quickSummary(rows: Rows): { good: Point[]; work: Point[] } {
   }
 
   return { good: good.slice(0, 6), work: work.slice(0, 6) };
+}
+
+/**
+ * Potions, damage over time, mana (healers) and being crit as a tank, across the night's bosses.
+ * Same thresholds as the site's analysis (server/analysis.ts insightFeedback).
+ */
+function insightPoints(rows: Rows, healer: boolean): { good: Point[]; work: Point[] } {
+  const good: Point[] = [];
+  const work: Point[] = [];
+  // Potions on bosses of 90 seconds or more
+  const potRows = rows.filter((r) => r.p.potions && r.fight.seconds >= 90);
+  if (potRows.length) {
+    const none = potRows.filter((r) => !r.p.potions!.used.length && !r.p.potions!.prePot).map((r) => r.fight.name);
+    if (none.length) work.push({ title: 'Potions', detail: `None used on ${none.slice(0, 4).join(', ')}. One before the pull and one during the fight is free ${healer ? 'healing' : 'damage'}.` });
+    else good.push({ title: 'Potions', detail: `Used on all ${bosses(potRows.length)}.` });
+  }
+  // Damage over time: uptime across the night, weighted by fight length
+  const dots = new Map<string, { up: number; secs: number }>();
+  for (const { fight, p } of rows) for (const d of p.dots ?? []) {
+    if (d.sharePct < 5) continue;
+    const x = dots.get(d.name) ?? { up: 0, secs: 0 };
+    dots.set(d.name, { up: x.up + d.uptimePct * fight.seconds, secs: x.secs + fight.seconds });
+  }
+  const dotAvg = [...dots].map(([name, x]) => ({ name, up: Math.round(x.up / (x.secs || 1)) }));
+  const lowDots = dotAvg.filter((d) => d.up < 80);
+  if (lowDots.length) work.push({ title: 'Keep your damage over time up', detail: `${lowDots.slice(0, 3).map((d) => `${d.name} ${d.up}%`).join(', ')} on average. Refresh just before it runs out.` });
+  else if (dotAvg.length && dotAvg.every((d) => d.up >= 90)) good.push({ title: 'Damage over time kept up', detail: dotAvg.slice(0, 3).map((d) => `${d.name} ${d.up}%`).join(', ') + '.' });
+  // Mana, for healers
+  if (healer) {
+    const oom = rows.filter((r) => r.p.mana?.oomAt != null).map((r) => `${r.fight.name} (${mmss(r.p.mana!.oomAt!)})`);
+    if (oom.length) work.push({ title: 'Ran out of mana', detail: `On ${oom.slice(0, 3).join(', ')}. Pace bigger heals, use a mana potion or rune, and ask for a mana cooldown before you're empty.` });
+    else if (rows.some((r) => r.p.mana)) good.push({ title: 'Never ran out of mana', detail: `Mana lasted on every boss.` });
+  }
+  // Tanks: crits from bosses' melee mean they're under the defense cap
+  const tankRows = rows.filter((r) => r.p.role === 'tank' && r.p.mitigation && r.p.mitigation.swings >= 30 && tankCanBeCritCapped(pageHost));
+  if (tankRows.length) {
+    const crits = tankRows.reduce((t, r) => t + r.p.mitigation!.crits, 0);
+    if (crits) work.push({ title: `Crit by bosses ${crits}×`, detail: DEFENSE_CAP_NOTE });
+    else good.push({ title: 'Never crit by a boss', detail: `On all ${bosses(tankRows.length)} you tanked.` });
+  }
+  return { good, work };
 }
 
 // ---------- My overview ----------
@@ -502,8 +553,13 @@ function survivalFields(rows: Rows): Field[] {
   const taken = rows.reduce((t, r) => t + r.p.taken, 0);
   const avoid = rows.reduce((t, r) => t + r.p.avoidable, 0);
   const raidMedian = rows.reduce((t, { fight, p }) => t + median(fight.players.filter((x) => x.role !== 'tank' && x.name !== p.name).map((x) => x.avoidable)), 0);
-  const deaths = rows.flatMap((r) => r.p.deaths.map((d) => `• **${r.fight.name}** at ${mmss(d.seconds)}: ${d.by}`));
+  const deaths = rows.flatMap((r) => r.p.deaths.map((d) => {
+    const recap = recapLine(d, compact);
+    return `• **${r.fight.name}** at ${mmss(d.seconds)}: ${d.by}${recap ? `\n  ${recap}` : ''}`;
+  }));
   const top = topAvoidable(rows);
+  // Tanks: the bosses' melee swings
+  const mit = rows.filter((r) => r.p.mitigation).map(({ fight, p }) => `• **${fight.name}**: avoided ${p.mitigation!.avoidPct}% of ${p.mitigation!.swings} swings${p.mitigation!.blocked ? `, blocked ${p.mitigation!.blocked}` : ''}${p.mitigation!.crits ? `, crit ${p.mitigation!.crits}×` : ''}`);
   const bossLines = rows.map(({ fight, p }) => {
     const m = median(fight.players.filter((x) => x.role !== 'tank' && x.name !== p.name).map((x) => x.avoidable));
     return `• **${fight.name}**: ${compact(p.taken)} taken · ${compact(p.avoidable)} likely avoidable${me.role !== 'tank' ? ` (raid typical: ${compact(m)})` : ''}`;
@@ -532,7 +588,8 @@ function survivalFields(rows: Rows): Field[] {
     stat('Deaths', String(deaths.length)),
     ...block('What went well', bullets(good)),
     ...block('What to work on', bullets(work)),
-    ...block('Deaths', deaths.join('\n')),
+    ...chunked('Deaths', deaths),
+    ...(me.role === 'tank' ? block('Boss melee', mit.join('\n')) : []),
     ...block('Likely avoidable damage', top.slice(0, 6).map(([n, t]) => `• **${n}**: ${compact(t)}`).join('\n')),
     ...block('Boss by boss', bossLines.join('\n')),
   ];
@@ -626,6 +683,9 @@ function healerQuickSummary(rows: Rows): { good: Point[]; work: Point[] } {
   const under = [...cds].filter(([, c]) => c.uses < c.possible);
   if (cds.size && !under.length) good.push({ title: 'Cooldowns on time', detail: 'Every tracked cooldown used as often as the fights allowed.' });
   if (under.length) work.push({ title: 'Use cooldowns more', detail: `${under.slice(0, 3).map(([n, c]) => `${n} ${c.uses}/${c.possible}`).join(', ')}.` });
+  const extra = insightPoints(rows, true);
+  work.push(...extra.work);
+  good.push(...extra.good);
 
   const withGear = [...rows].reverse().find((r) => r.p.gear?.length)?.p;
   if (withGear) {

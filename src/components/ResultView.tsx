@@ -11,6 +11,8 @@ import Feedback, { FeedbackPanels } from './Feedback';
 import Glyph from './Glyph';
 import { ClassIcon, GameIcon, classCss, compareLabel, parseCss } from './icons';
 import Timeline from './Timeline';
+import { DeathList, DotsPanel, GuildPanel, ManaPanel, MitigationFacts, PotionsAndDebuffs } from './Insights';
+import { tankCanBeCritCapped } from '../../server/gameData';
 
 const OTHER_CLASS = 'other class';
 const spaced = (s: string) => s.replace(/([a-z])([A-Z])/g, '$1 $2');
@@ -204,6 +206,8 @@ function Overview({ result }: { result: AnalysisResult }) {
 
       <Feedback result={result} />
 
+      <GuildPanel result={result} value={me.dps} />
+
       <div className="grid-2">
         <section className="panel">
           <h2 className="panel-title">Cooldowns</h2>
@@ -283,6 +287,10 @@ function HealingOverview({ result, h }: { result: AnalysisResult; h: Healing }) 
       </div>
 
       <FeedbackPanels work={feedback.work} good={feedback.good} />
+
+      {me.mana && <ManaPanel mana={me.mana} />}
+
+      <GuildPanel result={result} value={h.hps} />
 
       <div className="grid-2">
         <section className="panel">
@@ -499,6 +507,12 @@ function BuffsView({ result }: { result: AnalysisResult }) {
   return (
     <>
       <Survival result={result} />
+      {(me.potions || me.raidDebuffs || me.dots?.length) && (
+        <div className="grid-2">
+          <PotionsAndDebuffs me={me} />
+          <DotsPanel me={me} />
+        </div>
+      )}
       <section className="panel">
         <h2 className="panel-title">{ref ? `Buff uptime vs ${ref.name}` : 'Buff uptime'}</h2>
         {ref && !refSameClass && <p className="muted small">Different class: their class-only buffs (stances, forms, auras) are hidden.</p>}
@@ -625,12 +639,9 @@ function Survival({ result }: { result: AnalysisResult }) {
           {me.deaths.length === 0 ? (
             <p className="good-note"><Glyph name="check" size={16} />No deaths</p>
           ) : (
-            <ul className="death-list">
-              {me.deaths.map((x, i) => (
-                <li key={i}><Glyph name="alert" size={16} />Died at {mmss(x.seconds)}{x.by ? ` to ${x.by}` : ''}</li>
-              ))}
-            </ul>
+            <DeathList deaths={me.deaths} />
           )}
+          {me.mitigation && <MitigationFacts m={me.mitigation} critCap={tankCanBeCritCapped(me.host)} />}
           {sv && (
             <dl className="facts single">
               <div><dt>Rank for damage taken</dt><dd>{sv.rank} of {sv.compared}</dd></div>

@@ -19,6 +19,9 @@ delete from public.guild_raids where host <> 'fresh.warcraftlogs.com';
 -- Stored fights from any other game version
 delete from public.fight_packs where host <> 'fresh.warcraftlogs.com';
 
+-- Guild benchmarks from raids that are no longer on Past raids
+delete from public.kill_stats where report_code not in (select report_code from public.guild_raids);
+
 -- Tables replaced in v0.23.0 (if migrate-0.23.sql wasn't run)
 drop table if exists public.snapshot_cache;
 drop table if exists public.saved_data;
@@ -37,4 +40,5 @@ union all select 'bot_claims', count(*) from public.bot_claims
 union all select 'bot_reminders', count(*) from public.bot_reminders
 union all select 'guild_raids', count(*) from public.guild_raids
 union all select 'fight_packs', count(*) from public.fight_packs
-union all select 'item_names', count(*) from public.item_names;
+union all select 'item_names', count(*) from public.item_names
+union all select 'kill_stats', count(*) from public.kill_stats;

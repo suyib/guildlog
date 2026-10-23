@@ -3,7 +3,7 @@
 // Warcraft Logs is down.
 import { useEffect, useMemo, useState } from 'react';
 import type { RaidCard, SavedRaid } from '../../server/types';
-import { type Me, addRaid, loadMe, loadRaids } from '../api';
+import { type Me, addRaid, deleteRaid, loadMe, loadRaids } from '../api';
 import { mmss } from '../format';
 import Glyph from './Glyph';
 import { ClassIcon, SeverityDot, classCss } from './icons';
@@ -122,7 +122,7 @@ export default function RaidsPage() {
           <Overview raids={dated} />
           <div className="grid-raids">
             <Calendar raids={dated} month={month} onMonth={setMonth} selected={selected} onSelect={setSelected} />
-            {current ? <RaidCardView raid={current} archiveDays={archiveDays} /> : <section className="panel"><p className="muted">Pick a raid on the calendar.</p></section>}
+            {current ? <RaidCardView raid={current} archiveDays={archiveDays} canDelete={me?.rank === 'admin' || me?.rank === 'guild_master'} onDeleted={() => { setSelected(null); refresh(); }} /> : <section className="panel"><p className="muted">Pick a raid on the calendar.</p></section>}
           </div>
           <Attendance raids={dated} range={range} onRange={setRange} onSelect={(code) => {
             setSelected(code);
@@ -280,8 +280,29 @@ function RaidChip({ raid, on, onClick, wide = false }: { raid: SavedRaid; on: bo
 
 // ---------- The raid card ----------
 
-function RaidCardView({ raid, archiveDays }: { raid: SavedRaid; archiveDays: number }) {
+function RaidCardView({ raid, archiveDays, canDelete, onDeleted }: { raid: SavedRaid; archiveDays: number; canDelete: boolean; onDeleted: () => void }) {
   const c = raid.card;
+  // Deleting asks once more on the same button row before anything is removed
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  useEffect(() => {
+    setConfirming(false);
+    setDeleteError(null);
+  }, [raid.code]);
+  async function remove() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteRaid(raid.code);
+      onDeleted();
+    } catch (e) {
+      setDeleteError((e as Error).message);
+    } finally {
+      setDeleting(false);
+      setConfirming(false);
+    }
+  }
   // Cards made before v0.21.0 have no count: they were only made once every kill was read
   const partial = !!c && (c.summarized ?? c.kills) < c.kills;
   const when = new Date(raid.startTime!);
@@ -301,8 +322,17 @@ function RaidCardView({ raid, archiveDays }: { raid: SavedRaid; archiveDays: num
         <div className="raid-card-links">
           <a className="button ghost" href={siteLink(raid)}>Open on Guild Logs</a>
           <a className="button ghost" href={logLink(raid)} target="_blank" rel="noreferrer">Warcraft Logs</a>
+          {canDelete && !confirming && <button type="button" className="ghost danger" onClick={() => setConfirming(true)}>Delete raid</button>}
+          {canDelete && confirming && (
+            <>
+              <button type="button" className="ghost danger" disabled={deleting} onClick={remove}>{deleting ? 'Deleting…' : 'Yes, delete it'}</button>
+              <button type="button" className="ghost" disabled={deleting} onClick={() => setConfirming(false)}>Cancel</button>
+            </>
+          )}
         </div>
       </div>
+      {confirming && <p className="warning">This removes the raid from Past raids along with everything stored for it, including saved analyses of this log. Adding it again reads it from Warcraft Logs as a new raid.</p>}
+      {deleteError && <p className="error">{deleteError}</p>}
 
       {!c && <p className="muted">This raid&rsquo;s summary appears once its boss kills have been read.</p>}
       {c && (

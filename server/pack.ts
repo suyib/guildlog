@@ -10,6 +10,7 @@
 // Reports' fights and players (fight 0) are stored too, and reused once the log is finished.
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { cooldownFor } from './cooldowns.js';
+import { MELEE_ID, POTION_IDS } from './gameData.js';
 import { gearFrom } from './dashboard.js';
 import { dbEnabled, rest } from './db.js';
 import { type FightDigest, DIGEST_VERSION, digestFromPack } from './fightDigest.js';
@@ -31,6 +32,8 @@ export interface PackTables {
   details: any;
   interrupts: Record<string, number>;
   dispels: Record<string, number>;
+  /** Debuffs on the boss and its adds: [{ guid, name, totalUptime, totalUses, abilityIcon }]. */
+  debuffs?: any[];
 }
 
 /** [abilityId, total, hits, crits, misses, uses] */
@@ -53,6 +56,23 @@ export interface PackPlayer {
   hb: number[];
   tb: number[][];
   gear: GearItem[];
+  /** Damage-over-time spells on their main target: [abilityId, uptime per mille, ticks]. */
+  dots?: number[][];
+  /** Mana in percent every 5 seconds (-1 before it's known), for anyone who uses mana. */
+  mana?: number[];
+  /** A boss's melee swings at this player: [swings, dodged, parried, missed, blocked, crits]. */
+  mit?: number[];
+}
+
+/** What happened in the 10 seconds before a death. */
+export interface PackDeath {
+  id: number;
+  /** Centiseconds from the pull. */
+  at: number;
+  /** The last hits: [centiseconds, abilityId, amount, source name]. */
+  hits: (number | string)[][];
+  /** Healing received in those 10 seconds. */
+  healed: number;
 }
 
 export interface PackFull {
@@ -63,6 +83,7 @@ export interface PackFull {
   raid: number[];
   /** Bloodlust / Heroism casts: [centiseconds, sourceId, abilityId] */
   lust: number[][];
+  deaths?: PackDeath[];
 }
 
 export interface FightPack {
@@ -241,7 +262,8 @@ async function readTables(host: string, code: string, fightId: number): Promise<
       taken: table(dataType:DamageTaken, fightIDs:$fid) deaths: table(dataType:Deaths, fightIDs:$fid)`, 35_000),
     getTables(host, code, fightId, `
       healing: table(dataType:Healing, fightIDs:$fid) interrupts: table(dataType:Interrupts, fightIDs:$fid)
-      dispels: table(dataType:Dispels, fightIDs:$fid)`, 30_000),
+      dispels: table(dataType:Dispels, fightIDs:$fid)
+      debuffs: table(dataType:Debuffs, fightIDs:$fid, hostilityType:Enemies)`, 30_000),
     optional(getTables(host, code, fightId, `
       rankings(fightIDs:$fid, playerMetric:dps) hps: rankings(fightIDs:$fid, playerMetric:hps)
       details: playerDetails(fightIDs:$fid, includeCombatantInfo:true)`, 25_000)),
@@ -254,6 +276,7 @@ async function readTables(host: string, code: string, fightId: number): Promise<
     healing: entriesOf(b.healing, ['id', 'name', 'type', 'petOwner', 'total', 'overheal', 'activeTime'], ['name', 'total', 'overheal']),
     interrupts: countsFrom(b.interrupts),
     dispels: countsFrom(b.dispels),
+    debuffs: ((b.debuffs?.data?.auras ?? []) as any[]).map((a) => pick(a, ['guid', 'name', 'totalUptime', 'totalUses', 'abilityIcon'])),
     rankings: trimRankings(c.rankings),
     hps: trimRankings(c.hps),
     details: trimDetails(c.details),
@@ -284,7 +307,7 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
     getFightEvents(host, code, ref, 'DamageDone', deadline, run),
     getFightEvents(host, code, ref, 'Healing', deadline, run),
     getFightEvents(host, code, ref, 'DamageTaken', deadline, run),
-    getFightEvents(host, code, ref, 'Casts', deadline, run),
+    getFightEvents(host, code, ref, 'Casts', deadline, run, true),
     run(() => getAbilities(host, code)),
     early.length ? readBuffs(host, code, ref, early, run) : tables.then((t) => readBuffs(host, code, ref, [...idsFrom(t)], run)),
     tables.then((t) => readGear(host, code, ref.id, t, run)),
@@ -327,6 +350,10 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
   };
 
   const friendly = (id: number) => { const t = actors.get(id)?.type; return t === 'Player' || t === 'Pet'; };
+  const ticks = new Map<number, Map<string, number[]>>();
+  const heardTaken: any[] = [];
+  const healedAt: any[] = [];
+  const mit = new Map<number, number[]>();
   for (const e of damage) {
     // Damage to the raid's own side (Hellfire, Life Tap and the like) isn't damage done
     if (e.type !== 'damage' || friendly(e.targetID)) continue;
@@ -339,6 +366,13 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
     const isPet = e.sourceID !== owner;
     const r = bump(isPet ? petAgg(w, e.sourceID) : w.dmg, e.abilityGameID, 6);
     r[1] += amount;
+    // Ticks of damage over time, per spell and target, for its uptime
+    if (!isPet && e.tick) {
+      const key = `${e.abilityGameID}:${e.targetID}`;
+      const list = ticks.get(owner) ?? new Map<string, number[]>();
+      ticks.set(owner, list);
+      (list.get(key) ?? list.set(key, []).get(key)!).push(e.timestamp);
+    }
     if (amount > 0) {
       r[2]++;
       if (CRIT.has(e.hitType)) r[3]++;
@@ -357,6 +391,7 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
     const w = P(owner);
     const amount = num(e.amount);
     w.hb[sec(e.timestamp)] += amount;
+    if (amount > 0 && playerIds.has(e.targetID)) healedAt.push(e);
     const r = bump(w.heal, e.abilityGameID, 5);
     r[1] += amount;
     r[2] += num(e.overheal);
@@ -365,19 +400,41 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
   }
   for (const e of taken) {
     if (e.type !== 'damage' || !playerIds.has(e.targetID)) continue;
+    // A boss's melee swings: how many were dodged, parried, missed, blocked or crits
+    if (e.abilityGameID === MELEE_ID && !friendly(e.sourceID)) {
+      const m = mit.get(e.targetID) ?? [0, 0, 0, 0, 0, 0];
+      mit.set(e.targetID, m);
+      m[0]++;
+      if (e.hitType === 7) m[1]++;
+      else if (e.hitType === 8) m[2]++;
+      else if (e.hitType === 0) m[3]++;
+      if (num(e.blocked) > 0 || e.hitType === 4 || e.hitType === 5) m[4]++;
+      if (e.hitType === 2 || e.hitType === 5) m[5]++;
+    }
     const amount = num(e.amount) + num(e.absorbed);
     if (amount <= 0) continue;
+    heardTaken.push(e);
     const key = `${sec(e.timestamp)}:${e.abilityGameID}`;
     const tb = P(e.targetID).tb;
     tb.set(key, (tb.get(key) ?? 0) + amount);
     used.add(e.abilityGameID);
   }
   const lust: number[][] = [];
+  const manaAt = new Map<number, number[]>();
+  const buckets = Math.ceil(secs / 5);
   for (const e of casts) {
     if (e.type !== 'cast') continue;
     const owner = ownerOf(e.sourceID);
     if (owner === null) continue;
     used.add(e.abilityGameID);
+    // Mana at the moment of each cast (resource type 0), kept every 5 seconds
+    const mana = e.sourceID === owner ? ((e.classResources ?? []) as any[]).find((r) => r?.type === 0 && num(r.max) > 0) : null;
+    if (mana) {
+      const list = manaAt.get(owner) ?? new Array<number>(buckets).fill(-1);
+      manaAt.set(owner, list);
+      const b = Math.min(buckets - 1, Math.floor(sec(e.timestamp) / 5));
+      list[b] = Math.round((num(mana.amount) / num(mana.max)) * 100);
+    }
     if (e.sourceID === owner) {
       P(owner).casts.push([cs(e.timestamp), e.abilityGameID]);
       if (LUST_IDS.has(e.abilityGameID)) lust.push([cs(e.timestamp), owner, e.abilityGameID]);
@@ -387,6 +444,51 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
     }
   }
   for (const b of buffs.values()) for (const a of b.auras) used.add(a[0]);
+
+  // Damage over time: on each spell's main target, time covered by its ticks
+  const fightMs = ref.endTime - ref.startTime;
+  const dotsOf = (id: number) => {
+    const byTarget = ticks.get(id);
+    if (!byTarget) return undefined;
+    const best = new Map<number, number[]>();
+    for (const [key, times] of byTarget) {
+      const a = Number(key.split(':')[0]);
+      if ((best.get(a)?.length ?? 0) < times.length) best.set(a, times);
+    }
+    const out: number[][] = [];
+    for (const [a, raw] of best) {
+      const times = [...raw].sort((x, y) => x - y);
+      if (times.length < 4) continue;
+      const gaps = times.slice(1).map((t, i) => t - times[i]).filter((g) => g > 200).sort((x, y) => x - y);
+      const every = gaps[Math.floor(gaps.length / 2)] ?? 3000;
+      if (every < 900 || every > 6000) continue;
+      // Each tick covers the time back to the last one, while the spell was still running
+      // (a longer gap means it fell off: the first tick after re-applying covers one interval)
+      let covered = every;
+      for (let i = 1; i < times.length; i++) {
+        const g = times[i] - times[i - 1];
+        covered += g <= every * 1.6 ? g : every;
+      }
+      out.push([a, Math.min(1000, Math.round((covered / fightMs) * 1000)), times.length]);
+      used.add(a);
+    }
+    return out.length ? out : undefined;
+  };
+
+  // The 10 seconds before each death: what hit them, and how much healing they got
+  const deaths: PackDeath[] = [];
+  for (const d of (t.deaths?.data?.entries ?? []) as any[]) {
+    const at = num(d.deathTime ?? d.timestamp);
+    if (!d.id || !at) continue;
+    const from = at - 10_000;
+    const hits = heardTaken
+      .filter((e) => e.targetID === d.id && e.timestamp >= from && e.timestamp <= at)
+      .sort((x, y) => x.timestamp - y.timestamp)
+      .slice(-8)
+      .map((e) => [cs(e.timestamp), e.abilityGameID, Math.round(num(e.amount) + num(e.absorbed)), actors.get(e.sourceID)?.name ?? '']);
+    const healed = healedAt.filter((e) => e.targetID === d.id && e.timestamp >= from && e.timestamp <= at).reduce((s, e) => s + num(e.amount), 0);
+    deaths.push({ id: d.id, at: cs(at), hits, healed: Math.round(healed) });
+  }
 
   const round = (xs: number[]) => xs.map((v) => Math.round(v));
   const players: Record<string, PackPlayer> = {};
@@ -408,6 +510,9 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
       hb: w && w.hb.some((v) => v > 0) ? round(w.hb) : [],
       tb: w ? [...w.tb].map(([k, v]) => [...k.split(':').map(Number), Math.round(v)]).sort((x, y) => x[0] - y[0]) : [],
       gear: gear.get(id) ?? [],
+      ...(dotsOf(id) ? { dots: dotsOf(id) } : {}),
+      ...(manaAt.has(id) ? { mana: manaAt.get(id) } : {}),
+      ...(mit.get(id) && mit.get(id)![0] >= 10 ? { mit: mit.get(id) } : {}),
     };
   }
   const names: PackFull['names'] = {};
@@ -415,7 +520,7 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
     const a = abilities.get(id) ?? buffNames.get(id);
     if (a) names[id] = a.icon ? [a.name, a.icon] : [a.name];
   }
-  return { names, players, raid: round(raid), lust };
+  return { names, players, raid: round(raid), lust, deaths };
 }
 
 /** Everyone's buffs (uptime, uses, and when Bloodlust and big cooldowns were up), eight players per request. */
@@ -434,7 +539,8 @@ async function readBuffs(host: string, code: string, ref: FightRef, ids: number[
         total: num(data.totalTime) || ref.endTime - ref.startTime,
         auras: ((data.auras ?? []) as any[]).filter((a) => a?.guid).map((a) => {
           if (a.name) names.set(num(a.guid), { name: String(a.name), icon: typeof a.abilityIcon === 'string' ? a.abilityIcon : undefined });
-          const keepBands = /^(Bloodlust|Heroism|Time Warp|Ancient Hysteria)$/.test(String(a.name)) || cooldownFor(String(a.name), host) !== undefined;
+          // Bands for Bloodlust, big cooldowns and potions (a potion's band at the pull is a pre-pot)
+          const keepBands = /^(Bloodlust|Heroism|Time Warp|Ancient Hysteria)$/.test(String(a.name)) || cooldownFor(String(a.name), host) !== undefined || POTION_IDS.has(num(a.guid));
           const bands = keepBands ? ((a.bands ?? []) as any[]).map((b) => [Math.round(num(b.startTime) - ref.startTime), Math.round(num(b.endTime) - ref.startTime)]) : undefined;
           return [num(a.guid), Math.round(num(a.totalUptime)), num(a.totalUses), ...(bands ? [bands] : [])] as [number, number, number, number[][]?];
         }),

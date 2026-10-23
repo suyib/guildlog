@@ -4,6 +4,7 @@ import { compact, mmss, n0, pct } from '../format';
 import { DpsChart } from './charts';
 import Glyph from './Glyph';
 import { ClassIcon, GameIcon, SeverityDot, classCss, parseCss } from './icons';
+import { recapLine } from '../../server/insights';
 
 type Player = FightBreakdown['players'][number];
 const spaced = (s: string) => s.replace(/([a-z])([A-Z])/g, '$1 $2');
@@ -165,6 +166,7 @@ export default function Breakdown({ data, onPick }: { data: FightBreakdown; onPi
                   <span className="ev-time">{mmss(d.seconds)}</span>
                   <span className={classCss(d.className)}>{d.name}</span>
                   <span className="muted">{d.by}</span>
+                  {d.hits && d.hits.length > 0 && <span className="muted small recap-line">{recapLine(d, compact)}</span>}
                 </li>
               ))}
             </ul>
@@ -178,6 +180,16 @@ export default function Breakdown({ data, onPick }: { data: FightBreakdown; onPi
                 <li key={i}><span className="ev-time">{mmss(b.seconds)}</span>{b.name}<span className="muted">by {b.by}</span></li>
               ))}
             </ul>
+          )}
+          {data.debuffs && data.debuffs.length > 0 && (
+            <>
+              <h2 className="panel-title">Debuffs on the boss</h2>
+              <ul className="event-list">
+                {data.debuffs.map((d) => (
+                  <li key={d.label}><span className={`ev-time${d.uptimePct < 80 ? ' warn-text' : ''}`}>{d.uptimePct}%</span>{d.label}</li>
+                ))}
+              </ul>
+            </>
           )}
         </section>
       </div>

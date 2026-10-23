@@ -1,5 +1,7 @@
 import { GAP_SECONDS, IGNORE_FOR_GAPS, cooldownFor } from './cooldowns.js';
 import { isGeneralBuff } from './buffs.js';
+import { DEFENSE_CAP_NOTE, tankCanBeCritCapped } from './gameData.js';
+import { recapLine } from './insights.js';
 import type { AbilityRow, BuffRow, BuffWindow, Comparison, CooldownUse, Finding, Gap, GearItem, Healing, PlayerSnapshot, Strength } from './types.js';
 import type { Actor, CastEvent, Fight, PlayerTables } from './wcl.js';
 
@@ -302,8 +304,12 @@ export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Fi
 
   // 5. Deaths
   for (const d of me.deaths) {
-    out.push({ severity: 'high', title: `Died at ${mmss(d.seconds)}`, detail: `Killing blow: ${d.by}. Everything after this was lost damage.` });
+    const recap = recapLine(d, short);
+    out.push({ severity: 'high', title: `Died at ${mmss(d.seconds)}`, detail: `Killing blow: ${d.by}.${recap ? ` ${recap}.` : ''} Everything after this was lost damage.` });
   }
+
+  // Potions, damage over time and tanking (from the whole fight's events)
+  out.push(...insightFeedback(me, false).work);
 
   // 6. Avoidable damage taken (general)
   if (ref) {
@@ -389,6 +395,9 @@ export function buildStrengths(me: PlayerSnapshot, comparisons: Comparison[], ge
       out.push({ weight: 6, title: `More casts per minute than ${classRef.name}`, detail: better.map((a) => `${a.name} ${me.castsPerMinute[a.name]}/min vs ${classRef.castsPerMinute[a.name]}/min`).join('; ') + '.' });
     }
   }
+
+  // Potions, damage over time and tanking
+  for (const g of insightFeedback(me, false).good) out.push({ weight: 5, ...g });
 
   // Consumables and buffs
   const consumables = me.buffs.filter((b) => /Flask|Elixir|Well Fed|Scroll|Oil|Sharpening|Stone/i.test(b.name) && b.uptimePct >= 90).map((b) => b.name);
@@ -484,10 +493,69 @@ export function healingFeedback(me: PlayerSnapshot, h: Healing, ref?: PlayerSnap
   if (me.cooldowns.length && me.cooldowns.every((x) => x.uses >= x.possible)) good.push({ title: 'Cooldowns on time', detail: 'Every tracked cooldown used as often as the fight allowed.' });
 
   // Alive, and prepared
-  if (me.deaths.length) work.push({ severity: 'high', title: `Died at ${Math.floor(me.deaths[0].seconds / 60)}:${String(round(me.deaths[0].seconds) % 60).padStart(2, '0')}`, detail: `Killed by ${me.deaths[0].by}. A dead healer puts the whole raid at risk; the Buffs & survival page shows what hit you.` });
-  else good.push({ title: 'Stayed alive the whole fight', detail: 'No deaths, so no lost healing.' });
+  if (me.deaths.length) {
+    const recap = recapLine(me.deaths[0], short);
+    work.push({ severity: 'high', title: `Died at ${mmss(me.deaths[0].seconds)}`, detail: `Killed by ${me.deaths[0].by}.${recap ? ` ${recap}.` : ''} A dead healer puts the whole raid at risk; the Buffs & survival page shows what hit you.` });
+  } else good.push({ title: 'Stayed alive the whole fight', detail: 'No deaths, so no lost healing.' });
+  const extra = insightFeedback(me, true);
+  work.push(...extra.work);
+  good.push(...extra.good);
   const consumables = me.buffs.filter((b) => /Flask|Elixir|Well Fed|Scroll|Oil|Mana/i.test(b.name) && b.uptimePct >= 90).map((b) => b.name);
   if (consumables.length) good.push({ title: 'Consumables up all fight', detail: consumables.slice(0, 5).join(', ') + '.' });
 
+  return { work, good };
+}
+
+const short = (v: number) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}m` : v >= 1e3 ? `${Math.round(v / 1e3)}k` : String(Math.round(v)));
+
+/**
+ * Potions, damage-over-time uptime, mana (healers) and being crit as a tank, from the whole
+ * fight's events. Empty for fights read before v0.25.0. The Discord DMs use the same thresholds.
+ */
+export function insightFeedback(me: PlayerSnapshot, healer: boolean): { work: Finding[]; good: Strength[] } {
+  const work: Finding[] = [];
+  const good: Strength[] = [];
+  const long = me.fightSeconds >= 90;
+
+  // Potions: one before the pull and one during the fight
+  const pots = me.potions;
+  if (pots && long) {
+    const n = pots.used.length + (pots.prePot ? 1 : 0);
+    if (n === 0) {
+      work.push({ severity: 'medium', title: 'No potion used', detail: `A combat potion is free ${healer ? 'healing (a mana potion)' : 'damage'}: drink one just before the pull and another during the fight.` });
+    } else {
+      good.push({ title: pots.prePot && pots.used.length ? 'Pre-potted and used a potion' : 'Potion used', detail: [pots.prePot ? 'One running at the pull' : '', ...pots.used.map((u) => `${u.name} at ${mmss(u.seconds)}`)].filter(Boolean).join(', ') + '.' });
+      if (!pots.prePot && me.fightSeconds >= 150) work.push({ severity: 'low', title: 'Potion before the pull too', detail: 'Drinking one just before the pull gives you a second potion in a fight this long.' });
+    }
+  }
+
+  // Damage over time kept up on the main target
+  const dots = (me.dots ?? []).filter((d) => d.sharePct >= 5);
+  const lowDots = dots.filter((d) => d.uptimePct < 80);
+  for (const d of lowDots.slice(0, 2)) {
+    work.push({ severity: d.uptimePct < 60 ? 'high' : 'medium', title: `${d.name} up ${d.uptimePct}% of the fight`, detail: `It's ${d.sharePct}% of your damage, so every second it's missing costs you. Refresh it just before it runs out.` });
+  }
+  if (dots.length && !lowDots.length && dots.every((d) => d.uptimePct >= 90)) {
+    good.push({ title: 'Damage over time kept up', detail: dots.map((d) => `${d.name} ${d.uptimePct}%`).join(', ') + '.' });
+  }
+
+  // Mana, for healers
+  const mana = me.mana;
+  if (healer && mana) {
+    if (mana.oomAt !== null) {
+      work.push({ severity: 'high', title: `Ran out of mana at ${mmss(mana.oomAt)}`, detail: `${mana.lowSeconds}s under 10% mana. Pace your bigger heals, use a mana potion or rune, and ask for Innervate or a mana cooldown before you're empty.` });
+    } else if (mana.endPct !== null && mana.endPct >= 50 && me.kill && me.fightSeconds >= 120) {
+      work.push({ severity: 'low', title: `Finished with ${mana.endPct}% mana`, detail: 'You had mana to spare: bigger heals or more of them were affordable.' });
+    } else if (mana.endPct !== null && mana.endPct <= 30) {
+      good.push({ title: 'Mana used well', detail: `Finished with ${mana.endPct}% without running out.` });
+    }
+  }
+
+  // Tanks: crits from the boss's melee mean you're under the defense cap
+  const m = me.mitigation;
+  if (m && m.swings >= 30 && tankCanBeCritCapped(me.host)) {
+    if (m.crits > 0) work.push({ severity: 'high', title: `Crit by the boss ${m.crits}×`, detail: `${DEFENSE_CAP_NOTE} Avoided ${m.avoidPct}% of ${m.swings} swings.` });
+    else good.push({ title: 'Never crit by the boss', detail: `Avoided ${m.avoidPct}% of ${m.swings} swings${m.blocked ? `, blocked ${m.blocked}` : ''}.` });
+  }
   return { work, good };
 }

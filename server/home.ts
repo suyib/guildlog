@@ -8,6 +8,7 @@ import { discord, env } from './discord/api.js';
 import { type FightDigest, type PlayerDigest, healsMost } from './discord/digest.js';
 import { claimsFor, recentRaids } from './discord/store.js';
 import { reportRegion, storedDigests } from './pack.js';
+import { trendFor } from './benchmarks.js';
 import type { Session } from './auth.js';
 import type { HomeData, ProfileCharacter, ProfileData, SavedRaid } from './types.js';
 import { membership } from './officers.js';
@@ -110,6 +111,7 @@ export async function profileData(session: Session): Promise<ProfileData> {
       attendance: { attended: recent8.filter(inCard).length, of: recent8.length },
       raidsAttended: cards.filter(inCard).length,
       lastRaid: null, stats: [],
+      trend: await trendFor(c.character).catch(() => []),
     };
     // The most recent raid this character was in, from the bot's summaries
     for (const r of raids) {

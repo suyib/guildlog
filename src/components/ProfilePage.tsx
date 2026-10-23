@@ -99,6 +99,21 @@ function CharacterCard({ c }: { c: ProfileCharacter }) {
         <p className="muted small">No raids with this character yet. It fills in after the next /raidend.</p>
       )}
 
+      {c.trend && c.trend.length > 1 && (
+        <div>
+          <div className="comp-label">{c.healer ? 'Healing parse' : 'Parse'} by week</div>
+          <ol className="trend">
+            {c.trend.map((w) => (
+              <li key={w.week}>
+                <span className="muted">{new Date(`${w.week}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}</span>
+                <progress className={`bar ${parseCss(w.parse)}`} max={100} value={w.parse ?? 0} aria-label={`Average parse ${w.parse ?? 'unknown'}`} />
+                <strong className={parseCss(w.parse)}>{w.parse ?? '–'}</strong>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
       {c.stats.length > 0 && (
         <div className="char-stats">
           {c.stats.map((s) => <span key={s.name} className="admin-char">{s.name} <strong>{s.value}</strong></span>)}

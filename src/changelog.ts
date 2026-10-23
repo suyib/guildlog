@@ -9,6 +9,23 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.25.0',
+    date: '2026-10-23',
+    changes: [
+      'Potions (including pre-pots), your damage-over-time uptime and the debuffs kept on the boss, with feedback on the site and in Discord.',
+      'Deaths show the last hits and the healing received in the 10 seconds before.',
+      'Healers: mana over the fight, and when it ran out. Tanks: dodges, parries, blocks and crits from the boss.',
+      'Against the guild: where a fight sits among the guild\u2019s own kills of that boss in your spec, on analyses and in your Discord summary. Profiles and /check show parses week by week.',
+    ],
+  },
+  {
+    version: '0.24.0',
+    date: '2026-10-23',
+    changes: [
+      'Guild masters and admins can delete a raid from Past raids (Delete raid on its card). Everything stored for it goes too, including saved analyses of that log; adding it again reads it from Warcraft Logs as a new raid.',
+    ],
+  },
+  {
     version: '0.23.0',
     date: '2026-10-23',
     changes: [

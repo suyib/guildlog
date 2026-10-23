@@ -7,10 +7,11 @@ import { level, siteAdminIds, storedPerson } from '../ranks.js';
 import { rest } from '../db.js';
 import { getReportMeta, parseReportUrl } from '../wcl.js';
 import { reportRegion, storedDigests } from '../pack.js';
+import { guildContext, trendFor } from '../benchmarks.js';
 import {
   BRAND, bugButton, EPHEMERAL, type Embed, type MessageBody, button, discord, editReply, env, linkButton, memberRoles, postToChannel, row, sendDm,
 } from './api.js';
-import { type RaidDigest, playerFights, raidDigest } from './digest.js';
+import { type RaidDigest, healsMost, playerFights, raidDigest } from './digest.js';
 import { RAID_CHECKLIST, ROLE_CHOICES, type Role, consumablesMessage, lookupMessage } from './info.js';
 import { PAGES, type Page, pageButtons, personalPage, raidSummary, siteLink } from './pages.js';
 import {
@@ -395,7 +396,7 @@ async function raidButton(i: Interaction, id: string): Promise<Outcome> {
     const sent: string[] = [];
     let dmFailed = false;
     for (const c of claims) {
-      const body = personalPage(page, digest, c.character, c.realm);
+      const body = personalPage(page, digest, c.character, c.realm, page === 'summary' ? await guildLines(digest, c.character, c.realm) : undefined);
       if (!body) continue;
       if (await sendDm(user.id, body)) sent.push(c.character);
       else {
@@ -425,6 +426,29 @@ async function check(i: Interaction): Promise<Outcome> {
   });
 }
 
+/** "Against the guild" lines for the quick summary: where they placed among the guild's kills of each boss in their spec. */
+async function guildLines(digest: RaidDigest, character: string, realm: string | null): Promise<string[]> {
+  const lines: string[] = [];
+  for (const { fight, p } of playerFights(digest, character, realm)) {
+    const healer = healsMost(p);
+    const g = await guildContext({ encounterId: fight.encounterID, encounter: fight.name, className: p.className, specName: p.specName, name: p.name, healer }).catch(() => null);
+    if (!g || g.players < 2 || !g.place || !g.best) continue;
+    const mine = healer ? p.healing?.hps ?? 0 : p.dps;
+    const n = (v: number) => Math.round(v).toLocaleString('en-US');
+    lines.push(`• **${fight.name}**: ${n(mine)} ${g.unit} · #${g.place} of ${g.players} ${g.spec}s in the guild (best ${n(g.best.perSecond)}${g.median ? `, typical ${n(g.median)}` : ''})`);
+  }
+  return lines;
+}
+
+/** "55 → 61 → 72" over the weeks with raids. */
+async function trendLine(name: string): Promise<string | null> {
+  const weeks = (await trendFor(name).catch(() => [])).filter((w) => w.parse !== null);
+  if (weeks.length < 2) return null;
+  const first = weeks[0].parse!;
+  const last = weeks.at(-1)!.parse!;
+  return `Parse by week: ${weeks.map((w) => w.parse).join(' → ')} (${last >= first ? 'up' : 'down'} ${Math.abs(last - first)} over ${weeks.length} raid weeks)`;
+}
+
 async function characterCard(c: Claim): Promise<Embed> {
   // Latest raid this character appears in
   for (const r of await recentRaids(10)) {
@@ -444,6 +468,8 @@ async function characterCard(c: Claim): Promise<Embed> {
       { name: 'Item level', value: last.itemLevel ? String(last.itemLevel) : levels.length ? (levels.reduce((t, v) => t + v, 0) / levels.length).toFixed(1) : '–', inline: true },
       { name: 'Last raid', value: `${r.title ?? r.report_code} (${new Date(r.started_at).toLocaleDateString('en-GB')})\n${rows.length} boss${rows.length > 1 ? 'es' : ''}${parses.length ? ` · average parse ${Math.round(parses.reduce((t, v) => t + v, 0) / parses.length)}` : ''}` },
     ];
+    const trend = await trendLine(c.character);
+    if (trend) fields.push({ name: 'Last 8 weeks', value: trend });
     if (withGear?.stats?.length) fields.push({ name: 'Stats at the pull', value: withGear.stats.slice(0, 12).map((s) => `${s.name} ${s.value}`).join(' · ').slice(0, 1024) });
     return { title: `${c.character}${c.realm ? ` · ${c.realm}` : ''}`, color: BRAND, fields, url: siteLink(r.host, r.report_code, rows.at(-1)!.fight.id, last.id) };
   }

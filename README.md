@@ -97,6 +97,7 @@ The **Past raids** page shows a calendar of raid nights, a card for each (bosses
 
 - Raids are added by `/raidend`, by **Add a past raid** on the page, or automatically from the guild's uploads if `GUILD_NAME`, `GUILD_REALM` and `GUILD_REGION` are set.
 - Each raid is then stored by the every-5-minutes job (`?task=reminders`, the same one that posts reminders): one read per boss kill. A night is usually done within the hour.
+- Guild masters and admins can **Delete raid** on a raid's card. It removes the raid, every stored fight, the report's fight list and saved analyses of that log (the activity log notes who did it). Adding it again reads it from Warcraft Logs as new.
 - When Warcraft Logs is down, stored raids still load on the site and in the bot. Comparing with a log that's never been read still needs Warcraft Logs.
 
 ## Stored fights
@@ -107,7 +108,9 @@ Each boss fight is read from Warcraft Logs **once** and kept in `fight_packs` (c
 - A stored kill is roughly 60–120 KB; a raid night roughly 1 MB.
 - A finished log's fight list is reused too (3 hours after its last fight). Item and enchant names are learned once into `item_names`.
 - Logs that aren't on Past raids (comparisons with other guilds' logs) are removed after a week unused. Past raids keep each kill whole for `ARCHIVE_DAYS` (default 90), then just its tables and summary (about a fifth of the size): breakdowns, cards and the bot still work; a player's cast timeline would need a fresh read.
-- Upgrading from v0.22 or earlier: run `supabase/migrate-0.23.sql` once after deploying. It keeps the bot's summaries, removes `snapshot_cache`, `saved_data` and `bot_raid_fights`, and queues Past raids to be read once into the new format.
+- Potions, damage-over-time uptime, boss debuffs, death recaps, healer mana and tank mitigation all come from the same stored fight (no extra Warcraft Logs requests beyond the boss-debuffs table and mana on cast events). The spell lists and the defense-cap rule are in `server/gameData.ts` (GAME CONTENT).
+- Guild benchmarks and trends use `kill_stats`: one small row per player per kill of the guild's Past raids. Deleting a raid removes its rows too.
+- Upgrading from v0.22 or earlier: run `supabase/migrate-0.23.sql` once after deploying (safe to run again; it also adds `kill_stats`). It keeps the bot's summaries, removes `snapshot_cache`, `saved_data` and `bot_raid_fights`, and queues Past raids to be read once into the new format.
 
 ## Releases
 
