@@ -271,8 +271,9 @@ async function raidStart(i: Interaction): Promise<Outcome> {
   } catch (e) {
     return reply({ content: (e as Error).message });
   }
-  const channelId = env.raidChannel() || (i.guild_id ? i.channel_id : '');
-  if (!channelId) return reply({ content: 'No raid channel is set up yet (DISCORD_RAID_CHANNEL_ID in Vercel).' });
+  // Always the log channel, wherever /raidstart was typed (the channel it was typed in only if none is set)
+  const channelId = env.raidLogChannel() || (i.guild_id ? i.channel_id : '');
+  if (!channelId) return reply({ content: 'No log channel is set up yet (DISCORD_RAID_LOG_CHANNEL_ID in Vercel).' });
   const logger = (opt(o, 'logger') as string | undefined) ?? userOf(i).id;
   const note = opt(o, 'note') as string | undefined;
   return deferred(i, async () => {
@@ -303,8 +304,9 @@ async function raidEnd(i: Interaction): Promise<Outcome> {
         ? { content: `Only <@${open.started_by}>, who started ${open.title ?? 'the current raid'}, can end it.` }
         : { content: 'There\u2019s no raid in progress. Start one with `/raidstart` first.' };
     }
-    const channelId = env.raidChannel() || (i.guild_id ? i.channel_id! : '');
-    if (!channelId) return { content: 'No raid channel is set up yet (DISCORD_RAID_CHANNEL_ID in Vercel).' };
+    // Always the summary channel, wherever /raidend was typed (the channel it was typed in only if none is set)
+    const channelId = env.raidSummaryChannel() || (i.guild_id ? i.channel_id! : '');
+    if (!channelId) return { content: 'No summary channel is set up yet (DISCORD_RAID_SUMMARY_CHANNEL_ID in Vercel).' };
     const digest = await raidDigest(raid.host, raid.report_code, 40_000, { fresh: true });
     await postToChannel(channelId, raidSummary(digest, raid.logger_id));
     await endRaid(raid.report_code);

@@ -9,6 +9,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.25.2',
+    date: '2026-10-23',
+    changes: ['Discord: /raidstart always posts the live log in the raid log channel, and /raidend always posts the summary in the summary channel, wherever they\u2019re typed.'],
+  },
+  {
     version: '0.25.1',
     date: '2026-10-23',
     changes: [
