@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.20.0',
+    date: '2026-10-23',
+    changes: [
+      'Home page: the guild\u2019s Discord server and member count, the next raid from /remind, raid numbers for the last 8 weeks, the latest raids with kill times, the last raid\u2019s highlights, your characters and recent analyses.',
+      'Your profile (click your name in the menu): a card for each claimed character with class, spec, level, realm, item level, attendance, latest raid and parse, and a link to analyze their best boss.',
+    ],
+  },
+  {
     version: '0.19.0',
     date: '2026-10-23',
     changes: [

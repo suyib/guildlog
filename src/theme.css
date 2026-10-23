@@ -578,6 +578,47 @@ progress.uptime-bar { height: 8px; color: var(--primary-light); }
 .side-user-name { display: flex; flex-direction: column; min-width: 0; flex: 1; font-size: 13px; font-weight: 600; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-user-out { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
 .side-user + .side-version { margin-top: 8px; }
+.side-user-link { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; color: var(--ink); }
+a.side-user-link:hover { text-decoration: none; }
+a.side-user-link:hover .side-user-name > .muted { color: var(--link); }
+.side-user.on { outline: 1px solid var(--primary-light); }
+
+/* ---------- Home page ---------- */
+.home-hero { display: flex; flex-direction: row; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.home-guild { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.home-guild img { border-radius: 16px; flex: none; }
+.home-guild h1 { margin: 0; }
+.home-guild p { margin: 2px 0 0; }
+.home-mine { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 13px; }
+.home-next { display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-radius: 14px; background: rgba(0, 124, 173, 0.16); min-width: 220px; }
+.home-raids { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.home-raids li { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--raised); }
+.home-raids .raid-chip-count { margin-top: 2px; }
+.raid-chip-count.full { background: var(--win); }
+.raid-chip-count.partial { background: var(--medium); }
+.raid-chip-count.none { background: var(--high); }
+.home-raid-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.home-bosses { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; }
+.home-bosses a.kill { color: var(--good); }
+.home-bosses a.wipe { color: var(--high); }
+
+/* ---------- Profile ---------- */
+.profile-head { display: flex; align-items: center; gap: 16px; flex-direction: row; flex-wrap: wrap; }
+.profile-head img { border-radius: 50%; }
+.profile-head h1 { margin: 2px 0 6px; }
+.profile-out { margin-left: auto; }
+.char-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space); }
+.char-card { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 14px; background: var(--raised); border-top-width: 3px; border-top-style: solid; }
+.char-card:not([class*='-border']) { border-top-color: var(--line); } /* class color on top otherwise */
+.char-head { display: flex; flex-direction: row; align-items: center; gap: 12px; }
+.char-head > img, .char-head > .kpi-icon { flex: none; }
+.char-head h3 { margin: 0; font-size: 18px; }
+.char-card > .badge { align-self: flex-start; }
+.char-card progress.bar { width: 100%; height: 6px; }
+.char-card .facts dt, .char-card .facts dd { white-space: nowrap; }
+.char-last { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.char-last .button { margin-top: 6px; }
+.char-stats { display: flex; flex-wrap: wrap; gap: 4px; }
 
 /* ---------- Admin ---------- */
 .badge-ok { background: rgba(95, 211, 141, 0.14); color: var(--win); }

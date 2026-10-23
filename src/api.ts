@@ -10,6 +10,8 @@ import type {
   HistoryRow,
   PlayerSnapshot,
   AdminOverview,
+  HomeData,
+  ProfileData,
   RaidsList,
   ReportSummary,
   SavedRaid,
@@ -39,6 +41,8 @@ let mePromise: Promise<Me> | null = null;
 /** Who's signed in (asked once per page load). */
 export const loadMe = () => (mePromise ??= call<Me>('/api/login?me=1').catch(() => ({ signedIn: false, kind: null, name: null, avatar: null, officer: false, admin: false, discordLogin: false })));
 export const loadAdmin = () => call<AdminOverview>('/api/admin');
+export const loadHome = () => call<HomeData>('/api/raids?view=home');
+export const loadProfile = () => call<ProfileData>('/api/raids?view=profile');
 export const loadRaids = () => call<RaidsList>('/api/raids');
 export const addRaid = (url: string) => post<SavedRaid>('/api/raids', { url });
 export const loadSaved = (id: string) => call<AnalysisResult>(`/api/history?id=${encodeURIComponent(id)}`);

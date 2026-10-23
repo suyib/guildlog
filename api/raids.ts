@@ -1,9 +1,13 @@
 // Past raids.
 //   GET              every saved raid with its card (calendar, attendance, progress)
+//   GET ?view=home     the home page: guild, next raid, latest raids, highlights, recent analyses
+//   GET ?view=profile  the signed-in person's profile and claimed characters
+// (One function for all three, to stay within the free Vercel plan's function limit.)
 //   POST { url }     officers: add a raid from a Warcraft Logs link; it's saved in full over the next runs
 import { waitUntil } from '@vercel/functions';
 import { archiveNow, listRaids, registerRaid } from '../server/archive.js';
-import { json, requireSession } from '../server/auth.js';
+import { json, readSession, requireSession } from '../server/auth.js';
+import { homeData, profileData } from '../server/home.js';
 import { auditTask } from '../server/discord/audit.js';
 import { requireOfficer } from '../server/officers.js';
 import { parseReportUrl } from '../server/wcl.js';
@@ -14,6 +18,13 @@ export async function GET(req: Request): Promise<Response> {
   const denied = await requireSession(req);
   if (denied) return denied;
   try {
+    const view = new URL(req.url).searchParams.get('view');
+    if (view === 'home' || view === 'profile') {
+      const session = await readSession(req.headers.get('cookie'), process.env.SESSION_SECRET!);
+      if (view === 'home') return json(await homeData(session));
+      if (!session?.uid) return json({ error: 'Sign in with Discord to see your profile.' }, 403);
+      return json(await profileData(session));
+    }
     return json(await listRaids());
   } catch (e) {
     return json({ error: (e as Error).message }, 500);

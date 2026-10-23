@@ -5,13 +5,13 @@ import { sectionsFor, useNav } from '../nav';
 import Glyph from './Glyph';
 import { ShareButton } from './ResultView';
 
-export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history' | 'admin' | 'changelog' | 'saved' }) {
+export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history' | 'admin' | 'me' | 'changelog' | 'saved' }) {
   const { result, section, setSection, view } = useNav();
   const [me, setMe] = useState<Me | null>(null);
   useEffect(() => {
     loadMe().then(setMe);
   }, []);
-  const sections = sectionsFor(page === 'history' || page === 'changelog' || page === 'raids' || page === 'admin' ? null : result, view);
+  const sections = sectionsFor(page === 'history' || page === 'changelog' || page === 'raids' || page === 'admin' || page === 'me' ? null : result, view);
 
   return (
     <aside className="sidebar">
@@ -63,12 +63,22 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history
       )}
 
       {me?.signedIn && (
-        <div className="side-user">
-          {me.avatar ? <img src={me.avatar} width={28} height={28} alt="" /> : <span className="side-user-blank" aria-hidden="true"><Glyph name="users" size={16} /></span>}
-          <span className="side-user-name">
-            {me.name ?? 'Guild member'}
-            <span className="muted small">{me.kind === 'password' ? 'Guild password' : me.officer ? 'Officer' : 'Member'}</span>
-          </span>
+        <div className={`side-user${page === 'me' ? ' on' : ''}`}>
+          {/* Discord sign-ins open their profile; the guild password has no profile */}
+          {me.kind === 'discord' ? (
+            <a href="/#/me" className="side-user-link" title="Your profile and characters" aria-label="Your profile and characters">
+              {me.avatar ? <img src={me.avatar} width={28} height={28} alt="" /> : <span className="side-user-blank" aria-hidden="true"><Glyph name="users" size={16} /></span>}
+              <span className="side-user-name">
+                {me.name ?? 'Guild member'}
+                <span className="muted small">{me.officer ? 'Officer' : 'Member'}</span>
+              </span>
+            </a>
+          ) : (
+            <span className="side-user-link">
+              <span className="side-user-blank" aria-hidden="true"><Glyph name="users" size={16} /></span>
+              <span className="side-user-name">Guild member<span className="muted small">Guild password</span></span>
+            </span>
+          )}
           <a href="/api/login?logout=1" className="side-user-out">Sign out</a>
         </div>
       )}

@@ -5,6 +5,7 @@ import { mmss } from '../format';
 import { useNav } from '../nav';
 import Glyph from './Glyph';
 import Breakdown from './Breakdown';
+import { HomeExtras, HomeHero } from './Home';
 import ResultView from './ResultView';
 
 // Compare dropdown values: "none", "p:<playerId>" (someone in this fight) or "log" (someone in another log).
@@ -145,6 +146,9 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
     await loadMain(url);
   }
 
+  // Opened from a link with a log in it (Discord, Past raids): skip the home page while it loads
+  const [openedWithLog] = useState(() => new URLSearchParams(window.location.search).has('log'));
+
   // Links from the Discord bot open the site with ?log=<Warcraft Logs link> and load it straight away
   useEffect(() => {
     if (initial) return;
@@ -252,8 +256,12 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
     }
   }
 
+  // The home page: guild, next raid and latest raids around the box, until a log is loaded
+  const home = !initial && !report && !result && busy === null && !openedWithLog;
+
   return (
     <>
+      {home && <HomeHero />}
       <section className="panel analyze-card">
         <h2 className="panel-title">{initial ? 'Shared analysis' : 'Analyze a log'}</h2>
         {!report && <p className="help">
@@ -410,6 +418,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
         />
       )}
       {result && <ResultView result={result} />}
+      {home && <HomeExtras />}
     </>
   );
 }

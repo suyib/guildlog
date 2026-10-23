@@ -354,3 +354,50 @@ export interface AdminOverview {
   bot: Record<string, { name: string; firstClaim: string; characters: { name: string; realm: string | null; status: string }[] }>;
   signInLogDays: number;
 }
+
+// ---------- Home page and profiles ----------
+
+export interface HomeData {
+  guild: { name: string; icon: string | null; members: number | null; online: number | null } | null;
+  /** The next raid someone set a /remind for. */
+  nextRaid: { message: string; place: string | null; gatherAt: string } | null;
+  stats: { raids8w: number; fullClears8w: number; avgRaidSeconds: number | null; activeRaiders4w: number };
+  latestRaids: SavedRaid[];
+  /** "What went well" from the latest raid. */
+  highlights: RaidPoint[];
+  recentAnalyses: HistoryRow[];
+  /** The signed-in person's claimed characters. */
+  myCharacters: { name: string; status: string }[];
+}
+
+export interface ProfileCharacter {
+  name: string;
+  realm: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  className: string | null;
+  specName: string | null;
+  role: 'tank' | 'healer' | 'dps' | null;
+  /** From the Blizzard profile API, when set up. */
+  level: number | null;
+  itemLevel: number | null;
+  healer: boolean;
+  /** Raids in the last 8 weeks. */
+  attendance: { attended: number; of: number };
+  raidsAttended: number;
+  stats: { name: string; value: string }[];
+  lastRaid: {
+    host: string; code: string; title: string; date: string;
+    bosses: number; avgParse: number | null; perSecond: number; deaths: number;
+    best: { fightId: number; playerId: number; boss: string; parse: number | null };
+  } | null;
+}
+
+export interface ProfileData {
+  name: string;
+  avatar: string | null;
+  officer: boolean;
+  server: string | null;
+  firstSeen: string | null;
+  signIns: number | null;
+  characters: ProfileCharacter[];
+}
