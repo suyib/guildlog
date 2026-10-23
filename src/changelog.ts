@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.16.0',
+    date: '2026-10-23',
+    changes: [
+      'Healing done tab beside Damage done: HPS, healing parse, healing over the fight, healing by spell with overheal, and healer-focused feedback. Opens by default for healers.',
+      'Buffs & survival: damage taken over the fight, with what hit hardest at each moment and when you died.',
+    ],
+  },
+  {
     version: '0.15.0',
     date: '2026-10-21',
     changes: [

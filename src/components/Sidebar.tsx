@@ -4,8 +4,8 @@ import Glyph from './Glyph';
 import { ShareButton } from './ResultView';
 
 export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history' | 'changelog' | 'saved' }) {
-  const { result, section, setSection } = useNav();
-  const sections = sectionsFor(page === 'history' || page === 'changelog' || page === 'raids' ? null : result);
+  const { result, section, setSection, view } = useNav();
+  const sections = sectionsFor(page === 'history' || page === 'changelog' || page === 'raids' ? null : result, view);
 
   return (
     <aside className="sidebar">

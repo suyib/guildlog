@@ -1,6 +1,7 @@
 // Turns raw Warcraft Logs data into the personal dashboard shown when nothing is compared.
-import type { Dashboard, GearItem, Survival } from './types.js';
-import { getDashboardRaw } from './wcl.js';
+import { rankingRows } from './pipeline.js';
+import type { Dashboard, GearItem, Healing, HealingAbility, SeriesPoint, Survival } from './types.js';
+import { type AmountEvent, type DashboardRaw, getDashboardRaw } from './wcl.js';
 
 const SLOT_NAMES = [
   'Head', 'Neck', 'Shoulder', 'Shirt', 'Chest', 'Waist', 'Legs', 'Feet', 'Wrist', 'Hands',
@@ -66,13 +67,21 @@ export function statsFrom(raw: Record<string, any> | null | undefined): Dashboar
  * then averaged over a 5-second window (like Warcraft Logs' graph). Pet damage isn't in these
  * events, so the line is scaled so its average matches the player's real DPS.
  */
-export function dpsSeriesFrom(events: { timestamp: number; amount: number }[], start: number, fightSeconds: number, dps: number): Dashboard['dpsSeries'] {
+/**
+ * Per-second values across the fight from individual events, smoothed over 5 seconds and scaled
+ * so the line averages the real figure. With `notes`, each point names what contributed most
+ * around then (used for "what hit you" on damage taken).
+ */
+export function seriesFrom(events: AmountEvent[], start: number, fightSeconds: number, average: number, notes = false): SeriesPoint[] {
   const secs = Math.max(1, Math.ceil(fightSeconds));
   if (events.length < 3 || secs < 3) return [];
   const perSecond = new Array<number>(secs).fill(0);
+  const byAbility: Map<string, number>[] = notes ? Array.from({ length: secs }, () => new Map()) : [];
   for (const e of events) {
     const i = Math.floor((e.timestamp - start) / 1000);
-    if (i >= 0 && i < secs) perSecond[i] += e.amount;
+    if (i < 0 || i >= secs) continue;
+    perSecond[i] += e.amount;
+    if (notes && e.ability) byAbility[i].set(e.ability, (byAbility[i].get(e.ability) ?? 0) + e.amount);
   }
   const half = 2;
   const smooth = perSecond.map((_, i) => {
@@ -81,8 +90,78 @@ export function dpsSeriesFrom(events: { timestamp: number; amount: number }[], s
     return perSecond.slice(a, b).reduce((t, v) => t + v, 0) / (b - a);
   });
   const mean = smooth.reduce((t, v) => t + v, 0) / secs;
-  const scale = mean > 0 && dps > 0 ? dps / mean : 1;
-  return smooth.map((v, i) => ({ t: i, dps: Math.round(v * scale) }));
+  const scale = mean > 0 && average > 0 ? average / mean : 1;
+  return smooth.map((v, i) => {
+    const point: SeriesPoint = { t: i, dps: Math.round(v * scale) };
+    if (notes) {
+      // The biggest hitter within the same 5-second window the line is smoothed over
+      const window = new Map<string, number>();
+      for (let j = Math.max(0, i - half); j < Math.min(secs, i + half + 1); j++) for (const [n, a] of byAbility[j]) window.set(n, (window.get(n) ?? 0) + a);
+      const top = [...window].sort((x, y) => y[1] - x[1])[0];
+      if (top) point.note = `Mostly ${top[0]}`;
+    }
+    return point;
+  });
+}
+
+/** DPS across the fight (kept for older callers). */
+export const dpsSeriesFrom = (events: AmountEvent[], start: number, fightSeconds: number, dps: number) => seriesFrom(events, start, fightSeconds, dps);
+
+const num0 = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+/** The player's healing: totals, overheal, parse, place among the raid's healers, and by spell. */
+export function healingFrom(raw: DashboardRaw['healing'] | undefined, sourceId: number, fightSeconds: number, start: number): Healing | undefined {
+  if (!raw) return undefined;
+  const entries: any[] = raw.mine?.data?.entries ?? [];
+  const total = entries.reduce((t, e) => t + num0(e?.total), 0);
+  if (!total) return undefined;
+  const overheal = entries.reduce((t, e) => t + num0(e?.overheal), 0);
+  const abilities: HealingAbility[] = entries
+    .filter((e) => num0(e?.total) > 0 || num0(e?.overheal) > 0)
+    .map((e) => {
+      const hits = num0(e.hitCount) + num0(e.tickCount);
+      const crits = num0(e.critHitCount) + num0(e.critTickCount);
+      const t = num0(e.total);
+      const o = num0(e.overheal);
+      return {
+        name: String(e.name ?? 'Unknown'),
+        id: num0(e.guid),
+        total: t,
+        share: t / total,
+        overheal: o,
+        overhealPct: t + o ? Math.round((o / (t + o)) * 1000) / 10 : null,
+        casts: num0(e.uses),
+        hits,
+        critPct: hits ? Math.round((crits / hits) * 1000) / 10 : null,
+        avgHeal: hits ? Math.round(t / hits) : null,
+        isPet: e.type === 'Pet' || (e.petOwner ?? null) !== null,
+        icon: typeof e.abilityIcon === 'string' ? e.abilityIcon : undefined,
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+
+  // Everyone's healing: my active time, and where I placed among the healers
+  const everyone: any[] = (raw.everyone?.data?.entries ?? []).filter((e: any) => e && e.type !== 'Pet' && e.type !== 'NPC');
+  const meRow = everyone.find((e) => e.id === sourceId);
+  const ranks = rankingRows(raw.rankings);
+  const myName = meRow?.name;
+  const myRank = ranks.find((r) => r.name === myName);
+  const healerNames = new Set(((raw.rankings?.data?.[0]?.roles?.healers?.characters ?? []) as any[]).map((c) => c?.name));
+  const pool = everyone.filter((e) => (healerNames.size ? healerNames.has(e.name) || e.id === sourceId : num0(e.total) > 0));
+  const sorted = [...pool].sort((a, b) => num0(b.total) - num0(a.total));
+  const place = sorted.findIndex((e) => e.id === sourceId) + 1;
+  const seconds = fightSeconds || 1;
+  return {
+    total,
+    hps: total / seconds,
+    overheal,
+    overhealPct: total + overheal ? Math.round((overheal / (total + overheal)) * 1000) / 10 : null,
+    parse: typeof myRank?.rankPercent === 'number' ? myRank.rankPercent : null,
+    activePct: typeof meRow?.activeTime === 'number' ? Math.round(Math.min(100, (meRow.activeTime / (seconds * 1000)) * 100) * 10) / 10 : null,
+    rank: place > 0 ? { place, of: sorted.length } : null,
+    abilities,
+    hpsSeries: seriesFrom(raw.events, start, seconds, total / seconds),
+  };
 }
 
 const MELEE = /^(melee|auto attack|attack)$/i;
@@ -156,10 +235,14 @@ export async function buildDashboard(host: string, code: string, fightId: number
   // The summary table usually has item and enchant names; combatant info is the fallback.
   const byId = new Map(combatGear.filter((g) => g?.id).map((g) => [g.id, g]));
   const merged = (summaryGear.length ? summaryGear : combatGear).map((g) => ({ ...(byId.get(g?.id) ?? {}), ...g }));
+  const survival = survivalFrom(raw.taken, sourceId, raw.tankIds, raw.raidIds);
   return {
     gear: gearFrom(merged),
     stats: statsFrom(raw.combatant?.stats ?? raw.summary?.data?.stats),
-    dpsSeries: dpsSeriesFrom(raw.damageEvents, start, fightSeconds, dps),
-    survival: survivalFrom(raw.taken, sourceId, raw.tankIds, raw.raidIds),
+    dpsSeries: seriesFrom(raw.damageEvents, start, fightSeconds, dps),
+    survival,
+    healing: healingFrom(raw.healing, sourceId, fightSeconds, start),
+    // Scaled to the damage taken the table reports, so the line matches the Survival numbers
+    takenSeries: seriesFrom(raw.takenEvents, start, fightSeconds, survival ? survival.total / (fightSeconds || 1) : 0, true),
   };
 }

@@ -324,30 +324,61 @@ export async function getReportRegion(host: string, code: string): Promise<strin
 
 // ---------- Personal dashboard (no comparison) ----------
 
-export interface DashboardRaw { summary: any; combatant: any; damageEvents: { timestamp: number; amount: number }[]; taken: any; tankIds: number[]; raidIds: number[] }
+export interface DashboardRaw {
+  summary: any;
+  combatant: any;
+  damageEvents: AmountEvent[];
+  /** Damage the player took, one event per hit. */
+  takenEvents: AmountEvent[];
+  taken: any;
+  tankIds: number[];
+  raidIds: number[];
+  /** Healing: the player's own table (by ability), everyone's (active time, ranks), the hps rankings, and heals over time. */
+  healing: { mine: any; everyone: any; rankings: any; events: AmountEvent[] };
+}
 
-/** The player's own damage events across the fight, paged, within a time budget. */
-async function getDamageEvents(host: string, code: string, fightId: number, sourceId: number, start: number, end: number) {
-  const q = `query($code:String!,$fid:[Int]!,$sid:Int!,$st:Float,$et:Float){reportData{report(code:$code){
-    events(dataType:DamageDone, fightIDs:$fid, sourceID:$sid, startTime:$st, endTime:$et, limit:10000){data nextPageTimestamp}
+export type AmountKind = 'damage' | 'healing' | 'taken';
+export interface AmountEvent { timestamp: number; amount: number; ability?: string }
+
+/**
+ * One player's damage done, healing done or damage taken across the fight, paged, within a time
+ * budget. Damage taken events carry the ability's name (for "what hit you" on the chart).
+ */
+async function getAmountEvents(host: string, code: string, fightId: number, sourceId: number, start: number, end: number, kind: AmountKind): Promise<AmountEvent[]> {
+  const dataType = kind === 'damage' ? 'DamageDone' : kind === 'healing' ? 'Healing' : 'DamageTaken';
+  const who = kind === 'taken' ? 'targetID:$sid' : 'sourceID:$sid';
+  const q = (withNames: boolean) => `query($code:String!,$fid:[Int]!,$sid:Int!,$st:Float,$et:Float){reportData{report(code:$code){
+    events(dataType:${dataType}, fightIDs:$fid, ${who}, startTime:$st, endTime:$et, limit:10000){data nextPageTimestamp}
+    ${withNames ? 'masterData{abilities{gameID name}}' : ''}
   }}}`;
-  const out: { timestamp: number; amount: number }[] = [];
+  // Damage is "damage" events; healing is "heal" plus shields soaking damage ("absorbed")
+  const types = kind === 'healing' ? new Set(['heal', 'absorbed']) : new Set(['damage']);
+  const out: AmountEvent[] = [];
+  let names = new Map<number, string>();
   let st: number | null = start;
   const deadline = Date.now() + 35_000;
   for (let page = 0; st !== null && page < 8; page++) {
     const left = deadline - Date.now();
     if (left < 3_000) break; // keep what we have; the chart is scaled to the real average anyway
-    const d: any = await gql(host, q, { code, fid: [fightId], sid: sourceId, st, et: end }, Math.min(20_000, left));
-    for (const e of d.reportData.report.events?.data ?? []) {
-      if (e?.type === 'damage' && typeof e.timestamp === 'number') out.push({ timestamp: e.timestamp, amount: (Number(e.amount) || 0) + (Number(e.absorbed) || 0) });
+    const withNames = kind === 'taken' && page === 0;
+    const d: any = await gql(host, q(withNames), { code, fid: [fightId], sid: sourceId, st, et: end }, Math.min(20_000, left));
+    const rep = d.reportData.report;
+    if (withNames) names = new Map(((rep.masterData?.abilities ?? []) as any[]).map((a) => [a.gameID, a.name]));
+    for (const e of rep.events?.data ?? []) {
+      if (!types.has(e?.type) || typeof e.timestamp !== 'number') continue;
+      if (kind === 'taken' && e.targetID !== sourceId) continue;
+      // Damage (done or taken) counts what shields absorbed too; healing counts only what landed, not overheal
+      const amount = kind === 'healing' ? Number(e.amount) || 0 : (Number(e.amount) || 0) + (Number(e.absorbed) || 0);
+      if (amount <= 0) continue;
+      out.push(kind === 'taken' ? { timestamp: e.timestamp, amount, ability: names.get(e.abilityGameID) ?? 'Unknown' } : { timestamp: e.timestamp, amount });
     }
-    st = d.reportData.report.events?.nextPageTimestamp ?? null;
+    st = rep.events?.nextPageTimestamp ?? null;
   }
   return out;
 }
 
 /**
- * One player's gear, stats, damage over time and the raid's damage taken. Each part is its own
+ * One player's gear, stats, damage done, healing and damage taken over time, and the raid's damage taken. Each part is its own
  * request with a time limit, and any part that fails or is slow is simply left out.
  */
 export async function getDashboardRaw(host: string, code: string, fightId: number, sourceId: number, start: number, end: number): Promise<DashboardRaw> {
@@ -355,11 +386,26 @@ export async function getDashboardRaw(host: string, code: string, fightId: numbe
     gql<{ reportData: { report: Record<string, any> } }>(host, query, vars, 20_000)
       .then((d) => d.reportData.report)
       .catch(() => ({}) as Record<string, any>);
-  const [summary, details, damageEvents, taken] = await Promise.all([
+  // Healing: the tables first (cheap); heals over time only for players who actually healed
+  const healing = report(
+    `query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){
+      mine: table(dataType:Healing, fightIDs:$fid, sourceID:$sid)
+      everyone: table(dataType:Healing, fightIDs:$fid)
+      rankings(fightIDs:$fid, playerMetric:hps)
+    }}}`,
+    { code, fid: [fightId], sid: sourceId },
+  ).then(async (h) => {
+    const mineTotal = ((h.mine?.data?.entries ?? []) as any[]).reduce((t, e) => t + (Number(e?.total) || 0), 0);
+    const events = mineTotal > 0 ? await getAmountEvents(host, code, fightId, sourceId, start, end, 'healing').catch(() => []) : [];
+    return { mine: h.mine, everyone: h.everyone, rankings: h.rankings, events };
+  });
+  const [summary, details, damageEvents, taken, heal, takenEvents] = await Promise.all([
     report(`query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){ summary: table(dataType:Summary, fightIDs:$fid, sourceID:$sid) }}}`, { code, fid: [fightId], sid: sourceId }),
     report(`query($code:String!,$fid:[Int]!){reportData{report(code:$code){ details: playerDetails(fightIDs:$fid, includeCombatantInfo:true) }}}`, { code, fid: [fightId] }),
-    getDamageEvents(host, code, fightId, sourceId, start, end).catch(() => []),
+    getAmountEvents(host, code, fightId, sourceId, start, end, 'damage').catch(() => []),
     report(`query($code:String!,$fid:[Int]!){reportData{report(code:$code){ taken: table(dataType:DamageTaken, fightIDs:$fid) }}}`, { code, fid: [fightId] }),
+    healing,
+    getAmountEvents(host, code, fightId, sourceId, start, end, 'taken').catch(() => []),
   ]);
   const d = details.details?.data?.playerDetails ?? details.details?.playerDetails ?? {};
   const everyone = ['tanks', 'healers', 'dps'].flatMap((r) => (d[r] ?? []) as any[]);
@@ -368,8 +414,10 @@ export async function getDashboardRaw(host: string, code: string, fightId: numbe
     summary: summary.summary,
     combatant: mine?.combatantInfo ?? null,
     damageEvents,
+    takenEvents,
     taken: taken.taken,
     tankIds: ((d.tanks ?? []) as any[]).map((p) => p.id),
     raidIds: everyone.map((p) => p.id),
+    healing: heal,
   };
 }

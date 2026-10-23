@@ -1,6 +1,6 @@
 import { GAP_SECONDS, IGNORE_FOR_GAPS, cooldownFor } from './cooldowns.js';
 import { isGeneralBuff } from './buffs.js';
-import type { AbilityRow, BuffRow, BuffWindow, Comparison, CooldownUse, Finding, Gap, GearItem, PlayerSnapshot, Strength } from './types.js';
+import type { AbilityRow, BuffRow, BuffWindow, Comparison, CooldownUse, Finding, Gap, GearItem, Healing, PlayerSnapshot, Strength } from './types.js';
 import type { Actor, CastEvent, Fight, PlayerTables } from './wcl.js';
 
 const num = (v: unknown): number => (typeof v === 'number' && isFinite(v) ? v : 0);
@@ -411,4 +411,49 @@ export function buildStrengths(me: PlayerSnapshot, comparisons: Comparison[], ge
   }
 
   return out.sort((a, b) => b.weight - a.weight).slice(0, 6).map(({ title, detail }) => ({ title, detail }));
+}
+
+// ---------- Healing ----------
+
+/**
+ * "What to work on" and "What worked well" for the Healing tab, in plain language: overhealing,
+ * staying busy, the healing parse, cooldowns, deaths and consumables.
+ */
+export function healingFeedback(me: PlayerSnapshot, h: Healing): { work: Finding[]; good: Strength[] } {
+  const work: Finding[] = [];
+  const good: Strength[] = [];
+  const round = (v: number) => Math.round(v);
+
+  // Parse and place among the healers
+  if (h.parse !== null && h.parse < 25) work.push({ severity: 'high', title: `Healing parse ${round(h.parse)}`, detail: 'Below most players of your spec on this boss. Overhealing and time spent not casting (below) are the usual reasons.' });
+  if (h.parse !== null && h.parse >= 75) good.push({ title: `Healing parse ${round(h.parse)}`, detail: 'Better than most players of your spec on this boss.' });
+  if (h.rank && h.rank.of > 1 && h.rank.place === 1) good.push({ title: 'Top healer in the raid', detail: `Most healing of the ${h.rank.of} healers on this fight.` });
+
+  // Overhealing: overall, then the spells that waste the most
+  if (h.overhealPct !== null && h.overhealPct >= 45) {
+    work.push({ severity: 'medium', title: `${round(h.overhealPct)}% overhealing`, detail: 'Almost half of what you cast healed people who were already full. Waiting a moment longer, or switching to a smaller heal, saves mana for when it’s needed.' });
+  } else if (h.overhealPct !== null && h.overhealPct <= 25) {
+    good.push({ title: `Only ${round(h.overhealPct)}% overhealing`, detail: 'Very little of your healing was wasted on full health bars.' });
+  }
+  for (const a of h.abilities.filter((x) => x.share >= 0.1 && (x.overhealPct ?? 0) >= 60).slice(0, 2)) {
+    work.push({ severity: 'low', title: `${a.name}: ${round(a.overhealPct!)}% overheal`, detail: `${a.name} is ${round(a.share * 100)}% of your healing but mostly lands on people who are already full. Use it later, or on someone lower.` });
+  }
+
+  // Staying busy (healers have quiet moments, so the bar is lower than for damage)
+  if (h.activePct !== null && h.activePct < 60) work.push({ severity: 'medium', title: `Active ${h.activePct}% of the fight`, detail: 'A lot of time not casting. Keeping a heal-over-time or shield rolling on the tank, or adding damage in quiet moments, helps.' });
+  else if (h.activePct !== null && h.activePct >= 85) good.push({ title: `Active ${h.activePct}% of the fight`, detail: 'Always casting something.' });
+
+  // Cooldowns (mana and healing cooldowns that are tracked)
+  for (const c of me.cooldowns.filter((x) => x.possible > 0 && x.uses < x.possible).slice(0, 2)) {
+    work.push({ severity: 'medium', title: `${c.name}: ${c.uses} of ${c.possible} possible uses`, detail: 'Use it early and again as soon as it’s ready, unless a big damage phase is coming within a few seconds.' });
+  }
+  if (me.cooldowns.length && me.cooldowns.every((x) => x.uses >= x.possible)) good.push({ title: 'Cooldowns on time', detail: 'Every tracked cooldown used as often as the fight allowed.' });
+
+  // Alive, and prepared
+  if (me.deaths.length) work.push({ severity: 'high', title: `Died at ${Math.floor(me.deaths[0].seconds / 60)}:${String(round(me.deaths[0].seconds) % 60).padStart(2, '0')}`, detail: `Killed by ${me.deaths[0].by}. A dead healer puts the whole raid at risk; the Buffs & survival page shows what hit you.` });
+  else good.push({ title: 'Stayed alive the whole fight', detail: 'No deaths, so no lost healing.' });
+  const consumables = me.buffs.filter((b) => /Flask|Elixir|Well Fed|Scroll|Oil|Mana/i.test(b.name) && b.uptimePct >= 90).map((b) => b.name);
+  if (consumables.length) good.push({ title: 'Consumables up all fight', detail: consumables.slice(0, 5).join(', ') + '.' });
+
+  return { work, good };
 }

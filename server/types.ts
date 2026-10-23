@@ -123,11 +123,51 @@ export interface GearItem {
 }
 
 /** Extra personal data shown when nothing is compared ("Just my stats"). */
+/** One point on a chart over the fight: seconds from the pull, a per-second value, and an optional note for the tooltip. */
+export interface SeriesPoint { t: number; dps: number; note?: string }
+
+export interface HealingAbility {
+  name: string;
+  id: number;
+  /** Healing that landed (overheal not included). */
+  total: number;
+  share: number; // 0..1 of the player's healing
+  overheal: number;
+  overhealPct: number | null; // 0..100 of everything the spell tried to heal
+  casts: number;
+  hits: number;
+  critPct: number | null;
+  avgHeal: number | null;
+  isPet: boolean;
+  petName?: string;
+  icon?: string;
+}
+
+/** The player's healing for the fight, shown on the Healing tab. */
+export interface Healing {
+  total: number;
+  hps: number;
+  overheal: number;
+  overhealPct: number | null;
+  /** Healing parse (percentile for the spec), when Warcraft Logs ranks it. */
+  parse: number | null;
+  activePct: number | null;
+  /** Place among the raid's healers by healing done. */
+  rank: { place: number; of: number } | null;
+  abilities: HealingAbility[];
+  /** Healing per second across the fight. */
+  hpsSeries: SeriesPoint[];
+}
+
 export interface Dashboard {
   gear: GearItem[];
   stats: { name: string; value: string }[];
   /** DPS across the fight, seconds from the pull. */
-  dpsSeries: { t: number; dps: number }[];
+  dpsSeries: SeriesPoint[];
+  /** Healing done (missing on analyses saved before v0.16.0). */
+  healing?: Healing;
+  /** Damage taken per second across the fight, with what hit hardest each moment. */
+  takenSeries?: SeriesPoint[];
   /** Damage taken against the rest of the raid (missing when Warcraft Logs doesn't break it down). */
   survival?: Survival;
 }

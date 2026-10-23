@@ -1,12 +1,13 @@
 // One analysis, split into sections picked from the sidebar.
 import { useEffect, useState } from 'react';
 import { isGeneralBuff } from '../../server/buffs';
-import type { AnalysisResult, PlayerSnapshot } from '../../server/types';
+import type { AnalysisResult, Healing, PlayerSnapshot } from '../../server/types';
 import { loadPortrait } from '../api';
 import { compact, mmss, n0, pct } from '../format';
 import { type GlyphName, useNav } from '../nav';
+import { healingFeedback } from '../../server/analysis';
 import { DamageDonut, DpsChart, GearTable, StatsList } from './charts';
-import Feedback from './Feedback';
+import Feedback, { FeedbackPanels } from './Feedback';
 import Glyph from './Glyph';
 import { ClassIcon, GameIcon, classCss, compareLabel, parseCss } from './icons';
 import Timeline from './Timeline';
@@ -19,7 +20,8 @@ const lust = (s: PlayerSnapshot) => s.buffs.find((b) => b.name === 'Bloodlust' |
 interface Row { label: string; s: PlayerSnapshot; me?: boolean; sameClass: boolean }
 
 export default function ResultView({ result }: { result: AnalysisResult }) {
-  const { section } = useNav();
+  const { section, view } = useNav();
+  const healing = view === 'healing' ? result.dashboard?.healing : undefined;
   const me = result.player;
   const all: Row[] = [
     { label: 'You', s: me, me: true, sameClass: true },
@@ -38,9 +40,9 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
           shared buffs). Rotation and cooldown comparisons are skipped.
         </p>
       )}
-      {section === 'overview' && <Overview result={result} />}
+      {section === 'overview' && (healing ? <HealingOverview result={result} h={healing} /> : <Overview result={result} />)}
       {section === 'rotation' && <Rotation result={result} all={all} />}
-      {section === 'damage' && <DamageView result={result} />}
+      {section === 'damage' && (healing ? <HealingView result={result} h={healing} /> : <DamageView result={result} />)}
       {section === 'gear' && <GearView result={result} />}
       {section === 'buffs' && <BuffsView result={result} />}
       {section === 'compare' && <CompareView all={all} />}
@@ -67,11 +69,24 @@ function FightHeader({ result }: { result: AnalysisResult }) {
         </div>
       </div>
       <div className="fight-actions">
+        <ViewToggle result={result} />
         <span className="pill"><Glyph name="users" size={16} />{compareLabel(result.compareKey)}</span>
         <a className="button ghost" href={reportLink} target="_blank" rel="noreferrer"><Glyph name="link" size={16} />Warcraft Logs</a>
         {result.id && <ShareButton id={result.id} />}
       </div>
     </header>
+  );
+}
+
+/** Damage done / Healing done, shown when the player did any healing. */
+function ViewToggle({ result }: { result: AnalysisResult }) {
+  const { view, setView } = useNav();
+  if (!result.dashboard?.healing) return null;
+  return (
+    <div className="seg" role="group" aria-label="Show damage or healing">
+      <button type="button" className={view === 'damage' ? 'on' : ''} aria-pressed={view === 'damage'} onClick={() => setView('damage')}><Glyph name="bolt" size={16} />Damage done</button>
+      <button type="button" className={view === 'healing' ? 'on' : ''} aria-pressed={view === 'healing'} onClick={() => setView('healing')}><Glyph name="pulse" size={16} />Healing done</button>
+    </div>
   );
 }
 
@@ -219,6 +234,112 @@ function CooldownList({ snapshot }: { snapshot: PlayerSnapshot }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+// ---------- Healing done ----------
+
+function HealingOverview({ result, h }: { result: AnalysisResult; h: Healing }) {
+  const me = result.player;
+  const d = result.dashboard;
+  const gear = d?.gear.map((g) => g.itemLevel).filter((v): v is number => !!v) ?? [];
+  const avgIlvl = gear.length ? gear.reduce((t, v) => t + v, 0) / gear.length : null;
+  const feedback = healingFeedback(me, h);
+  const facts: [string, string][] = [
+    ['Healing done', compact(h.total)],
+    ['Overhealing', `${compact(h.overheal)} (${pct(h.overhealPct)})`],
+    ['Among the healers', h.rank ? `#${h.rank.place} of ${h.rank.of}` : '–'],
+    ['Fight length', mmss(me.fightSeconds)],
+    ['Casts', n0(me.castSeconds.length)],
+    ['Damage done', compact(me.total)],
+    ['Deaths', String(me.deaths.length)],
+  ];
+  return (
+    <>
+      {result.comparisons.length > 0 && <p className="muted small">Comparisons are about damage; switch to Damage done to see them.</p>}
+      <div className="kpis">
+        <Kpi glyph="pulse" label="HPS" value={n0(h.hps)} sub={`${compact(h.total)} healing`} />
+        <Kpi glyph="target" label="Healing parse" value={h.parse === null ? '–' : String(Math.round(h.parse))} valueCls={parseCss(h.parse)} sub={h.parse === null ? 'Not ranked' : 'Percentile for your spec'} />
+        <Kpi glyph="timer" label="Active time" value={pct(h.activePct, 1)} sub={`${pct(h.overhealPct)} overhealing`} />
+        <Kpi glyph="shield" label="Item level" value={me.itemLevel ? String(me.itemLevel) : avgIlvl ? avgIlvl.toFixed(0) : '–'} sub={avgIlvl ? `Gear average ${avgIlvl.toFixed(1)}` : undefined} />
+      </div>
+
+      <div className="grid-2-1">
+        <section className="panel">
+          <h2 className="panel-title">{h.hpsSeries.length > 1 ? 'Healing over the fight' : 'Cast timeline'}</h2>
+          {h.hpsSeries.length > 1 ? <DpsChart series={h.hpsSeries} average={h.hps} snapshot={me} kind="hps" /> : <Timeline players={[{ label: 'You', snapshot: me }]} />}
+        </section>
+        <section className="panel">
+          <h2 className="panel-title">Healing by ability</h2>
+          <DamageDonut abilities={h.abilities} total={h.total} noun="healing" />
+        </section>
+      </div>
+
+      <FeedbackPanels work={feedback.work} good={feedback.good} />
+
+      <div className="grid-2">
+        <section className="panel">
+          <h2 className="panel-title">Cooldowns</h2>
+          <CooldownList snapshot={me} />
+        </section>
+        <section className="panel">
+          <h2 className="panel-title">Fight facts</h2>
+          <dl className="facts">
+            {facts.map(([k, v]) => (
+              <div key={k}><dt>{k}</dt><dd>{v}</dd></div>
+            ))}
+          </dl>
+        </section>
+      </div>
+    </>
+  );
+}
+
+function HealingView({ result, h }: { result: AnalysisResult; h: Healing }) {
+  const me = result.player;
+  const topShare = Math.max(...h.abilities.map((a) => a.share), 0.0001);
+  return (
+    <>
+      <section className="panel donut-wide">
+        <h2 className="panel-title">Share of healing</h2>
+        <DamageDonut abilities={h.abilities} total={h.total} noun="healing" />
+      </section>
+      <section className="panel">
+        <h2 className="panel-title">Healing done by ability</h2>
+        <p className="muted small">Amounts are healing that landed. Overheal is the part that went to people already at full health.</p>
+        <div className="scroll">
+          <table className="grid">
+            <thead>
+              <tr><th>Name</th><th className="amount-col">Amount</th><th className="r">Casts</th><th className="r">Avg heal</th><th className="r">Crit %</th><th className="r">Overheal</th></tr>
+            </thead>
+            <tbody>
+              {h.abilities.map((a) => (
+                <tr key={`${a.name}-${a.id}-${a.isPet ? 'pet' : 'own'}`} className={(a.overhealPct ?? 0) >= 60 && a.share >= 0.1 ? 'warn' : ''}>
+                  <td>
+                    <span className="with-icon">
+                      <GameIcon file={a.icon} />
+                      {a.name}
+                      {a.isPet && <span className="muted small">(pet{a.petName ? `: ${a.petName}` : ''})</span>}
+                    </span>
+                  </td>
+                  <td className="amount-col">
+                    <div className="amount">
+                      <span className="pct">{pct(a.share * 100, 2)}</span>
+                      <progress className={`bar ${classCss(me.className)}-bar`} max={1} value={a.share / topShare} aria-label={`${a.name} share`} />
+                      <span className="total">{compact(a.total)}</span>
+                    </div>
+                  </td>
+                  <td className="r">{a.casts || '–'}</td>
+                  <td className="r">{n0(a.avgHeal)}</td>
+                  <td className="r">{pct(a.critPct, 1)}</td>
+                  <td className="r">{pct(a.overhealPct, 1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -430,6 +551,25 @@ function Survival({ result }: { result: AnalysisResult }) {
         />
         <Kpi glyph="pulse" label="Deaths" value={String(me.deaths.length)} sub={me.deaths.length ? me.deaths.map((d) => mmss(d.seconds)).join(', ') : 'Alive the whole fight'} />
       </div>
+
+      <section className="panel">
+        <h2 className="panel-title">Damage taken over the fight</h2>
+        {result.dashboard?.takenSeries && result.dashboard.takenSeries.length > 1 ? (
+          <>
+            <p className="muted small">Hover the line to see what hit you hardest at each moment. Spikes are usually boss abilities; marks show when you died.</p>
+            <DpsChart
+              series={result.dashboard.takenSeries}
+              average={perSecond}
+              kind="taken"
+              wide
+              marks={me.deaths.map((d) => ({ t: d.seconds, name: `Died (${d.by})` }))}
+              markLabel="death"
+            />
+          </>
+        ) : (
+          <p className="muted small">{result.dashboard ? 'Warcraft Logs didn\u2019t return your damage taken over time for this fight.' : 'Click Analyze again to load damage taken over time.'}</p>
+        )}
+      </section>
 
       <div className="grid-2-1">
         <section className="panel">

@@ -1,6 +1,9 @@
 // Charts and tables for one player's fight: DPS over time, damage breakdown, gear and stats.
 import { useMemo, useState } from 'react';
-import type { AbilityRow, Dashboard, GearItem, PlayerSnapshot } from '../../server/types';
+import type { Dashboard, GearItem, PlayerSnapshot, SeriesPoint } from '../../server/types';
+
+/** A damage or healing spell, as the donut needs it. */
+export interface DonutItem { name: string; id: number; total: number; casts?: number; isPet: boolean; petName?: string; icon?: string }
 import { compact, mmss, n0, pct } from '../format';
 import { statTooltip } from '../statInfo';
 import { BlankIcon, GameIcon } from './icons';
@@ -13,8 +16,20 @@ const QUALITY = ['q-poor', 'q-common', 'q-uncommon', 'q-rare', 'q-epic', 'q-lege
 // ---------- DPS over time ----------
 
 /** `marks` are moments to flag on the chart (your cooldowns, or Bloodlust for the whole raid); `markLabel` names them in the key. */
-export function DpsChart({ series, average, snapshot, marks, markLabel = 'cooldown used' }: { series: { t: number; dps: number }[]; average: number; snapshot?: PlayerSnapshot; marks?: { t: number; name: string }[]; markLabel?: string }) {
-  const W = 640;
+/** What the line measures: its unit in the tooltip, its name in the key, and its color. */
+const CHART_KIND = {
+  dps: { unit: 'DPS', key: 'DPS, smoothed', line: 'dps-line', aria: 'DPS over the fight' },
+  hps: { unit: 'HPS', key: 'Healing per second, smoothed', line: 'dps-line heal-line', aria: 'Healing per second over the fight' },
+  taken: { unit: 'taken per second', key: 'Damage taken per second, smoothed', line: 'dps-line taken-line', aria: 'Damage taken per second over the fight' },
+} as const;
+
+export function DpsChart({ series, average, snapshot, marks, markLabel = 'cooldown used', kind = 'dps', wide = false }: {
+  series: SeriesPoint[]; average: number; snapshot?: PlayerSnapshot; marks?: { t: number; name: string }[]; markLabel?: string; kind?: keyof typeof CHART_KIND;
+  /** Drawn wider for a full-width panel, so the labels stay the same size. */
+  wide?: boolean;
+}) {
+  const k = CHART_KIND[kind];
+  const W = wide ? 1040 : 640;
   const H = 240;
   const pad = { l: 52, r: 12, t: 22, b: 26 };
   const [hover, setHover] = useState<number | null>(null);
@@ -47,7 +62,7 @@ export function DpsChart({ series, average, snapshot, marks, markLabel = 'cooldo
 
   return (
     <div className="chart-wrap">
-      <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label={`DPS over the fight, averaging ${n0(average)}`}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label={`${k.aria}, averaging ${n0(average)}`}>
         {yTicks.map((v) => (
           <g key={v}>
             <line className="gridline" x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} />
@@ -64,14 +79,14 @@ export function DpsChart({ series, average, snapshot, marks, markLabel = 'cooldo
         ))}
         <line className="avg-line" x1={pad.l} x2={W - pad.r} y1={y(average)} y2={y(average)} />
         <text className="avg-label" x={W - pad.r} y={y(average) - 6} textAnchor="end">Average {n0(average)}</text>
-        <path className="dps-line" d={line} />
+        <path className={k.line} d={line} />
         {hp && (
           <>
             <line className="crosshair" x1={x(hp.t)} x2={x(hp.t)} y1={pad.t} y2={H - pad.b} />
-            <circle className="dps-dot" cx={x(hp.t)} cy={y(hp.dps)} r={4.5} />
+            <circle className={`dps-dot ${kind}`} cx={x(hp.t)} cy={y(hp.dps)} r={4.5} />
           </>
         )}
-        {hp && <ChartTip x={x(hp.t)} y={y(hp.dps)} W={W} lines={[mmss(hp.t), `${n0(hp.dps)} DPS`, ...nearCds.map((c) => c.name)]} />}
+        {hp && <ChartTip x={x(hp.t)} y={y(hp.dps)} W={W} lines={[mmss(hp.t), `${n0(hp.dps)} ${k.unit}`, ...(hp.note ? [hp.note] : []), ...nearCds.map((c) => c.name)]} />}
         <rect
           x={pad.l}
           y={pad.t}
@@ -83,7 +98,7 @@ export function DpsChart({ series, average, snapshot, marks, markLabel = 'cooldo
         />
       </svg>
       <p className="muted small chart-key">
-        <span className="key-line" /> DPS, smoothed <span className="key-dash" /> fight average <span className="key-cd" /> {markLabel}
+        <span className={`key-line ${kind}`} /> {k.key} <span className="key-dash" /> fight average {cds.length > 0 && <><span className="key-cd" /> {markLabel}</>}
       </p>
       <dl className="chart-stats">
         <div><dt>Peak</dt><dd>{n0(peak.dps)}<span>at {mmss(peak.t)}</span></dd></div>
@@ -120,20 +135,20 @@ function niceMax(v: number): number {
 // ---------- Damage breakdown donut ----------
 
 /** "Melee (pet: Kitty)" for pet damage, so it isn't mistaken for the player's own. */
-export const abilityLabel = (a: Pick<AbilityRow, 'name' | 'isPet' | 'petName'>) => (a.isPet ? `${a.name} (pet${a.petName ? `: ${a.petName}` : ''})` : a.name);
+export const abilityLabel = (a: Pick<DonutItem, 'name' | 'isPet' | 'petName'>) => (a.isPet ? `${a.name} (pet${a.petName ? `: ${a.petName}` : ''})` : a.name);
 
 /** One line saying how much of the damage came from pets, when any did. */
-export function PetShare({ abilities }: { abilities: AbilityRow[] }) {
+export function PetShare({ abilities, noun = 'damage' }: { abilities: DonutItem[]; noun?: string }) {
   const all = abilities.reduce((t, a) => t + a.total, 0);
   const pet = abilities.filter((a) => a.isPet).reduce((t, a) => t + a.total, 0);
   if (!all || !pet) return null;
   const names = [...new Set(abilities.filter((a) => a.isPet && a.petName).map((a) => a.petName!))];
-  return <p className="muted small">Pet damage{names.length ? ` (${names.join(', ')})` : ''}: {((pet / all) * 100).toFixed(1)}% of the total, marked &ldquo;pet&rdquo; below.</p>;
+  return <p className="muted small">Pet {noun}{names.length ? ` (${names.join(', ')})` : ''}: {((pet / all) * 100).toFixed(1)}% of the total, marked &ldquo;pet&rdquo; below.</p>;
 }
 
 interface Slice { key: string; name: string; total: number; share: number; slot: string; icon?: string; casts?: number; isPet?: boolean; count?: number }
 
-export function DamageDonut({ abilities, total }: { abilities: AbilityRow[]; total: number }) {
+export function DamageDonut({ abilities, total, noun = 'damage' }: { abilities: DonutItem[]; total: number; noun?: 'damage' | 'healing' }) {
   const [active, setActive] = useState<string | null>(null);
   const slices = useMemo<Slice[]>(() => {
     const sorted = [...abilities].filter((a) => a.total > 0).sort((a, b) => b.total - a.total);
@@ -158,7 +173,7 @@ export function DamageDonut({ abilities, total }: { abilities: AbilityRow[]; tot
     return out;
   }, [abilities, total]);
 
-  if (!slices.length) return <p className="muted small">No damage recorded.</p>;
+  if (!slices.length) return <p className="muted small">No {noun} recorded.</p>;
 
   const R = 92;
   const r = 58;
@@ -173,9 +188,9 @@ export function DamageDonut({ abilities, total }: { abilities: AbilityRow[]; tot
 
   return (
     <>
-    <PetShare abilities={abilities} />
+    <PetShare abilities={abilities} noun={noun} />
     <div className="donut-wrap">
-      <svg viewBox="0 0 200 200" className="donut" role="img" aria-label="Share of damage by ability">
+      <svg viewBox="0 0 200 200" className="donut" role="img" aria-label={`Share of ${noun} by ability`}>
         {arcs.map(({ s, d }) => (
           <path
             key={s.key}
@@ -191,7 +206,7 @@ export function DamageDonut({ abilities, total }: { abilities: AbilityRow[]; tot
           </path>
         ))}
         <text x="100" y={shown ? 92 : 98} textAnchor="middle" className="donut-big">{shown ? pct(shown.share * 100, 1) : compact(total)}</text>
-        <text x="100" y={shown ? 110 : 116} textAnchor="middle" className="donut-small">{shown ? truncate(shown.name, 20) : 'total damage'}</text>
+        <text x="100" y={shown ? 110 : 116} textAnchor="middle" className="donut-small">{shown ? truncate(shown.name, 20) : `total ${noun}`}</text>
         {shown && <text x="100" y="126" textAnchor="middle" className="donut-small">{compact(shown.total)}{shown.casts ? ` · ${shown.casts} casts` : ''}</text>}
       </svg>
       <ul className="donut-legend">

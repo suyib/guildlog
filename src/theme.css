@@ -464,6 +464,20 @@ progress.uptime-bar { height: 8px; color: var(--primary-light); }
 .chart-key { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0; font-family: var(--font-mono); }
 .key-line, .key-dash, .key-cd { display: inline-block; width: 18px; height: 0; margin-left: 10px; }
 .key-line { border-top: 2px solid var(--primary-light); margin-left: 0; }
+/* Healing (green) and damage taken (red) versions of the over-the-fight chart */
+.chart .heal-line { stroke: var(--win); }
+.chart .taken-line { stroke: var(--high); }
+.chart .dps-dot.hps { fill: var(--win); }
+.chart .dps-dot.taken { fill: var(--high); }
+.key-line.hps { border-top-color: var(--win); }
+.key-line.taken { border-top-color: var(--high); }
+
+/* Damage done / Healing done switch in the fight header */
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--radius-pill); border: 1px solid var(--line); }
+.seg button { height: 28px; padding: 0 12px; gap: 6px; border-radius: var(--radius-pill); background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.seg button:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.seg button.on, .seg button.on:hover:not(:disabled) { background: rgba(0, 124, 173, 0.28); color: var(--ink); }
+.seg button.on .glyph { stroke: var(--primary-light); }
 .key-dash { border-top: 1px dashed var(--ink-3); }
 .key-cd { width: 0; height: 12px; border-left: 1px solid var(--cooldown); }
 .chart-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0 0; }

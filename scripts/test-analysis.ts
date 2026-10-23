@@ -1,8 +1,8 @@
 // Offline check of the analysis logic with mock WCL-shaped data (modelled on the Magtheridon kill).
 import assert from 'node:assert/strict';
-import { buildFindings, buildSnapshot, findGaps, possibleUses } from '../server/analysis';
+import { buildFindings, buildSnapshot, findGaps, healingFeedback, possibleUses } from '../server/analysis';
 import type { Fight, PlayerTables } from '../server/wcl';
-import { dpsSeriesFrom, survivalFrom } from '../server/dashboard';
+import { dpsSeriesFrom, healingFrom, seriesFrom, survivalFrom } from '../server/dashboard';
 import { statTooltip } from '../src/statInfo';
 import { cooldownFor } from '../server/cooldowns';
 import { seriesOverTime } from '../server/breakdown';
@@ -139,5 +139,35 @@ assert.equal(petMelee.total, 13_800);
 assert.equal(withPet.abilities.find((a) => a.name === 'Melee' && !a.isPet)?.total, 200, 'the hunter\u2019s own swings stay theirs');
 assert.ok(withPet.abilities.find((a) => a.name === 'Gore')!.isPet);
 assert.ok(Math.abs(withPet.abilities.reduce((t, a) => t + a.share, 0) - 1) < 1e-9);
+
+// Healing: totals, overheal, parse and place among the healers, by spell
+const heal = healingFrom({
+  mine: { data: { entries: [
+    { name: 'Greater Heal', guid: 1, total: 300_000, overheal: 340_000, hitCount: 100, critHitCount: 20, uses: 100 },
+    { name: 'Renew', guid: 2, total: 100_000, overheal: 20_000, hitCount: 0, tickCount: 200, uses: 40 },
+  ] } },
+  everyone: { data: { entries: [{ id: 28, name: 'Suy', type: 'Priest', total: 400_000, activeTime: 160_000 }, { id: 5, name: 'Other', type: 'Druid', total: 500_000 }, { id: 9, name: 'Dps', type: 'Rogue', total: 1_000 }] } },
+  rankings: { data: [{ roles: { healers: { characters: [{ name: 'Suy', rankPercent: 81 }, { name: 'Other', rankPercent: 90 }] } } }] },
+  events: [],
+}, 28, 200, 0)!;
+assert.equal(heal.total, 400_000);
+assert.equal(heal.hps, 2000);
+assert.equal(heal.overhealPct, 47.4);
+assert.equal(heal.parse, 81);
+assert.equal(heal.activePct, 80);
+assert.deepEqual(heal.rank, { place: 2, of: 2 }, 'ranked among the healers only');
+assert.equal(heal.abilities[0].overhealPct, 53.1);
+const hf = healingFeedback(me, heal);
+assert.ok(hf.work.some((f) => f.title.includes('overhealing')));
+assert.ok(!hf.work.some((f) => f.title.startsWith('Greater Heal:')), 'below the 60% bar for one spell');
+assert.ok(hf.good.some((f) => f.title === 'Healing parse 81'));
+assert.equal(healingFrom({ mine: { data: { entries: [] } }, everyone: null, rankings: null, events: [] }, 28, 200, 0), undefined, 'no healing: no Healing tab');
+
+// Damage taken over time names what hit hardest
+const takenLine = seriesFrom([
+  { timestamp: 1000, amount: 500, ability: 'Melee' }, { timestamp: 10_000, amount: 9000, ability: 'Shatter' }, { timestamp: 10_500, amount: 100, ability: 'Melee' }, { timestamp: 20_000, amount: 400, ability: 'Melee' },
+], 0, 30, 400, true);
+assert.equal(takenLine[10].note, 'Mostly Shatter');
+assert.equal(takenLine.length, 30);
 
 console.log('\nAll analysis checks passed.');

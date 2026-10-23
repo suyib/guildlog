@@ -1,6 +1,6 @@
 // "What to work on" and "What worked well", side by side.
 import { buildStrengths } from '../../server/analysis';
-import type { AnalysisResult } from '../../server/types';
+import type { AnalysisResult, Finding, Strength } from '../../server/types';
 import Glyph from './Glyph';
 import { SeverityDot } from './icons';
 
@@ -8,16 +8,20 @@ export default function Feedback({ result }: { result: AnalysisResult }) {
   const { findings, notes } = result;
   // Analyses saved before "What worked well" existed get it worked out from the saved numbers.
   const strengths = result.strengths ?? buildStrengths(result.player, result.comparisons, result.dashboard?.gear);
+  return <FeedbackPanels work={findings} good={strengths} notes={notes} />;
+}
 
+/** The two panels, for damage (above) or healing (the Healing done tab). */
+export function FeedbackPanels({ work, good, notes = [] }: { work: Finding[]; good: Strength[]; notes?: string[] }) {
   return (
     <div className="grid-2 feedback">
       <section className="panel">
         <h2 className="panel-title">What to work on</h2>
-        {findings.length === 0 ? (
+        {work.length === 0 ? (
           <p className="muted">Nothing stood out. Nice work.</p>
         ) : (
           <ul className="findings">
-            {findings.map((f, i) => (
+            {work.map((f, i) => (
               <li key={i} className={`sev-${f.severity}`}>
                 <SeverityDot severity={f.severity} />
                 <div>
@@ -28,7 +32,7 @@ export default function Feedback({ result }: { result: AnalysisResult }) {
             ))}
           </ul>
         )}
-        {findings.length > 0 && (
+        {work.length > 0 && (
           <p className="muted small legend">
             <SeverityDot severity="high" /> biggest gain <SeverityDot severity="medium" /> worth fixing <SeverityDot severity="low" /> minor
           </p>
@@ -38,11 +42,11 @@ export default function Feedback({ result }: { result: AnalysisResult }) {
 
       <section className="panel">
         <h2 className="panel-title">What worked well</h2>
-        {strengths.length === 0 ? (
+        {good.length === 0 ? (
           <p className="muted">Nothing to single out on this pull yet. Keep logging and this fills in as your numbers improve.</p>
         ) : (
           <ul className="findings wins">
-            {strengths.map((s, i) => (
+            {good.map((s, i) => (
               <li key={i}>
                 <span className="win-mark"><Glyph name="check" size={14} label="Went well" /></span>
                 <div>
