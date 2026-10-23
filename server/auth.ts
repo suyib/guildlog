@@ -113,6 +113,11 @@ export async function requireSession(req: Request): Promise<Response | null> {
   if (!secret) return json({ error: 'Server is missing SESSION_SECRET' }, 500);
   const session = await readSession(req.headers.get('cookie'), secret);
   if (!session || !forThisGuild(session)) return json({ error: 'Not signed in' }, 401);
+  // Turned off on the Admin page: refused straight away, not only at the next sign-in
+  if (session.kind === 'discord' && session.uid) {
+    const { isBlocked } = await import('./ranks.js');
+    if (await isBlocked(session.uid)) return json({ error: 'Your access to Guild Logs has been turned off by an officer.' }, 403);
+  }
   return null;
 }
 

@@ -1,6 +1,6 @@
 // Left-hand menu: app pages, then the sections of the analysis on screen.
 import { useEffect, useState } from 'react';
-import { type Me, loadMe } from '../api';
+import { type Me, RANK_LABEL, loadMe } from '../api';
 import { sectionsFor, useNav } from '../nav';
 import Glyph from './Glyph';
 import { ShareButton } from './ResultView';
@@ -24,7 +24,7 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history
         <a href="/" className={page === 'analyze' || page === 'saved' ? 'on' : ''}><Glyph name="compass" />Analyze</a>
         <a href="/#/raids" className={page === 'raids' ? 'on' : ''}><Glyph name="calendar" />Past raids</a>
         <a href="/#/history" className={page === 'history' ? 'on' : ''}><Glyph name="clock" />History</a>
-        {me?.admin && <a href="/#/admin" className={page === 'admin' ? 'on' : ''}><Glyph name="shield" />Admin</a>}
+        {me?.officer && <a href="/#/admin" className={page === 'admin' ? 'on' : ''}><Glyph name="shield" />Admin</a>}
       </nav>
 
       {sections.length > 0 && (
@@ -70,7 +70,7 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history
               {me.avatar ? <img src={me.avatar} width={28} height={28} alt="" /> : <span className="side-user-blank" aria-hidden="true"><Glyph name="users" size={16} /></span>}
               <span className="side-user-name">
                 {me.name ?? 'Guild member'}
-                <span className="muted small">{me.officer ? 'Officer' : 'Member'}</span>
+                <span className="muted small">{me.rank ? RANK_LABEL[me.rank] : 'Member'}</span>
               </span>
             </a>
           ) : (

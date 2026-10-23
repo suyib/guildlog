@@ -3,6 +3,7 @@
 // only raid-wide information is posted in channels.
 import { characterLevel } from '../blizzard.js';
 import { registerRaid } from '../archive.js';
+import { level, siteAdminIds, storedPerson } from '../ranks.js';
 import { rest } from '../db.js';
 import { getReportMeta, getReportRegion, parseReportUrl } from '../wcl.js';
 import {
@@ -130,6 +131,11 @@ const nameOf = (u: DUser) => u.global_name || u.username;
 const opt = (opts: Opt[] | undefined, name: string) => opts?.find((o) => o.name === name)?.value;
 
 async function isOfficer(i: Interaction): Promise<boolean> {
+  // Ranks from the site come first: SITE_ADMIN_IDS, then a rank set on the Admin page
+  const uid = userOf(i).id;
+  if (siteAdminIds().includes(uid)) return true;
+  const stored = await storedPerson(uid).catch(() => null);
+  if (stored?.rank) return level(stored.rank) >= level('officer');
   const role = env.adminRole();
   if (i.member) {
     const perms = BigInt(i.member.permissions ?? '0');

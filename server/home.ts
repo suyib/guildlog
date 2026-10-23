@@ -11,6 +11,7 @@ import type { Session } from './auth.js';
 import type { HomeData, ProfileCharacter, ProfileData, SavedRaid } from './types.js';
 import { getReportRegion } from './wcl.js';
 import { membership } from './officers.js';
+import { discordRank, effectiveRank } from './ranks.js';
 
 const WEEK = 7 * 86_400_000;
 const avg = (xs: number[]) => (xs.length ? xs.reduce((t, v) => t + v, 0) / xs.length : null);
@@ -86,7 +87,7 @@ export async function profileData(session: Session): Promise<ProfileData> {
     claimsFor(session.uid).catch(() => []),
     raidCodes(),
     membership(session.uid, session.gid).catch(() => null),
-    rest(`site_users?discord_id=eq.${encodeURIComponent(session.uid)}&select=first_seen,sign_ins`).catch(() => []),
+    rest(`site_users?discord_id=eq.${encodeURIComponent(session.uid)}&select=first_seen,sign_ins,rank,display_name`).catch(() => []),
     listRaids().catch(() => ({ raids: [] as SavedRaid[] })),
   ]);
   // Each raid's stored summaries, read once and shared by all of this person's characters
@@ -151,7 +152,8 @@ export async function profileData(session: Session): Promise<ProfileData> {
   }));
 
   return {
-    name: session.name ?? 'You',
+    name: users?.[0]?.display_name || session.name || 'You',
+    rank: effectiveRank(session.uid, users?.[0]?.rank, me ? discordRank(me) : session.officer ? 'officer' : 'raider'),
     avatar: session.avatar ? `https://cdn.discordapp.com/avatars/${session.uid}/${session.avatar}.png?size=128` : null,
     officer: me?.officer ?? session.officer,
     server: me?.guildName ?? null,

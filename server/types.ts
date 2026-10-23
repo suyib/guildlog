@@ -324,6 +324,9 @@ export interface RaidFeedback { good: RaidPoint[]; work: RaidPoint[] }
 
 // ---------- Admin ----------
 
+export type Rank = 'raider' | 'officer' | 'guild_master' | 'admin';
+
+/** A stored site user row. */
 export interface AdminUser {
   discord_id: string;
   username: string;
@@ -335,6 +338,38 @@ export interface AdminUser {
   first_seen: string;
   last_seen: string;
   sign_ins: number;
+  /** Rank set on the Admin page (wins over Discord); null when not set. */
+  rank: Rank | null;
+  /** What Discord said at their last sign-in. */
+  discord_rank: Rank | null;
+  display_name: string | null;
+  note: string | null;
+  blocked: boolean;
+}
+
+/** One person on the Admin page: site sign-ins and bot claims together. */
+export interface AdminPerson {
+  id: string;
+  /** Display name if one is set, else their Discord name. */
+  name: string;
+  discordName: string;
+  username: string | null;
+  avatar: string | null;
+  guild: string | null;
+  rank: Rank;
+  /** Where the rank comes from. */
+  rankFrom: 'site admin' | 'set here' | 'discord';
+  rankSet: Rank | null;
+  displayName: string | null;
+  note: string | null;
+  blocked: boolean;
+  firstSignIn: string | null;
+  lastSignIn: string | null;
+  signIns: number;
+  firstClaim: string | null;
+  characters: { id: string; name: string; realm: string | null; status: 'pending' | 'approved' | 'rejected' }[];
+  /** Whether the person viewing may edit this person. */
+  editable: boolean;
 }
 
 export interface AdminSignIn {
@@ -350,12 +385,21 @@ export interface AdminSignIn {
 }
 
 export interface AdminOverview {
-  users: AdminUser[];
+  /** The person viewing: their rank and the ranks they can give. */
+  me: { id: string | null; rank: Rank; assignable: Rank[] };
+  people: AdminPerson[];
   signIns: AdminSignIn[];
-  /** Bot use by Discord account: when they first claimed a character, and their characters. */
-  bot: Record<string, { name: string; firstClaim: string; characters: { name: string; realm: string | null; status: string }[] }>;
   signInLogDays: number;
 }
+
+/** One change on the Admin page. */
+export type AdminEdit =
+  | { action: 'rank'; id: string; rank: Rank | null }
+  | { action: 'name'; id: string; displayName: string | null }
+  | { action: 'note'; id: string; note: string | null }
+  | { action: 'blocked'; id: string; blocked: boolean }
+  | { action: 'addCharacter'; id: string; character: string; realm: string | null }
+  | { action: 'claim'; id: string; claimId: string; status: 'approved' | 'rejected' | 'removed' };
 
 // ---------- Home page and profiles ----------
 
@@ -396,6 +440,7 @@ export interface ProfileCharacter {
 
 export interface ProfileData {
   name: string;
+  rank: Rank;
   avatar: string | null;
   officer: boolean;
   server: string | null;

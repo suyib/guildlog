@@ -116,7 +116,7 @@ function Privacy() {
         <li>
           <strong>Signing in with Discord.</strong> We ask Discord for your user ID, username and avatar (nothing else, and never your messages
           or password), and check with the bot that you&rsquo;re in the guild&rsquo;s Discord server and whether you&rsquo;re an officer. We keep these,
-          with which server you signed in for and when you first and last signed in, so the site&rsquo;s admin can see who uses it. Each sign-in attempt
+          with which server you signed in for and when you first and last signed in, so the site&rsquo;s admin can see who uses it. Officers can also give you a rank, a display name and a short note visible only to officers, and can turn off your access. Each sign-in attempt
           is logged for 90 days, and sign-ins and officer actions are also noted in a private log channel for the officers.
         </li>
         <li>

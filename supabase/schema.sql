@@ -165,3 +165,10 @@ create index if not exists site_signins_at on public.site_signins (at desc);
 
 alter table public.site_users enable row level security;
 alter table public.site_signins enable row level security;
+
+-- Ranks and profile edits from the Admin page (v0.21.0)
+alter table public.site_users add column if not exists rank text check (rank in ('guild_master', 'officer', 'raider'));
+alter table public.site_users add column if not exists discord_rank text;
+alter table public.site_users add column if not exists display_name text;
+alter table public.site_users add column if not exists note text;
+alter table public.site_users add column if not exists blocked boolean not null default false;

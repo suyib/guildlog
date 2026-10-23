@@ -13,6 +13,8 @@ import { buildCard } from '../server/archive';
 import { liveOrSaved } from '../server/saved';
 import { forThisGuild, readSession, sessionCookie, sign as signValue } from '../server/auth';
 import { isSiteAdmin } from '../server/officers';
+import { assignable, canEdit, discordRank, effectiveRank } from '../server/ranks';
+import { applyEdit } from '../server/users';
 
 // Signed requests: Discord's PING gets a PONG, a bad signature is refused
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -304,6 +306,42 @@ process.env.SITE_ADMIN_IDS = '7, 9';
 assert.ok(isSiteAdmin({ kind: 'discord', uid: '9', officer: false, exp: 0 }));
 assert.ok(!isSiteAdmin({ kind: 'discord', uid: '8', officer: true, exp: 0 }));
 assert.ok(!isSiteAdmin({ kind: 'password', officer: false, exp: 0 }));
+delete process.env.SITE_ADMIN_IDS;
+
+// Ranks: each rank edits and promotes only below itself; admins come from SITE_ADMIN_IDS
+assert.ok(canEdit('guild_master', 'officer') && canEdit('officer', 'raider') && canEdit('admin', 'admin'));
+assert.ok(!canEdit('officer', 'officer') && !canEdit('officer', 'guild_master') && !canEdit('guild_master', 'guild_master'));
+assert.deepEqual(assignable('admin'), ['raider', 'officer', 'guild_master']);
+assert.deepEqual(assignable('guild_master'), ['raider', 'officer']);
+assert.deepEqual(assignable('officer'), ['raider']);
+process.env.SITE_ADMIN_IDS = '1';
+assert.equal(effectiveRank('1', 'raider', 'raider'), 'admin');
+assert.equal(effectiveRank('2', 'officer', 'raider'), 'officer', 'a rank set on the Admin page wins over Discord');
+assert.equal(effectiveRank('2', null, 'guild_master'), 'guild_master');
+assert.equal(discordRank({ owner: true, officer: true }), 'guild_master');
+// Editing is checked on the server too: an officer can't change another officer
+{
+  const realFetch = globalThis.fetch;
+  process.env.SUPABASE_URL = 'https://db.example';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
+  const sent: string[] = [];
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    sent.push(`${init?.method ?? 'GET'} ${url}`);
+    if (String(url).includes('site_users?order')) return new Response(JSON.stringify([
+      { discord_id: '5', username: 'off', name: 'Off', rank: null, discord_rank: 'officer', officer: true, sign_ins: 1, first_seen: '', last_seen: '' },
+      { discord_id: '6', username: 'rai', name: 'Rai', rank: null, discord_rank: 'raider', officer: false, sign_ins: 1, first_seen: '', last_seen: '' },
+    ]), { status: 200 });
+    if (String(url).includes('bot_claims?select')) return new Response('[]', { status: 200 });
+    return new Response(null, { status: 204 });
+  }) as typeof fetch;
+  await assert.rejects(applyEdit({ action: 'rank', id: '5', rank: 'raider' }, { id: '7', name: 'X', rank: 'officer' }), /only change people below/);
+  await assert.rejects(applyEdit({ action: 'rank', id: '6', rank: 'officer' }, { id: '7', name: 'X', rank: 'officer' }), /can\u2019t give the Officer rank/);
+  assert.match(await applyEdit({ action: 'rank', id: '6', rank: 'officer' }, { id: '8', name: 'GM', rank: 'guild_master' }), /set Rai .* rank to Officer/);
+  assert.ok(sent.some((x) => x.startsWith('PATCH') && x.includes('site_users?discord_id=eq.6')));
+  globalThis.fetch = realFetch;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+}
 delete process.env.SITE_ADMIN_IDS;
 
 console.log('All bot checks passed.');

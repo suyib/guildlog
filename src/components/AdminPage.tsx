@@ -1,8 +1,8 @@
-// Admin (site admins only): everyone who has signed in or used the bot, which Discord server
-// they're from, when they first connected and last signed in, and the sign-in log.
-import { useEffect, useMemo, useState } from 'react';
-import type { AdminOverview, AdminSignIn } from '../../server/types';
-import { loadAdmin } from '../api';
+// Admin (officers and above): everyone who has signed in or used the bot, with their rank, and
+// editing for anyone below you: rank, display name, officer note, site access and characters.
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import type { AdminEdit, AdminOverview, AdminPerson, AdminSignIn, Rank } from '../../server/types';
+import { RANK_LABEL, loadAdmin, saveAdminEdit } from '../api';
 import Glyph from './Glyph';
 
 const when = (iso: string) => new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
@@ -17,60 +17,36 @@ const RESULT: Record<AdminSignIn['result'], { label: string; cls: string }> = {
   wrong_password: { label: 'Wrong password', cls: 'badge-warn' },
   error: { label: 'Failed', cls: 'badge-bad' },
 };
-
-interface Person {
-  id: string;
-  name: string;
-  username: string | null;
-  avatar: string | null;
-  guild: string | null;
-  officer: boolean;
-  firstSignIn: string | null;
-  lastSignIn: string | null;
-  signIns: number;
-  firstClaim: string | null;
-  characters: { name: string; realm: string | null; status: string }[];
-}
+const RANK_ORDER: Rank[] = ['admin', 'guild_master', 'officer', 'raider'];
 
 export default function AdminPage() {
   const [data, setData] = useState<AdminOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  const [rankFilter, setRankFilter] = useState<Rank | 'all'>('all');
+  const [open, setOpen] = useState<string | null>(null);
   const [onlyProblems, setOnlyProblems] = useState(false);
 
+  const refresh = () => loadAdmin().then(setData).catch((e) => setError((e as Error).message));
   useEffect(() => {
-    loadAdmin().then(setData).catch((e) => setError((e as Error).message));
+    refresh();
   }, []);
 
-  // Everyone: site sign-ins, plus people who've only used the bot (claimed a character)
-  const people = useMemo<Person[]>(() => {
+  const people = useMemo(() => {
     if (!data) return [];
-    const out = new Map<string, Person>();
-    for (const u of data.users) {
-      out.set(u.discord_id, {
-        id: u.discord_id, name: u.name || u.username, username: u.username, guild: u.guild_name ?? u.guild_id,
-        avatar: u.avatar ? `https://cdn.discordapp.com/avatars/${u.discord_id}/${u.avatar}.png?size=64` : null,
-        officer: u.officer, firstSignIn: u.first_seen, lastSignIn: u.last_seen, signIns: u.sign_ins, firstClaim: null, characters: [],
-      });
-    }
-    for (const [id, b] of Object.entries(data.bot)) {
-      const p = out.get(id) ?? { id, name: b.name, username: null, avatar: null, guild: null, officer: false, firstSignIn: null, lastSignIn: null, signIns: 0, firstClaim: null, characters: [] };
-      p.firstClaim = b.firstClaim;
-      p.characters = b.characters;
-      out.set(id, p);
-    }
     const f = filter.trim().toLowerCase();
-    return [...out.values()]
-      .filter((p) => !f || `${p.name} ${p.username ?? ''} ${p.id} ${p.guild ?? ''} ${p.characters.map((c) => c.name).join(' ')}`.toLowerCase().includes(f))
-      .sort((a, b) => (b.lastSignIn ?? b.firstClaim ?? '').localeCompare(a.lastSignIn ?? a.firstClaim ?? ''));
-  }, [data, filter]);
+    return data.people
+      .filter((p) => rankFilter === 'all' || p.rank === rankFilter)
+      .filter((p) => !f || `${p.name} ${p.discordName} ${p.username ?? ''} ${p.id} ${p.guild ?? ''} ${p.characters.map((c) => c.name).join(' ')}`.toLowerCase().includes(f))
+      .sort((a, b) => RANK_ORDER.indexOf(a.rank) - RANK_ORDER.indexOf(b.rank) || (b.lastSignIn ?? b.firstClaim ?? '').localeCompare(a.lastSignIn ?? a.firstClaim ?? ''));
+  }, [data, filter, rankFilter]);
 
   if (error) return <section className="panel"><h1>Admin</h1><p className="error">{error}</p></section>;
   if (!data) return <section className="panel"><h1>Admin</h1><p className="muted">Loading…</p></section>;
 
   const week = Date.now() - 7 * 86_400_000;
-  const active = data.users.filter((u) => new Date(u.last_seen).getTime() >= week).length;
-  const guilds = new Set(data.users.map((u) => u.guild_id).filter(Boolean)).size;
+  const active = data.people.filter((p) => p.lastSignIn && new Date(p.lastSignIn).getTime() >= week).length;
+  const count = (r: Rank) => data.people.filter((p) => p.rank === r).length;
   const problems = data.signIns.filter((s) => s.result !== 'ok').length;
   const log = data.signIns.filter((s) => !onlyProblems || s.result !== 'ok');
 
@@ -78,54 +54,76 @@ export default function AdminPage() {
     <>
       <section className="panel">
         <h1>Admin</h1>
-        <p className="help">Everyone who has signed in to the site or used the bot. Only site admins (SITE_ADMIN_IDS) can see this page.</p>
+        <p className="help">
+          You&rsquo;re {data.me.rank === 'admin' ? 'an' : 'a'} {RANK_LABEL[data.me.rank]}. {data.me.rank === 'admin' ? 'You can change everyone.' : `You can change anyone below ${RANK_LABEL[data.me.rank]}.`} Click a person to edit them.
+        </p>
       </section>
 
       <div className="kpis">
-        <Kpi glyph="users" label="People" value={String(people.length)} sub={`${data.users.length} signed in to the site`} />
-        <Kpi glyph="clock" label="Active this week" value={String(active)} sub="signed in in the last 7 days" />
-        <Kpi glyph="shield" label="Officers" value={String(data.users.filter((u) => u.officer).length)} sub="at their last sign-in" />
+        <Kpi glyph="users" label="People" value={String(data.people.length)} sub={`${active} active this week`} />
+        <Kpi glyph="shield" label="Guild masters and officers" value={String(count('guild_master') + count('officer'))} sub={`${count('guild_master')} guild master${count('guild_master') === 1 ? '' : 's'}, ${count('officer')} officer${count('officer') === 1 ? '' : 's'}`} />
+        <Kpi glyph="users" label="Raiders" value={String(count('raider'))} sub={`${data.people.filter((p) => p.blocked).length} with access turned off`} />
         <Kpi glyph="alert" label="Problems" value={String(problems)} sub={`failed sign-ins, last ${data.signInLogDays} days`} />
       </div>
 
       <section className="panel">
         <div className="panel-head">
-          <h2 className="panel-title">People{guilds > 1 ? ` across ${guilds} servers` : ''}</h2>
-          <input className="filter" placeholder="Filter: name, ID, server, character" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter people" />
+          <h2 className="panel-title">People</h2>
+          <div className="row admin-filters">
+            <select value={rankFilter} onChange={(e) => setRankFilter(e.target.value as Rank | 'all')} aria-label="Rank">
+              <option value="all">All ranks</option>
+              {RANK_ORDER.map((r) => <option key={r} value={r}>{RANK_LABEL[r]}</option>)}
+            </select>
+            <input className="filter" placeholder="Filter: name, ID, character" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter people" />
+          </div>
         </div>
-        {people.length === 0 ? <p className="muted">Nobody yet.</p> : (
+        {people.length === 0 ? <p className="muted">Nobody here.</p> : (
           <div className="scroll">
             <table className="grid admin-table">
               <thead>
-                <tr><th>Person</th><th>Server</th><th>Role</th><th>Connected</th><th>Last signed in</th><th className="r">Sign-ins</th><th>Characters</th></tr>
+                <tr><th>Person</th><th>Rank</th><th>Connected</th><th>Last signed in</th><th className="r">Sign-ins</th><th>Characters</th><th></th></tr>
               </thead>
               <tbody>
                 {people.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <span className="admin-person">
-                        {p.avatar ? <img src={p.avatar} width={24} height={24} alt="" /> : <span className="side-user-blank" aria-hidden="true"><Glyph name="users" size={14} /></span>}
-                        <span>
-                          <strong>{p.name}</strong>
-                          <span className="muted small">{p.username ? `@${p.username} · ` : ''}{p.id}</span>
+                  <Fragment key={p.id}>
+                    <tr className={`${p.editable ? 'clickable' : ''}${open === p.id ? ' on' : ''}${p.blocked ? ' blocked' : ''}`} onClick={() => p.editable && setOpen(open === p.id ? null : p.id)}>
+                      <td>
+                        <span className="admin-person">
+                          {p.avatar ? <img src={p.avatar} width={24} height={24} alt="" /> : <span className="side-user-blank" aria-hidden="true"><Glyph name="users" size={14} /></span>}
+                          <span>
+                            <strong>{p.name}</strong>
+                            <span className="muted small">{p.displayName ? `${p.discordName} · ` : ''}{p.username ? `@${p.username} · ` : ''}{p.id}</span>
+                          </span>
                         </span>
-                      </span>
-                    </td>
-                    <td>{p.guild ?? <span className="muted">–</span>}</td>
-                    <td>{p.signIns ? <span className={`badge ${p.officer ? 'badge-ok' : 'badge-plain'}`}>{p.officer ? 'Officer' : 'Member'}</span> : <span className="muted small">Bot only</span>}</td>
-                    <td className="muted">
-                      {p.firstSignIn ? <>Site {day(p.firstSignIn)}</> : null}
-                      {p.firstSignIn && p.firstClaim ? <br /> : null}
-                      {p.firstClaim ? <>Bot {day(p.firstClaim)}</> : null}
-                    </td>
-                    <td className="muted">{p.lastSignIn ? <span title={when(p.lastSignIn)}>{ago(p.lastSignIn)}</span> : 'Never'}</td>
-                    <td className="r">{p.signIns || '–'}</td>
-                    <td>
-                      {p.characters.length === 0 ? <span className="muted">–</span> : p.characters.map((c) => (
-                        <span key={`${c.name}-${c.realm}`} className={`admin-char ${c.status}`} title={`${c.name}${c.realm ? `-${c.realm}` : ''}: ${c.status}`}>{c.name}</span>
-                      ))}
-                    </td>
-                  </tr>
+                      </td>
+                      <td>
+                        <span className={`badge rank-${p.rank}`}>{RANK_LABEL[p.rank]}</span>
+                        {p.rankFrom === 'set here' && <span className="muted small"> set here</span>}
+                        {p.blocked && <span className="badge badge-bad"> No access</span>}
+                      </td>
+                      <td className="muted">
+                        {p.firstSignIn ? <>Site {day(p.firstSignIn)}</> : null}
+                        {p.firstSignIn && p.firstClaim ? <br /> : null}
+                        {p.firstClaim ? <>Bot {day(p.firstClaim)}</> : null}
+                        {!p.firstSignIn && !p.firstClaim ? '–' : null}
+                      </td>
+                      <td className="muted">{p.lastSignIn ? <span title={when(p.lastSignIn)}>{ago(p.lastSignIn)}</span> : 'Never'}</td>
+                      <td className="r">{p.signIns || '–'}</td>
+                      <td>
+                        {p.characters.length === 0 ? <span className="muted">–</span> : p.characters.map((c) => (
+                          <span key={c.id} className={`admin-char ${c.status}`} title={`${c.name}${c.realm ? `-${c.realm}` : ''}: ${c.status}`}>{c.name}</span>
+                        ))}
+                      </td>
+                      <td className="r">{p.editable ? <span className="link-like small">{open === p.id ? 'Close' : 'Edit'}</span> : null}</td>
+                    </tr>
+                    {open === p.id && (
+                      <tr className="admin-edit-row">
+                        <td colSpan={7}>
+                          <PersonEditor person={p} assignable={data.me.assignable} self={p.id === data.me.id} onSaved={refresh} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -152,8 +150,7 @@ export default function AdminPage() {
                     <td>{s.kind === 'discord' ? 'Discord' : 'Guild password'}</td>
                     <td>
                       <span className={`badge ${RESULT[s.result].cls}`}>{RESULT[s.result].label}</span>
-                      {s.detail && s.detail !== 'officer' && <span className="muted small"> {s.detail}</span>}
-                      {s.detail === 'officer' && <span className="muted small"> as officer</span>}
+                      {s.detail && <span className="muted small"> {s.detail}</span>}
                     </td>
                   </tr>
                 ))}
@@ -166,7 +163,95 @@ export default function AdminPage() {
   );
 }
 
-function Kpi({ glyph, label, value, sub }: { glyph: 'users' | 'clock' | 'shield' | 'alert'; label: string; value: string; sub: string }) {
+/** Everything you can change about one person. Each change saves on its own. */
+function PersonEditor({ person: p, assignable, self, onSaved }: { person: AdminPerson; assignable: Rank[]; self: boolean; onSaved: () => void }) {
+  const [displayName, setDisplayName] = useState(p.displayName ?? '');
+  const [note, setNote] = useState(p.note ?? '');
+  const [newChar, setNewChar] = useState('');
+  const [newRealm, setNewRealm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function save(edit: AdminEdit) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const r = await saveAdminEdit(edit);
+      setMessage({ ok: true, text: `Done: ${r.done.replace(/<@\d+>/g, '').replace(/\(\s*\)/g, '').trim()}.` });
+      onSaved();
+    } catch (e) {
+      setMessage({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="admin-edit">
+      <div className="admin-edit-grid">
+        <label>
+          Rank
+          {p.rankFrom === 'site admin' ? (
+            <span className="muted small">Admin (set with SITE_ADMIN_IDS in Vercel)</span>
+          ) : (
+            <select disabled={busy} value={p.rankSet ?? ''} onChange={(e) => save({ action: 'rank', id: p.id, rank: (e.target.value || null) as Rank | null })}>
+              <option value="">From Discord{p.rankSet ? '' : ` (${RANK_LABEL[p.rank]})`}</option>
+              {assignable.map((r) => <option key={r} value={r}>{RANK_LABEL[r]}</option>)}
+            </select>
+          )}
+        </label>
+        <label>
+          Display name
+          <span className="row">
+            <input value={displayName} maxLength={40} placeholder={p.discordName} onChange={(e) => setDisplayName(e.target.value)} />
+            <button type="button" className="ghost" disabled={busy || displayName === (p.displayName ?? '')} onClick={() => save({ action: 'name', id: p.id, displayName: displayName || null })}>Save</button>
+          </span>
+        </label>
+        <label>
+          Site access
+          <span>
+            {self ? <span className="muted small">You can&rsquo;t turn off your own access.</span> : (
+              <button type="button" className={p.blocked ? 'secondary' : 'ghost danger'} disabled={busy} onClick={() => save({ action: 'blocked', id: p.id, blocked: !p.blocked })}>
+                {p.blocked ? 'Turn access back on' : 'Turn off access'}
+              </button>
+            )}
+          </span>
+        </label>
+      </div>
+
+      <label className="admin-note">
+        Officer note <span className="muted small">(only officers and above see this)</span>
+        <textarea value={note} maxLength={500} rows={2} onChange={(e) => setNote(e.target.value)} placeholder="e.g. trial raider since October, main is the priest" />
+        <button type="button" className="ghost" disabled={busy || note === (p.note ?? '')} onClick={() => save({ action: 'note', id: p.id, note: note || null })}>Save note</button>
+      </label>
+
+      <div>
+        <div className="comp-label">Characters</div>
+        {p.characters.length === 0 && <p className="muted small">No characters yet.</p>}
+        <ul className="admin-chars">
+          {p.characters.map((c) => (
+            <li key={c.id}>
+              <strong>{c.name}</strong>{c.realm && <span className="muted small"> {c.realm}</span>}
+              <span className={`badge ${c.status === 'approved' ? 'badge-ok' : c.status === 'pending' ? 'badge-warn' : 'badge-plain'}`}>{c.status === 'approved' ? 'Approved' : c.status === 'pending' ? 'Waiting' : 'Rejected'}</span>
+              {c.status !== 'approved' && <button type="button" className="ghost" disabled={busy} onClick={() => save({ action: 'claim', id: p.id, claimId: c.id, status: 'approved' })}>Approve</button>}
+              {c.status === 'pending' && <button type="button" className="ghost" disabled={busy} onClick={() => save({ action: 'claim', id: p.id, claimId: c.id, status: 'rejected' })}>Reject</button>}
+              <button type="button" className="ghost danger" disabled={busy} onClick={() => save({ action: 'claim', id: p.id, claimId: c.id, status: 'removed' })}>Remove</button>
+            </li>
+          ))}
+        </ul>
+        <form className="row admin-add-char" onSubmit={(e) => { e.preventDefault(); if (newChar.trim()) save({ action: 'addCharacter', id: p.id, character: newChar, realm: newRealm || null }).then(() => { setNewChar(''); setNewRealm(''); }); }}>
+          <input value={newChar} maxLength={24} placeholder="Add a character" onChange={(e) => setNewChar(e.target.value)} aria-label="Character name" />
+          <input value={newRealm} maxLength={40} placeholder="Realm (optional)" onChange={(e) => setNewRealm(e.target.value)} aria-label="Realm" />
+          <button type="submit" className="ghost" disabled={busy || !newChar.trim()}>Add</button>
+        </form>
+      </div>
+
+      {message && <p className={message.ok ? 'good-note small' : 'error'}>{message.text}</p>}
+    </div>
+  );
+}
+
+function Kpi({ glyph, label, value, sub }: { glyph: 'users' | 'shield' | 'alert'; label: string; value: string; sub: string }) {
   return (
     <div className="kpi">
       <div className="kpi-head"><span className="kpi-icon"><Glyph name={glyph} size={18} /></span>{label}</div>

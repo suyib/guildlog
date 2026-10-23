@@ -9,7 +9,9 @@ import type {
   FightRef,
   HistoryRow,
   PlayerSnapshot,
+  AdminEdit,
   AdminOverview,
+  Rank,
   HomeData,
   ProfileData,
   RaidsList,
@@ -36,11 +38,14 @@ export const loadReport = (url: string) => post<ReportSummary>('/api/report', { 
 /** Whole-raid breakdown of one fight, for when no player is chosen. */
 export const loadBreakdown = (p: { host: string; code: string; fight: FightRef }) => post<FightBreakdown>('/api/fight', { ...p, breakdown: true });
 export const loadHistory = () => call<HistoryRow[]>('/api/history');
-export interface Me { signedIn: boolean; kind: 'discord' | 'password' | null; name: string | null; avatar: string | null; officer: boolean; admin: boolean; discordLogin: boolean }
+export interface Me { signedIn: boolean; kind: 'discord' | 'password' | null; name: string | null; avatar: string | null; rank: Rank | null; officer: boolean; admin: boolean; discordLogin: boolean }
 let mePromise: Promise<Me> | null = null;
 /** Who's signed in (asked once per page load). */
-export const loadMe = () => (mePromise ??= call<Me>('/api/login?me=1').catch(() => ({ signedIn: false, kind: null, name: null, avatar: null, officer: false, admin: false, discordLogin: false })));
+export const loadMe = () => (mePromise ??= call<Me>('/api/login?me=1').catch(() => ({ signedIn: false, kind: null, name: null, avatar: null, rank: null, officer: false, admin: false, discordLogin: false })));
 export const loadAdmin = () => call<AdminOverview>('/api/admin');
+export const saveAdminEdit = (edit: AdminEdit) => post<{ ok: true; done: string }>('/api/admin', edit);
+
+export const RANK_LABEL: Record<Rank, string> = { admin: 'Admin', guild_master: 'Guild master', officer: 'Officer', raider: 'Raider' };
 export const loadHome = () => call<HomeData>('/api/raids?view=home');
 export const loadProfile = () => call<ProfileData>('/api/raids?view=profile');
 export const loadRaids = () => call<RaidsList>('/api/raids');

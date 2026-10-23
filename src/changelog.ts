@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.21.0',
+    date: '2026-10-23',
+    changes: [
+      'Ranks: Admin, Guild master, Officer and Raider, shown in the menu and on profiles. Taken from Discord by default; a rank set on the Admin page wins, and the bot uses the same ranks.',
+      'Admin page for officers and above: edit anyone below your rank (rank, display name, officer note, site access, and adding, approving or removing characters). Every change is noted in the activity log.',
+    ],
+  },
+  {
     version: '0.20.1',
     date: '2026-10-23',
     changes: ['Past raids and the home page show a raid as soon as its report is read (bosses, kill times, who was there), instead of waiting for every boss to be saved; deaths and the summary fill in as each kill is read.'],

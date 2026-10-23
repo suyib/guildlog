@@ -624,6 +624,28 @@ a.side-user-link:hover .side-user-name > .muted { color: var(--link); }
 .badge-ok { background: rgba(95, 211, 141, 0.14); color: var(--win); }
 .badge-bad { background: rgba(255, 107, 107, 0.14); color: var(--high); }
 .badge-plain { background: var(--raised); color: var(--ink-2); }
+/* Ranks */
+.badge.rank-admin { background: rgba(0, 124, 173, 0.28); color: var(--primary-light); }
+.badge.rank-guild_master { background: rgba(255, 209, 0, 0.14); color: var(--cooldown); }
+.badge.rank-officer { background: rgba(95, 211, 141, 0.14); color: var(--win); }
+.badge.rank-raider { background: var(--raised); color: var(--ink-2); }
+.admin-filters { align-items: center; }
+.admin-filters select { width: auto; }
+table.admin-table tr.on td { background: var(--hover); }
+table.admin-table tr.blocked td { opacity: 0.6; }
+.link-like { color: var(--link); font-weight: 600; }
+tr.admin-edit-row > td { background: rgba(0, 124, 173, 0.08) !important; padding: 16px; }
+.admin-edit { display: grid; gap: 16px; }
+.admin-edit-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.admin-edit label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.admin-edit textarea { width: 100%; box-sizing: border-box; padding: 10px 14px; border-radius: var(--radius-field); border: 1px solid var(--line); background: var(--field); color: var(--ink); font: inherit; resize: vertical; }
+.admin-note { align-items: flex-start; }
+.admin-chars { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 6px; }
+.admin-chars li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-add-char input { max-width: 220px; }
+button.ghost.danger { color: var(--high); }
+button.ghost.danger:hover:not(:disabled) { border-color: var(--high); }
+@media (max-width: 960px) { .admin-edit-grid { grid-template-columns: 1fr; } }
 table.admin-table td { vertical-align: middle; }
 .admin-person { display: flex; align-items: center; gap: 10px; }
 .admin-person img { border-radius: 50%; flex: none; }

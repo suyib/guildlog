@@ -2,7 +2,7 @@
 // for each character you've claimed with the bot.
 import { useEffect, useState } from 'react';
 import type { ProfileCharacter, ProfileData } from '../../server/types';
-import { loadPortrait, loadProfile } from '../api';
+import { RANK_LABEL, loadPortrait, loadProfile } from '../api';
 import { n0 } from '../format';
 import Glyph from './Glyph';
 import { ClassIcon, classCss, parseCss } from './icons';
@@ -30,7 +30,7 @@ export default function ProfilePage() {
         <div>
           <div className="eyebrow">{data.server ?? 'Discord'}{data.firstSeen ? ` · connected ${day(data.firstSeen)}` : ''}{data.signIns ? ` · ${data.signIns} sign-in${data.signIns === 1 ? '' : 's'}` : ''}</div>
           <h1>{data.name}</h1>
-          <span className={`badge ${data.officer ? 'badge-ok' : 'badge-plain'}`}>{data.officer ? 'Officer' : 'Member'}</span>
+          <span className={`badge rank-${data.rank}`}>{RANK_LABEL[data.rank]}</span>
         </div>
         <a className="button ghost profile-out" href="/api/login?logout=1">Sign out</a>
       </section>
