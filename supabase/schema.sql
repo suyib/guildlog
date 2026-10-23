@@ -132,3 +132,36 @@ create table if not exists public.saved_data (
 
 alter table public.guild_raids enable row level security;
 alter table public.saved_data enable row level security;
+
+-- ---------- Site sign-ins (Admin page) ----------
+
+-- Everyone who has signed in with Discord: which server, officer or not, first and last sign-in.
+create table if not exists public.site_users (
+  discord_id text primary key,
+  username text not null default '',
+  name text not null default '',
+  avatar text,
+  guild_id text,
+  guild_name text,
+  officer boolean not null default false,
+  first_seen timestamptz not null default now(),
+  last_seen timestamptz not null default now(),
+  sign_ins int not null default 0
+);
+
+-- Every sign-in attempt (kept 90 days): Discord or guild password, and whether it worked.
+create table if not exists public.site_signins (
+  id uuid primary key default gen_random_uuid(),
+  at timestamptz not null default now(),
+  kind text not null check (kind in ('discord', 'password')),
+  result text not null check (result in ('ok', 'not_member', 'wrong_password', 'error')),
+  discord_id text,
+  username text,
+  guild_id text,
+  guild_name text,
+  detail text
+);
+create index if not exists site_signins_at on public.site_signins (at desc);
+
+alter table public.site_users enable row level security;
+alter table public.site_signins enable row level security;

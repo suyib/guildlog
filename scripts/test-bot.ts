@@ -12,6 +12,7 @@ import { gql } from '../server/wcl';
 import { buildCard } from '../server/archive';
 import { liveOrSaved } from '../server/saved';
 import { forThisGuild, readSession, sessionCookie, sign as signValue } from '../server/auth';
+import { isSiteAdmin } from '../server/officers';
 
 // Signed requests: Discord's PING gets a PONG, a bad signature is refused
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -290,5 +291,12 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
   delete process.env.DISCORD_GUILD_ID;
   delete process.env.SESSION_SECRET;
 }
+
+// Admin: only the Discord IDs in SITE_ADMIN_IDS, and never the guild password
+process.env.SITE_ADMIN_IDS = '7, 9';
+assert.ok(isSiteAdmin({ kind: 'discord', uid: '9', officer: false, exp: 0 }));
+assert.ok(!isSiteAdmin({ kind: 'discord', uid: '8', officer: true, exp: 0 }));
+assert.ok(!isSiteAdmin({ kind: 'password', officer: false, exp: 0 }));
+delete process.env.SITE_ADMIN_IDS;
 
 console.log('All bot checks passed.');

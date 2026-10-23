@@ -9,6 +9,7 @@ import type {
   FightRef,
   HistoryRow,
   PlayerSnapshot,
+  AdminOverview,
   RaidsList,
   ReportSummary,
   SavedRaid,
@@ -33,10 +34,11 @@ export const loadReport = (url: string) => post<ReportSummary>('/api/report', { 
 /** Whole-raid breakdown of one fight, for when no player is chosen. */
 export const loadBreakdown = (p: { host: string; code: string; fight: FightRef }) => post<FightBreakdown>('/api/fight', { ...p, breakdown: true });
 export const loadHistory = () => call<HistoryRow[]>('/api/history');
-export interface Me { signedIn: boolean; kind: 'discord' | 'password' | null; name: string | null; avatar: string | null; officer: boolean; discordLogin: boolean }
+export interface Me { signedIn: boolean; kind: 'discord' | 'password' | null; name: string | null; avatar: string | null; officer: boolean; admin: boolean; discordLogin: boolean }
 let mePromise: Promise<Me> | null = null;
 /** Who's signed in (asked once per page load). */
-export const loadMe = () => (mePromise ??= call<Me>('/api/login?me=1').catch(() => ({ signedIn: false, kind: null, name: null, avatar: null, officer: false, discordLogin: false })));
+export const loadMe = () => (mePromise ??= call<Me>('/api/login?me=1').catch(() => ({ signedIn: false, kind: null, name: null, avatar: null, officer: false, admin: false, discordLogin: false })));
+export const loadAdmin = () => call<AdminOverview>('/api/admin');
 export const loadRaids = () => call<RaidsList>('/api/raids');
 export const addRaid = (url: string) => post<SavedRaid>('/api/raids', { url });
 export const loadSaved = (id: string) => call<AnalysisResult>(`/api/history?id=${encodeURIComponent(id)}`);

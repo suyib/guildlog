@@ -7,6 +7,7 @@
 import { waitUntil } from '@vercel/functions';
 import { discord, env, postToChannel, verifyDiscordRequest } from '../server/discord/api.js';
 import { archiveTick } from '../server/archive.js';
+import { pruneSignIns } from '../server/users.js';
 import { audit, auditTask } from '../server/discord/audit.js';
 import { COMMANDS, type Interaction, handle, reminderMessage } from '../server/discord/commands.js';
 import { dueReminders, markReminderSent } from '../server/discord/store.js';
@@ -86,7 +87,7 @@ export async function GET(req: Request): Promise<Response> {
     // Then keep saving Past raids in the background, so the scheduler gets its answer straight away
     // (cron-job.org gives up on slow replies and turns jobs off after repeated failures)
     waitUntil(
-      archiveTick(started + 55_000)
+      pruneSignIns().catch(() => undefined).then(() => archiveTick(started + 55_000))
         .then(async (r) => {
           for (const title of r.finished) await auditTask(`Saved ${title} in full on Past raids`);
         })

@@ -9,6 +9,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.19.0',
+    date: '2026-10-23',
+    changes: [
+      'Admin page (site admins only): everyone who has signed in or used the bot, their Discord server, officer or member, when they first connected and last signed in, their claimed characters, and a 90-day sign-in log.',
+    ],
+  },
+  {
     version: '0.18.0',
     date: '2026-10-23',
     changes: [

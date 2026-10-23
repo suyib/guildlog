@@ -39,7 +39,9 @@ People sign in with their Discord account; only members of the guild's server (`
 2. Same page → **Redirects** → add `https://guildlog.uk/api/login` (it must match `SITE_URL` + `/api/login` exactly). Save.
 3. Redeploy. The sign-in page shows **Sign in with Discord**, plus the password box while `APP_PASSWORD` is set. Until `DISCORD_CLIENT_SECRET` is set, the password works as before and everyone signed in counts as an officer.
 
-Sessions last 7 days (30 with the password). Sign-ins, failed sign-ins from non-members and officer actions are posted to the activity log channel.
+Sessions last 7 days (30 with the password).
+
+**Admin page.** Set `SITE_ADMIN_IDS` to your Discord user ID (Discord → Settings → Advanced → Developer Mode, then right-click your name → Copy User ID; comma-separate several). Signed in with Discord, you'll see **Admin** in the menu: everyone who has signed in or used the bot, their server, officer or member, when they first connected (site and bot), when they last signed in, their claimed characters, and the sign-in log (90 days). Needs the `site_users` and `site_signins` tables: run `supabase/schema.sql` again. Sign-ins, failed sign-ins from non-members and officer actions are posted to the activity log channel.
 
 ## Offering it to other guilds later
 

@@ -7,7 +7,8 @@
 import { clearSessionCookie, json, passwordMatches, readCookie, readSession, sessionCookie, sign, unsign } from '../server/auth.js';
 import { env } from '../server/discord/api.js';
 import { auditTask } from '../server/discord/audit.js';
-import { discordLoginEnabled, membership } from '../server/officers.js';
+import { discordLoginEnabled, isSiteAdmin, membership } from '../server/officers.js';
+import { recordSignIn } from '../server/users.js';
 
 const STATE_COOKIE = 'gl_oauth';
 const redirectUri = () => `${env.site()}/api/login`;
@@ -31,6 +32,7 @@ export async function GET(req: Request): Promise<Response> {
       name: s?.name ?? null,
       avatar: s?.uid && s.avatar ? `https://cdn.discordapp.com/avatars/${s.uid}/${s.avatar}.png?size=64` : null,
       officer: s ? (s.kind === 'discord' ? s.officer : !discordLoginEnabled()) : false,
+      admin: isSiteAdmin(s),
       discordLogin: discordLoginEnabled(),
     }, 200, { 'Cache-Control': 'no-store' });
   }
@@ -81,11 +83,14 @@ export async function GET(req: Request): Promise<Response> {
     // Only members of the guild's Discord server get in
     const guildId = env.guildId();
     const m = await membership(user.id, guildId);
+    const who = { discord_id: user.id, username: user.username, guild_id: guildId, guild_name: m.guildName };
     if (!m.member) {
+      await recordSignIn({ kind: 'discord', result: 'not_member', ...who, detail: null });
       await auditTask(`<@${user.id}> (${user.username}) tried to sign in to the site but isn’t in the server`);
       return page('Not in the guild’s Discord', 'Guild Logs is for members of the guild’s Discord server. Join the server, then sign in again.', true);
     }
     const name = m.nick || user.global_name || user.username;
+    await recordSignIn({ kind: 'discord', result: 'ok', ...who, detail: m.officer ? 'officer' : null, name, avatar: user.avatar ?? null, officer: m.officer });
     await auditTask(`<@${user.id}> (${user.username}) signed in to the site${m.officer ? ' (officer)' : ''}`);
     const cookie = await sessionCookie(secret, { kind: 'discord', uid: user.id, name, avatar: user.avatar ?? null, gid: guildId, officer: m.officer });
     const headers = new Headers({ Location: safeNext(next) });
@@ -94,6 +99,7 @@ export async function GET(req: Request): Promise<Response> {
     return new Response(null, { status: 303, headers });
   } catch (e) {
     console.error('discord sign-in failed', e);
+    await recordSignIn({ kind: 'discord', result: 'error', discord_id: null, username: null, guild_id: env.guildId() || null, guild_name: null, detail: (e as Error).message.slice(0, 200) });
     return page('Sign-in didn’t work', `${(e as Error).message}. Please try again in a minute.`, true);
   }
 }
@@ -107,8 +113,10 @@ export async function POST(req: Request): Promise<Response> {
   const password = String(form?.get('password') ?? '');
   const next = safeNext(String(form?.get('next') ?? '/'));
   if (!password || !(await passwordMatches(password, expected, secret))) {
+    await recordSignIn({ kind: 'password', result: 'wrong_password', discord_id: null, username: null, guild_id: env.guildId() || null, guild_name: null, detail: null });
     return new Response(null, { status: 303, headers: { Location: `${next}${next.includes('?') ? '&' : '?'}error=1` } });
   }
+  await recordSignIn({ kind: 'password', result: 'ok', discord_id: null, username: null, guild_id: env.guildId() || null, guild_name: null, detail: null });
   return new Response(null, { status: 303, headers: { Location: next, 'Set-Cookie': await sessionCookie(secret, { kind: 'password', officer: false }) } });
 }
 

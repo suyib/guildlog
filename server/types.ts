@@ -319,3 +319,38 @@ export interface RaidPoint {
 }
 
 export interface RaidFeedback { good: RaidPoint[]; work: RaidPoint[] }
+
+// ---------- Admin ----------
+
+export interface AdminUser {
+  discord_id: string;
+  username: string;
+  name: string;
+  avatar: string | null;
+  guild_id: string | null;
+  guild_name: string | null;
+  officer: boolean;
+  first_seen: string;
+  last_seen: string;
+  sign_ins: number;
+}
+
+export interface AdminSignIn {
+  id: string;
+  at: string;
+  kind: 'discord' | 'password';
+  result: 'ok' | 'not_member' | 'wrong_password' | 'error';
+  discord_id: string | null;
+  username: string | null;
+  guild_id: string | null;
+  guild_name: string | null;
+  detail: string | null;
+}
+
+export interface AdminOverview {
+  users: AdminUser[];
+  signIns: AdminSignIn[];
+  /** Bot use by Discord account: when they first claimed a character, and their characters. */
+  bot: Record<string, { name: string; firstClaim: string; characters: { name: string; realm: string | null; status: string }[] }>;
+  signInLogDays: number;
+}

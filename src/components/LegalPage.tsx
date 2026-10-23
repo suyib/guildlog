@@ -115,8 +115,9 @@ function Privacy() {
         </li>
         <li>
           <strong>Signing in with Discord.</strong> We ask Discord for your user ID, username and avatar (nothing else, and never your messages
-          or password), and check with the bot that you&rsquo;re in the guild&rsquo;s Discord server and whether you&rsquo;re an officer. These are kept in
-          your sign-in cookie, not in our database. Sign-ins and officer actions on the site are noted in a private log channel for the officers.
+          or password), and check with the bot that you&rsquo;re in the guild&rsquo;s Discord server and whether you&rsquo;re an officer. We keep these,
+          with which server you signed in for and when you first and last signed in, so the site&rsquo;s admin can see who uses it. Each sign-in attempt
+          is logged for 90 days, and sign-ins and officer actions are also noted in a private log channel for the officers.
         </li>
         <li>
           <strong>A sign-in cookie.</strong> After you sign in, a cookie named <code>gl_session</code> keeps you signed in (7 days with Discord, 30 with the guild password). With Discord it holds your Discord ID, name and avatar; with the password, nothing personal. There are no tracking or advertising cookies, and no analytics.

@@ -5,13 +5,13 @@ import { sectionsFor, useNav } from '../nav';
 import Glyph from './Glyph';
 import { ShareButton } from './ResultView';
 
-export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history' | 'changelog' | 'saved' }) {
+export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history' | 'admin' | 'changelog' | 'saved' }) {
   const { result, section, setSection, view } = useNav();
   const [me, setMe] = useState<Me | null>(null);
   useEffect(() => {
     loadMe().then(setMe);
   }, []);
-  const sections = sectionsFor(page === 'history' || page === 'changelog' || page === 'raids' ? null : result, view);
+  const sections = sectionsFor(page === 'history' || page === 'changelog' || page === 'raids' || page === 'admin' ? null : result, view);
 
   return (
     <aside className="sidebar">
@@ -24,6 +24,7 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history
         <a href="/" className={page === 'analyze' || page === 'saved' ? 'on' : ''}><Glyph name="compass" />Analyze</a>
         <a href="/#/raids" className={page === 'raids' ? 'on' : ''}><Glyph name="calendar" />Past raids</a>
         <a href="/#/history" className={page === 'history' ? 'on' : ''}><Glyph name="clock" />History</a>
+        {me?.admin && <a href="/#/admin" className={page === 'admin' ? 'on' : ''}><Glyph name="shield" />Admin</a>}
       </nav>
 
       {sections.length > 0 && (
