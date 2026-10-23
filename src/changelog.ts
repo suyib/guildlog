@@ -9,6 +9,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.20.1',
+    date: '2026-10-23',
+    changes: ['Past raids and the home page show a raid as soon as its report is read (bosses, kill times, who was there), instead of waiting for every boss to be saved; deaths and the summary fill in as each kill is read.'],
+  },
+  {
     version: '0.20.0',
     date: '2026-10-23',
     changes: [

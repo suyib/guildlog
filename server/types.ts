@@ -241,6 +241,8 @@ export interface RaidCard {
   /** Everyone in at least one boss fight. bosses: how many of the kills they were in. */
   raiders: { name: string; className: string; specName: string; role: 'tank' | 'healer' | 'dps' | null; bosses: number }[];
   kills: number;
+  /** How many kills have been read in full so far (deaths, item level, roles and feedback come from these). */
+  summarized?: number;
   feedback: RaidFeedback;
 }
 

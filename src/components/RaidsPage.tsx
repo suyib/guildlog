@@ -282,6 +282,8 @@ function RaidChip({ raid, on, onClick, wide = false }: { raid: SavedRaid; on: bo
 
 function RaidCardView({ raid, archiveDays }: { raid: SavedRaid; archiveDays: number }) {
   const c = raid.card;
+  // Cards made before v0.21.0 have no count: they were only made once every kill was read
+  const partial = !!c && (c.summarized ?? c.kills) < c.kills;
   const when = new Date(raid.startTime!);
   const roles = c
     ? (['tank', 'healer', 'dps', 'unknown'] as const)
@@ -309,7 +311,7 @@ function RaidCardView({ raid, archiveDays }: { raid: SavedRaid; archiveDays: num
             <div><dt>Bosses killed</dt><dd>{c.kills} of {c.bosses.length}</dd></div>
             <div><dt>Raid time</dt><dd>{c.raidSeconds ? hm(c.raidSeconds) : '–'}</dd></div>
             <div><dt>Wipes</dt><dd>{c.wipes}</dd></div>
-            <div><dt>Deaths on kills</dt><dd>{c.deaths}</dd></div>
+            <div><dt>Deaths on kills</dt><dd>{partial ? `${c.deaths} so far` : c.deaths}</dd></div>
             <div><dt>Raiders</dt><dd>{c.raiders.length}</dd></div>
             <div><dt>Item level</dt><dd>{c.avgItemLevel ?? '–'}</dd></div>
           </dl>
@@ -328,7 +330,10 @@ function RaidCardView({ raid, archiveDays }: { raid: SavedRaid; archiveDays: num
             </ul>
           </div>
 
-          <div className="grid-2 feedback">
+          {partial && (
+            <p className="muted small">Still reading the boss kills: {c.summarized ?? 0} of {c.kills} done. Deaths, item level, roles and the summary below fill in as each one is read.</p>
+          )}
+          {!partial && <div className="grid-2 feedback">
             <div>
               <div className="comp-label">What went well</div>
               {c.feedback.good.length === 0 ? <p className="muted small">Nothing to single out.</p> : (
@@ -352,7 +357,7 @@ function RaidCardView({ raid, archiveDays }: { raid: SavedRaid; archiveDays: num
                 </ul>
               )}
             </div>
-          </div>
+          </div>}
 
           <div className="raid-attendance">
             <div className="comp-label">Who was there ({c.raiders.length})</div>

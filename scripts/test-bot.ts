@@ -218,6 +218,13 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
   assert.equal(card.raidSeconds, 900);
   assert.deepEqual(card.raiders.map((r) => [r.name, r.bosses, r.role]), [['Alt', 0, null], ['Luke', 2, 'tank'], ['Suy', 2, 'dps']], 'only people in boss fights, with kills attended');
   assert.ok(card.feedback.work.some((p) => p.title.includes('wipe')));
+  assert.equal(card.summarized, 2);
+  // Before any kill is read: bosses, wipes and attendance already there, no feedback yet
+  const early = buildCard(meta, []);
+  assert.equal(early.summarized, 0);
+  assert.equal(early.kills, 2);
+  assert.deepEqual(early.raiders.map((r) => r.name), ['Alt', 'Luke', 'Suy']);
+  assert.deepEqual(early.feedback, { good: [], work: [] });
 }
 
 // When Warcraft Logs is down, a saved raid answers from its saved copy (marked offline)

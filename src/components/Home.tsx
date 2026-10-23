@@ -92,7 +92,18 @@ export function HomeExtras() {
           ) : (
             <ul className="home-raids">
               {d.latestRaids.map((r) => {
-                const c = r.card!;
+                const c = r.card;
+                if (!c) {
+                  return (
+                    <li key={r.code}>
+                      <span className="raid-chip-count">…</span>
+                      <span className="home-raid-main">
+                        <a href={logLink(r)}><strong>{r.title ?? r.code}</strong></a>
+                        <span className="muted small">{shortDate(r.startTime!)} · being read from Warcraft Logs</span>
+                      </span>
+                    </li>
+                  );
+                }
                 const full = c.kills > 0 && c.bosses.every((b) => b.kill);
                 return (
                   <li key={r.code}>
@@ -100,7 +111,7 @@ export function HomeExtras() {
                     <span className="home-raid-main">
                       <a href={logLink(r)}><strong>{r.title ?? r.code}</strong></a>
                       <span className="muted small">
-                        {shortDate(r.startTime!)} · {c.raidSeconds ? hm(c.raidSeconds) : '–'} · {c.raiders.length} raiders · {c.deaths} death{c.deaths === 1 ? '' : 's'}
+                        {shortDate(r.startTime!)} · {c.raidSeconds ? hm(c.raidSeconds) : '–'} · {c.raiders.length} raiders · {(c.summarized ?? c.kills) < c.kills ? `still reading (${c.summarized ?? 0} of ${c.kills} kills)` : `${c.deaths} death${c.deaths === 1 ? '' : 's'}`}
                       </span>
                       <span className="home-bosses">
                         {c.bosses.map((b) => (

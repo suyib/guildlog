@@ -50,7 +50,8 @@ export async function homeData(session: Session | null): Promise<HomeData> {
   const last8 = dated.filter((r) => Date.now() - new Date(r.startTime!).getTime() <= 8 * WEEK);
   const last4 = dated.filter((r) => Date.now() - new Date(r.startTime!).getTime() <= 4 * WEEK);
   const raiders = new Set(last4.flatMap((r) => r.card!.raiders.map((p) => p.name)));
-  const latest = dated[0] ?? null;
+  // Highlights from the latest raid that's been read in full
+  const latest = dated.find((r) => (r.card!.summarized ?? r.card!.kills) >= r.card!.kills) ?? null;
   return {
     guild,
     nextRaid: next,
@@ -60,7 +61,8 @@ export async function homeData(session: Session | null): Promise<HomeData> {
       avgRaidSeconds: avg(last8.map((r) => r.card!.raidSeconds).filter((v) => v > 0)),
       activeRaiders4w: raiders.size,
     },
-    latestRaids: dated.slice(0, 4),
+    // Including raids still being read, so a new raid shows up straight away
+    latestRaids: list.raids.filter((r) => r.startTime).slice(0, 4),
     highlights: latest?.card?.feedback.good.slice(0, 3) ?? [],
     recentAnalyses: recent,
     myCharacters: claims.map((c) => ({ name: c.character, status: c.status })),

@@ -131,7 +131,9 @@ export function buildCard(meta: ReportMeta, digests: FightDigest[]): RaidCard {
     avgItemLevel: ilvls.length ? Math.round((ilvls.reduce((t, v) => t + v, 0) / ilvls.length) * 10) / 10 : null,
     raiders,
     kills: kills.length,
-    feedback: raidFeedback(digests, { wipes: bosses.filter((b) => b.wipes > 0).map((b) => ({ boss: b.name, count: b.wipes })) }),
+    summarized: new Set(digests.map((d) => d.id)).size,
+    // Feedback only once every kill is read, so a half-read raid isn't judged on part of it
+    feedback: new Set(digests.map((d) => d.id)).size < kills.length ? { good: [], work: [] } : raidFeedback(digests, { wipes: bosses.filter((b) => b.wipes > 0).map((b) => ({ boss: b.name, count: b.wipes })) }),
   };
 }
 
@@ -221,10 +223,10 @@ async function saveRaid(raid: RaidRow, deadline: number): Promise<{ done: number
 
   const saved = [savedKey('meta'), ...pieces.map((x) => savedKey(x.kind, x.fightId, x.playerId))].filter((k) => have.has(k)).length;
   const missing = pieces.some((x) => !have.has(savedKey(x.kind, x.fightId, x.playerId)));
-  const allBreakdowns = refs.every((r) => have.has(savedKey('breakdown', r.id)));
-  // The card is rebuilt once every kill's breakdown (and so its summary) is in
+  // The card is built from the start (bosses, wipes and who was there come from the report itself)
+  // and filled in as each kill's summary is read: deaths, item level, roles and feedback
   let card = raid.card;
-  if (allBreakdowns && (!card || !missing || done > 0)) {
+  if (!card || done > 0 || !missing || (card.summarized ?? card.kills) < card.kills) {
     const digests = (await storedFights(code).catch(() => []))
       .map((s) => s.data as FightDigest)
       .filter((d) => (d.v ?? 0) >= 3 && kills.some((k) => k.id === d.id)); // any summary with roles will do for the card
