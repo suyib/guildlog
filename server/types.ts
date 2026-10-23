@@ -53,6 +53,8 @@ export interface PlayerSnapshot {
   windows?: BuffWindow[];
   deaths: { seconds: number; by: string }[];
   damageTaken: { name: string; total: number }[];
+  /** Healing for the fight (no over-time line), so healers can be compared on healing. Missing before v0.17.0. */
+  healing?: Healing;
 }
 
 export type ComparisonKind = 'chosen-player' | 'other-log';

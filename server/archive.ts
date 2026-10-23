@@ -7,7 +7,7 @@
 import { fightBreakdown } from './breakdown.js';
 import { buildDashboard } from './dashboard.js';
 import { dbEnabled, rest } from './db.js';
-import { DIGEST_VERSION, type FightDigest } from './discord/digest.js';
+import type { FightDigest } from './discord/digest.js';
 import { storedFights } from './discord/store.js';
 import { GAME } from './game.js';
 import { fightRows, snapshotOne } from './pipeline.js';
@@ -227,7 +227,7 @@ async function saveRaid(raid: RaidRow, deadline: number): Promise<{ done: number
   if (allBreakdowns && (!card || !missing || done > 0)) {
     const digests = (await storedFights(code).catch(() => []))
       .map((s) => s.data as FightDigest)
-      .filter((d) => d.v === DIGEST_VERSION && kills.some((k) => k.id === d.id));
+      .filter((d) => (d.v ?? 0) >= 3 && kills.some((k) => k.id === d.id)); // any summary with roles will do for the card
     card = buildCard(meta, digests);
   }
   const runs = raid.runs + 1;

@@ -161,6 +161,12 @@ const hf = healingFeedback(me, heal);
 assert.ok(hf.work.some((f) => f.title.includes('overhealing')));
 assert.ok(!hf.work.some((f) => f.title.startsWith('Greater Heal:')), 'below the 60% bar for one spell');
 assert.ok(hf.good.some((f) => f.title === 'Healing parse 81'));
+// Two healers: compared on healing, with where the gap comes from
+const refHealer: any = { ...me, name: 'Other', total: 10_000, healing: { ...heal, hps: 3000, overhealPct: 20, abilities: [{ ...heal.abilities[1], name: 'Prayer of Mending', share: 0.4 }, ...heal.abilities] } };
+const meHealer: any = { ...me, total: 10_000, healing: heal };
+const vs = healingFeedback(meHealer, heal, refHealer);
+assert.ok(vs.work.some((f) => f.title === '33% less healing per second than Other' && f.detail.includes('Prayer of Mending is 40% of their healing and 0% of yours')));
+assert.ok(vs.work.some((f) => f.title === 'More overhealing than Other'));
 assert.equal(healingFrom({ mine: { data: { entries: [] } }, everyone: null, rankings: null, events: [] }, 28, 200, 0), undefined, 'no healing: no Healing tab');
 
 // Damage taken over time names what hit hardest

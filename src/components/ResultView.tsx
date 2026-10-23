@@ -5,7 +5,7 @@ import type { AnalysisResult, Healing, PlayerSnapshot } from '../../server/types
 import { loadPortrait } from '../api';
 import { compact, mmss, n0, pct } from '../format';
 import { type GlyphName, useNav } from '../nav';
-import { healingFeedback } from '../../server/analysis';
+import { healingFeedback, isHealerSnapshot } from '../../server/analysis';
 import { DamageDonut, DpsChart, GearTable, StatsList } from './charts';
 import Feedback, { FeedbackPanels } from './Feedback';
 import Glyph from './Glyph';
@@ -21,7 +21,7 @@ interface Row { label: string; s: PlayerSnapshot; me?: boolean; sameClass: boole
 
 export default function ResultView({ result }: { result: AnalysisResult }) {
   const { section, view } = useNav();
-  const healing = view === 'healing' ? result.dashboard?.healing : undefined;
+  const healing = view === 'healing' ? result.dashboard?.healing ?? result.player.healing : undefined;
   const me = result.player;
   const all: Row[] = [
     { label: 'You', s: me, me: true, sameClass: true },
@@ -45,7 +45,7 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
       {section === 'damage' && (healing ? <HealingView result={result} h={healing} /> : <DamageView result={result} />)}
       {section === 'gear' && <GearView result={result} />}
       {section === 'buffs' && <BuffsView result={result} />}
-      {section === 'compare' && <CompareView all={all} />}
+      {section === 'compare' && (healing && all.slice(1).some((p) => isHealerSnapshot(p.s)) ? <HealingCompareView all={all} /> : <CompareView all={all} />)}
     </div>
   );
 }
@@ -81,7 +81,7 @@ function FightHeader({ result }: { result: AnalysisResult }) {
 /** Damage done / Healing done, shown when the player did any healing. */
 function ViewToggle({ result }: { result: AnalysisResult }) {
   const { view, setView } = useNav();
-  if (!result.dashboard?.healing) return null;
+  if (!result.dashboard?.healing && !result.player.healing) return null;
   return (
     <div className="seg" role="group" aria-label="Show damage or healing">
       <button type="button" className={view === 'damage' ? 'on' : ''} aria-pressed={view === 'damage'} onClick={() => setView('damage')}><Glyph name="bolt" size={16} />Damage done</button>
@@ -244,7 +244,14 @@ function HealingOverview({ result, h }: { result: AnalysisResult; h: Healing }) 
   const d = result.dashboard;
   const gear = d?.gear.map((g) => g.itemLevel).filter((v): v is number => !!v) ?? [];
   const avgIlvl = gear.length ? gear.reduce((t, v) => t + v, 0) / gear.length : null;
-  const feedback = healingFeedback(me, h);
+  // Compared on healing when the other player is a healer too
+  const ref = result.comparisons.map((c) => c.snapshot).find(isHealerSnapshot);
+  const rh = ref?.healing;
+  const vs = ref ? ` vs ${ref.name}` : '';
+  const feedback = healingFeedback(me, h, ref);
+  const hpsDelta: Delta | null = rh && rh.hps > 0 ? { text: `${Math.abs(((h.hps - rh.hps) / rh.hps) * 100).toFixed(1)}%${vs}`, good: h.hps >= rh.hps } : null;
+  const parseDelta: Delta | null = rh && rh.parse !== null && h.parse !== null ? { text: `${Math.abs(Math.round(h.parse - rh.parse))} pts${vs}`, good: h.parse >= rh.parse } : null;
+  const activeDelta: Delta | null = rh && rh.activePct !== null && h.activePct !== null ? { text: `${Math.abs(h.activePct - rh.activePct).toFixed(1)} pts${vs}`, good: h.activePct >= rh.activePct } : null;
   const facts: [string, string][] = [
     ['Healing done', compact(h.total)],
     ['Overhealing', `${compact(h.overheal)} (${pct(h.overhealPct)})`],
@@ -256,11 +263,11 @@ function HealingOverview({ result, h }: { result: AnalysisResult; h: Healing }) 
   ];
   return (
     <>
-      {result.comparisons.length > 0 && <p className="muted small">Comparisons are about damage; switch to Damage done to see them.</p>}
+      {result.comparisons.length > 0 && !ref && <p className="muted small">The player you compared with isn&rsquo;t a healer on this fight, so the comparison is on Damage done.</p>}
       <div className="kpis">
-        <Kpi glyph="pulse" label="HPS" value={n0(h.hps)} sub={`${compact(h.total)} healing`} />
-        <Kpi glyph="target" label="Healing parse" value={h.parse === null ? '–' : String(Math.round(h.parse))} valueCls={parseCss(h.parse)} sub={h.parse === null ? 'Not ranked' : 'Percentile for your spec'} />
-        <Kpi glyph="timer" label="Active time" value={pct(h.activePct, 1)} sub={`${pct(h.overhealPct)} overhealing`} />
+        <Kpi glyph="pulse" label="HPS" value={n0(h.hps)} delta={hpsDelta} sub={`${compact(h.total)} healing`} />
+        <Kpi glyph="target" label="Healing parse" value={h.parse === null ? '–' : String(Math.round(h.parse))} valueCls={parseCss(h.parse)} delta={parseDelta} sub={h.parse === null ? 'Not ranked' : 'Percentile for your spec'} />
+        <Kpi glyph="timer" label="Active time" value={pct(h.activePct, 1)} delta={activeDelta} sub={`${pct(h.overhealPct)} overhealing`} />
         <Kpi glyph="shield" label="Item level" value={me.itemLevel ? String(me.itemLevel) : avgIlvl ? avgIlvl.toFixed(0) : '–'} sub={avgIlvl ? `Gear average ${avgIlvl.toFixed(1)}` : undefined} />
       </div>
 
@@ -667,6 +674,44 @@ function CompareView({ all }: { all: Row[] }) {
             if (!p.sameClass) return OTHER_CLASS;
             const a = p.s.abilities.find((x) => x.name === name);
             return a ? pct(a.share * 100, 1) : '–';
+          })} />
+        ))}
+      </PlayerTable>
+    </section>
+  );
+}
+
+/** Side by side for healers: healing numbers instead of damage. */
+function HealingCompareView({ all }: { all: Row[] }) {
+  const icons = iconMap(all);
+  for (const p of all) for (const a of p.s.healing?.abilities ?? []) if (a.icon) icons.set(a.name, a.icon);
+  const healers = all.filter((p) => p.s.healing);
+  const H = (p: Row) => p.s.healing;
+  const spells = Array.from(new Set(healers.flatMap((p) => H(p)!.abilities.slice(0, 5).map((a) => a.name)))).slice(0, 10);
+  return (
+    <section className="panel">
+      <h2 className="panel-title">Side by side (healing)</h2>
+      <PlayerTable players={all} showCrossClass>
+        <tr className="group"><td colSpan={all.length + 1}>General</td></tr>
+        <TRow label="HPS" cells={all.map((p) => (H(p) ? n0(H(p)!.hps) : '–'))} />
+        <tr>
+          <td>Healing parse</td>
+          {all.map((p, i) => (
+            <td key={i} className={`r strong ${parseCss(H(p)?.parse ?? null)}`}>{H(p)?.parse == null ? '–' : Math.round(H(p)!.parse!)}</td>
+          ))}
+        </tr>
+        <TRow label="Healing done" cells={all.map((p) => (H(p) ? compact(H(p)!.total) : '–'))} />
+        <TRow label="Overhealing" cells={all.map((p) => (H(p) ? pct(H(p)!.overhealPct) : '–'))} />
+        <TRow label="Active time" cells={all.map((p) => pct(H(p)?.activePct ?? p.s.activePct))} />
+        <TRow label="Among the healers" cells={all.map((p) => (H(p)?.rank ? `#${H(p)!.rank!.place} of ${H(p)!.rank!.of}` : '–'))} />
+        <TRow label="Item level" cells={all.map((p) => (p.s.itemLevel ? String(p.s.itemLevel) : '–'))} />
+        <TRow label="Time with no casts" cells={all.map((p) => `${gapTotal(p.s)}s`)} />
+        <TRow label="Deaths" cells={all.map((p) => String(p.s.deaths.length))} />
+        <tr className="group"><td colSpan={all.length + 1}>Top spells (share of healing, overheal)</td></tr>
+        {spells.map((name) => (
+          <TRow key={name} label={name} icon={icons.get(name)} cells={all.map((p) => {
+            const a = H(p)?.abilities.find((x) => x.name === name);
+            return a ? `${pct(a.share * 100, 1)} · ${pct(a.overhealPct)}` : '–';
           })} />
         ))}
       </PlayerTable>

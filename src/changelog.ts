@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.17.0',
+    date: '2026-10-23',
+    changes: [
+      'Two healers are compared on healing: HPS, healing parse, overheal, active time and spells side by side, with feedback on where the gap is.',
+      'Discord: healers\u2019 DM pages are about healing (HPS, healing parse, overheal, place among the healers, spells), and the raid summary counts healers by their healing parse.',
+    ],
+  },
+  {
     version: '0.16.0',
     date: '2026-10-23',
     changes: [

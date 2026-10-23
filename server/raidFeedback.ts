@@ -106,11 +106,12 @@ export function raidFeedback(fights: FightDigest[], opts: RaidFeedbackOptions = 
   }
 
   // ---- Parses ----
-  // Damage parses only: healers' digest parses are for damage, which isn't their job
-  const ranked = (p: PlayerDigest) => p.role !== 'healer' && p.parse !== null;
+  // Healers by their healing parse, everyone else by damage
+  const parseOf = (p: PlayerDigest) => (p.role === 'healer' ? p.healing?.parse ?? null : p.parse);
+  const ranked = (p: PlayerDigest) => parseOf(p) !== null;
   if (rows.some(({ p }) => ranked(p))) {
-    const strong = people((p) => ranked(p) && p.parse! >= 75);
-    const weak = people((p) => ranked(p) && p.parse! < 25);
+    const strong = people((p) => ranked(p) && parseOf(p)! >= 75);
+    const weak = people((p) => ranked(p) && parseOf(p)! < 25);
     if (strong.length) good.push({ title: `${plural(strong.length, 'strong performance')}`, detail: 'Parsed 75 or higher, better than most players of the same spec on that boss.', who: strong });
     if (weak.length) work.push({ title: `${plural(weak.length, 'player')} well below their spec`, detail: 'Parsed under 25. A look at their own summary (or a chat about rotation and gear) will help most.' });
   }

@@ -378,6 +378,25 @@ async function getAmountEvents(host: string, code: string, fightId: number, sour
 }
 
 /**
+ * A player's healing tables for a fight: their own (by spell), everyone's (active time, place among
+ * the healers) and the healing rankings (parse). Empty parts when Warcraft Logs doesn't answer.
+ */
+export async function getHealingTables(host: string, code: string, fightId: number, sourceId: number): Promise<{ mine: any; everyone: any; rankings: any }> {
+  const d = await gql<{ reportData: { report: Record<string, any> } }>(
+    host,
+    `query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){
+      mine: table(dataType:Healing, fightIDs:$fid, sourceID:$sid)
+      everyone: table(dataType:Healing, fightIDs:$fid)
+      rankings(fightIDs:$fid, playerMetric:hps)
+    }}}`,
+    { code, fid: [fightId], sid: sourceId },
+    20_000,
+  ).catch(() => null);
+  const r = d?.reportData.report ?? {};
+  return { mine: r.mine, everyone: r.everyone, rankings: r.rankings };
+}
+
+/**
  * One player's gear, stats, damage done, healing and damage taken over time, and the raid's damage taken. Each part is its own
  * request with a time limit, and any part that fails or is slow is simply left out.
  */
@@ -387,17 +406,10 @@ export async function getDashboardRaw(host: string, code: string, fightId: numbe
       .then((d) => d.reportData.report)
       .catch(() => ({}) as Record<string, any>);
   // Healing: the tables first (cheap); heals over time only for players who actually healed
-  const healing = report(
-    `query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){
-      mine: table(dataType:Healing, fightIDs:$fid, sourceID:$sid)
-      everyone: table(dataType:Healing, fightIDs:$fid)
-      rankings(fightIDs:$fid, playerMetric:hps)
-    }}}`,
-    { code, fid: [fightId], sid: sourceId },
-  ).then(async (h) => {
+  const healing = getHealingTables(host, code, fightId, sourceId).then(async (h) => {
     const mineTotal = ((h.mine?.data?.entries ?? []) as any[]).reduce((t, e) => t + (Number(e?.total) || 0), 0);
     const events = mineTotal > 0 ? await getAmountEvents(host, code, fightId, sourceId, start, end, 'healing').catch(() => []) : [];
-    return { mine: h.mine, everyone: h.everyone, rankings: h.rankings, events };
+    return { ...h, events };
   });
   const [summary, details, damageEvents, taken, heal, takenEvents] = await Promise.all([
     report(`query($code:String!,$fid:[Int]!,$sid:Int!){reportData{report(code:$code){ summary: table(dataType:Summary, fightIDs:$fid, sourceID:$sid) }}}`, { code, fid: [fightId], sid: sourceId }),

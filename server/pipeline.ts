@@ -6,7 +6,8 @@ import { buildFindings, buildSnapshot, buildStrengths } from './analysis.js';
 import { getCachedSnapshot, putCachedSnapshot, saveAnalysis } from './db.js';
 import type { ActorRef, AnalysisResult, Comparison, Dashboard, FightPlayerRow, FightRef, PlayerSnapshot, ReportSummary } from './types.js';
 import { metaLiveOrSaved } from './saved.js';
-import { type Actor, type Fight, getAutoAttackEvents, getCastEvents, getFightData, getPlayerTables, parseReportUrl } from './wcl.js';
+import { healingFrom } from './dashboard.js';
+import { type Actor, type Fight, getAutoAttackEvents, getCastEvents, getFightData, getHealingTables, getPlayerTables, parseReportUrl } from './wcl.js';
 
 export async function reportSummary(url: string): Promise<ReportSummary> {
   const parsed = parseReportUrl(url);
@@ -99,7 +100,7 @@ const toActor = (a: ActorRef): Actor => ({ id: a.id, name: a.name, type: 'Player
  */
 export async function snapshotOne(host: string, code: string, fightRef: FightRef, actorRef: ActorRef, row?: FightPlayerRow): Promise<PlayerSnapshot> {
   // v5: auto attacks are also read from damage events when the cast events leave them out
-  const cacheKey = `v6:${host}:${code}:${fightRef.id}:${fightRef.endTime}:${actorRef.id}`;
+  const cacheKey = `v7:${host}:${code}:${fightRef.id}:${fightRef.endTime}:${actorRef.id}`;
   const cached = await getCachedSnapshot(cacheKey);
   if (cached) return cached;
   const fresh = await buildFreshSnapshot(host, code, fightRef, actorRef, row);
@@ -111,11 +112,12 @@ async function buildFreshSnapshot(host: string, code: string, fightRef: FightRef
   const fight = toFight(fightRef);
   const actor = toActor(actorRef);
   const auto = AUTO_ATTACK[actorRef.className] ?? AUTO_ATTACK.default;
-  const [r, tables, casts, autos] = await Promise.all([
+  const [r, tables, casts, autos, healTables] = await Promise.all([
     row ? Promise.resolve(row) : fightRows(host, code, fight.id, false).then((rows) => rows.find((x) => x.id === actor.id || x.name === actor.name)),
     getPlayerTables(host, code, fight.id, actor.id),
     getCastEvents(host, code, fight, actor.id),
     auto ? getAutoAttackEvents(host, code, fight, actor.id, auto.id) : Promise.resolve([]),
+    getHealingTables(host, code, fight.id, actor.id),
   ]);
   // If the cast events left out auto attacks, add them from the damage events for the timeline
   if (auto && autos.length && !casts.events.some((e) => casts.abilities.get(e.abilityGameID) === auto.name)) {
@@ -134,6 +136,9 @@ async function buildFreshSnapshot(host: string, code: string, fightRef: FightRef
     casts,
   });
   snapshot.server = r?.server ?? null;
+  // Healing totals, parse and spells, so two healers can be compared on healing
+  const healing = healingFrom({ ...healTables, events: [] }, actor.id, (fight.endTime - fight.startTime) / 1000, fight.startTime);
+  if (healing) snapshot.healing = healing;
   return snapshot;
 }
 

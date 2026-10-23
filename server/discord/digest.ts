@@ -31,10 +31,23 @@ export interface PlayerDigest {
   avoidableTop: { name: string; total: number }[];
   gear?: GearItem[];
   stats?: { name: string; value: string }[];
+  /** Healing for the fight, for anyone who healed (missing on summaries stored before v0.17.0). */
+  healing?: {
+    total: number;
+    hps: number;
+    overhealPct: number | null;
+    /** Healing parse, for healers. */
+    parse: number | null;
+    activePct: number | null;
+    abilities: { name: string; total: number; overhealPct: number | null }[];
+  };
 }
 
+/** A healer on this fight: healing well above their damage. Their DM pages are about healing. */
+export const healsMost = (p: PlayerDigest) => !!p.healing && p.healing.total > 2 * p.total;
+
 /** Bump when what's stored per fight changes, so older stored fights are rebuilt. */
-export const DIGEST_VERSION = 4; // 4: pet damage listed as "<pet> (pet)"; 3: everyone in the fight is included, with roles
+export const DIGEST_VERSION = 5; // 5: healing; 4: pet damage listed as "<pet> (pet)"; 3: everyone in the fight is included, with roles
 
 export interface FightDigest {
   v?: number;
@@ -78,6 +91,27 @@ function withPets(e: any): { name: string; total: number }[] {
   return pets.length && ownSum + petSum <= num(e.total) * 1.02 ? [...own, ...pets] : own;
 }
 
+/** One player's healing from the fight-wide healing table (undefined when they didn't heal). */
+function healingOf(e: any, rows: Map<number, any>, ranks: any[], seconds: number): PlayerDigest['healing'] {
+  const h = rows.get(e.id);
+  const total = num(h?.total);
+  if (!total) return undefined;
+  const over = num(h.overheal);
+  const rank = ranks.find((r) => r.name === e.name);
+  return {
+    total,
+    hps: total / (seconds || 1),
+    overhealPct: total + over ? Math.round((over / (total + over)) * 1000) / 10 : null,
+    parse: typeof rank?.rankPercent === 'number' ? rank.rankPercent : null,
+    activePct: typeof h.activeTime === 'number' && seconds > 0 ? Math.round(Math.min(100, (h.activeTime / (seconds * 1000)) * 100) * 10) / 10 : null,
+    abilities: ((h.abilities ?? []) as any[])
+      .filter((a) => a?.name && num(a.total) > 0)
+      .map((a) => ({ name: String(a.name), total: num(a.total), overhealPct: num(a.total) + num(a.overheal) ? Math.round((num(a.overheal) / (num(a.total) + num(a.overheal))) * 1000) / 10 : null }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10),
+  };
+}
+
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
 async function fightTables(host: string, code: string, fightId: number, fields: string, timeoutMs: number): Promise<Record<string, any>> {
@@ -92,11 +126,12 @@ async function fightTables(host: string, code: string, fightId: number, fields: 
 
 export async function buildFightDigest(host: string, code: string, fight: Fight): Promise<FightDigest> {
   const optional = (p: Promise<Record<string, any>>) => p.catch(() => ({}) as Record<string, any>);
-  const [main, survival, ranks, details] = await Promise.all([
+  const [main, survival, ranks, details, heal] = await Promise.all([
     fightTables(host, code, fight.id, 'damage: table(dataType:DamageDone, fightIDs:$fid) casts: table(dataType:Casts, fightIDs:$fid)', 25_000),
     optional(fightTables(host, code, fight.id, 'taken: table(dataType:DamageTaken, fightIDs:$fid) deaths: table(dataType:Deaths, fightIDs:$fid)', 25_000)),
     optional(fightTables(host, code, fight.id, 'rankings(fightIDs:$fid, playerMetric:dps)', 15_000)),
     optional(fightTables(host, code, fight.id, 'details: playerDetails(fightIDs:$fid, includeCombatantInfo:true)', 20_000)),
+    optional(fightTables(host, code, fight.id, 'healing: table(dataType:Healing, fightIDs:$fid) hps: rankings(fightIDs:$fid, playerMetric:hps)', 20_000)),
   ]);
 
   const seconds = (fight.endTime - fight.startTime) / 1000;
@@ -128,6 +163,9 @@ export async function buildFightDigest(host: string, code: string, fight: Fight)
     entries.push({ id: c.id, name: c.name, type: c.type, icon: c.icon ?? c.type, total: 0 });
   }
   const raidIds = entries.map((e) => e.id);
+  // Healing: everyone's from one fight-wide table, parses from the healing rankings
+  const healRows = new Map<number, any>(((heal.healing?.data?.entries ?? []) as any[]).filter((e) => e?.id && e.type !== 'Pet' && e.type !== 'NPC').map((e) => [e.id, e]));
+  const hpsRanks = rankingRows(heal.hps);
   const players = entries.map((e): PlayerDigest => {
     const rank = rankRows.find((r) => r.name === e.name);
     const det = detail.find((x) => x.id === e.id || x.name === e.name);
@@ -166,6 +204,7 @@ export async function buildFightDigest(host: string, code: string, fight: Fight)
       avoidableTop: (sv?.abilities ?? []).filter((a) => a.avoidable).slice(0, 3).map((a) => ({ name: a.name, total: a.total })),
       gear: det?.combatantInfo?.gear ? gearFrom(det.combatantInfo.gear) : undefined,
       stats: det?.combatantInfo?.stats ? statsFrom(det.combatantInfo.stats) : undefined,
+      healing: healingOf(e, healRows, hpsRanks, seconds),
     };
   });
 
@@ -200,7 +239,9 @@ export async function raidDigest(host: string, code: string, budgetMs = 40_000):
   };
   await Promise.all([worker(), worker(), worker()]);
 
-  const fights = kills.map((f) => have.get(f.id)).filter((x): x is FightDigest => !!x);
+  // Couldn't rebuild (Warcraft Logs down or slow): an older stored summary is better than none
+  const older = new Map(stored.map((s) => [s.fight_id, s.data as FightDigest]));
+  const fights = kills.map((f) => have.get(f.id) ?? older.get(f.id)).filter((x): x is FightDigest => !!x && (x.v ?? 0) >= 3);
   return { host, code, meta, fights, pending: kills.length - fights.length };
 }
 

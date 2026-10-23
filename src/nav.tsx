@@ -22,7 +22,7 @@ export type View = 'damage' | 'healing';
 
 /** A healer for this fight: healing well above their damage. Their analysis opens on Healing done. */
 export function isHealer(result: AnalysisResult | null): boolean {
-  const h = result?.dashboard?.healing;
+  const h = result?.dashboard?.healing ?? result?.player.healing;
   return !!h && h.total > 2 * (result?.player.total ?? 0);
 }
 

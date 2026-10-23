@@ -415,14 +415,48 @@ export function buildStrengths(me: PlayerSnapshot, comparisons: Comparison[], ge
 
 // ---------- Healing ----------
 
+/** Healing well above their damage on this fight: compared on healing rather than damage. */
+export const isHealerSnapshot = (s: PlayerSnapshot) => !!s.healing && s.healing.total > 2 * s.total;
+
 /**
  * "What to work on" and "What worked well" for the Healing tab, in plain language: overhealing,
  * staying busy, the healing parse, cooldowns, deaths and consumables.
  */
-export function healingFeedback(me: PlayerSnapshot, h: Healing): { work: Finding[]; good: Strength[] } {
+export function healingFeedback(me: PlayerSnapshot, h: Healing, ref?: PlayerSnapshot): { work: Finding[]; good: Strength[] } {
   const work: Finding[] = [];
   const good: Strength[] = [];
   const round = (v: number) => Math.round(v);
+
+  // Against another healer, when one is compared
+  const rh = ref && isHealerSnapshot(ref) ? ref.healing! : null;
+  if (ref && rh) {
+    const gap = rh.hps > 0 ? (h.hps - rh.hps) / rh.hps : 0;
+    if (gap <= -0.1) {
+      // Where the difference comes from: spells that are a bigger part of their healing than yours
+      const theirTop = rh.abilities.slice(0, 4).map((a) => {
+        const mine = h.abilities.find((x) => x.name === a.name);
+        return { name: a.name, theirs: a.share, mine: mine?.share ?? 0 };
+      }).filter((x) => x.theirs - x.mine >= 0.08);
+      work.push({
+        severity: 'high',
+        title: `${round(Math.abs(gap) * 100)}% less healing per second than ${ref.name}`,
+        detail: theirTop.length
+          ? `${theirTop.slice(0, 2).map((x) => `${x.name} is ${round(x.theirs * 100)}% of their healing and ${round(x.mine * 100)}% of yours`).join('; ')}.`
+          : `${ref.name} healed ${round(rh.hps).toLocaleString('en-US')} per second against your ${round(h.hps).toLocaleString('en-US')}.`,
+      });
+    } else if (gap >= 0.05) {
+      good.push({ title: `${round(gap * 100)}% more healing per second than ${ref.name}`, detail: `${round(h.hps).toLocaleString('en-US')} against their ${round(rh.hps).toLocaleString('en-US')}.` });
+    }
+    if (h.overhealPct !== null && rh.overhealPct !== null && h.overhealPct - rh.overhealPct >= 10) {
+      work.push({ severity: 'medium', title: `More overhealing than ${ref.name}`, detail: `${round(h.overhealPct)}% of your healing was overheal, against their ${round(rh.overhealPct)}%.` });
+    }
+    if (h.activePct !== null && rh.activePct !== null && rh.activePct - h.activePct >= 10) {
+      work.push({ severity: 'medium', title: `Less time casting than ${ref.name}`, detail: `Active ${h.activePct}% of the fight, against their ${rh.activePct}%.` });
+    }
+    // Spells they cast that you didn't
+    const missing = rh.abilities.filter((a) => a.share >= 0.08 && !h.abilities.some((x) => x.name === a.name)).slice(0, 2);
+    for (const a of missing) work.push({ severity: 'low', title: `${a.name} not used`, detail: `${round(a.share * 100)}% of ${ref.name}\u2019s healing came from ${a.name}.` });
+  }
 
   // Parse and place among the healers
   if (h.parse !== null && h.parse < 25) work.push({ severity: 'high', title: `Healing parse ${round(h.parse)}`, detail: 'Below most players of your spec on this boss. Overhealing and time spent not casting (below) are the usual reasons.' });

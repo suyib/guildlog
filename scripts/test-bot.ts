@@ -237,4 +237,25 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
   delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 }
 
+// Healers: DM pages in terms of healing
+{
+  const healerP = (name: string, hps: number, parse: number) => ({
+    ...player(name, 200, 10), className: 'Priest', specName: 'Holy', role: 'healer' as const,
+    healing: { total: hps * 180, hps, overhealPct: 30, parse, activePct: 90, abilities: [{ name: 'Circle of Healing', total: hps * 100, overhealPct: 70 }, { name: 'Renew', total: hps * 80, overhealPct: 20 }] },
+  });
+  const hd = { ...digest, fights: digest.fights.map((f: any) => ({ ...f, players: [healerP('Healz', 1500, 85), healerP('Other', 1200, 60)] })) } as any;
+  const q = personalPage('summary', hd, 'Healz', null)!.embeds![0];
+  const qf = Object.fromEntries(q.fields!.map((f) => [f.name, f.value]));
+  assert.equal(qf['Healing parse'], '85');
+  assert.equal(qf['Average HPS'], '1,125', 'healing on kills over time on kills');
+  assert.ok(qf['What went well'].includes('Top healer'));
+  assert.ok(qf['What to work on'].includes('Circle of Healing overheals'));
+  const hb = personalPage('damage', hd, 'Healz', null)!.embeds![0];
+  assert.ok(hb.title!.startsWith('Healing breakdown'));
+  assert.ok(hb.fields!.some((f) => f.value.includes('**Circle of Healing**')));
+  assert.ok(personalPage('overview', hd, 'Healz', null)!.embeds![0].fields!.some((f) => f.value.includes('#1 of 2 healers')));
+  // The raid summary counts healers by their healing parse
+  assert.ok(raidFeedback(hd.fights).good.some((p) => p.title.includes('strong performance') && p.who?.includes('Healz')));
+}
+
 console.log('All bot checks passed.');
