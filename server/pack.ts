@@ -16,7 +16,7 @@ import { dbEnabled, rest } from './db.js';
 import { type FightDigest, DIGEST_VERSION, digestFromPack } from './fightDigest.js';
 import { countsFrom, detailRows, num } from './tables.js';
 import type { FightRef, GearItem, Offline } from './types.js';
-import { type ReportMeta, WclTimeout, getAbilities, getFightEvents, getReportMeta, getTables } from './wcl.js';
+import { type ReportMeta, getAbilities, getFightEvents, getReportMeta, getTables } from './wcl.js';
 
 export const PACK_VERSION = 1;
 
@@ -92,6 +92,9 @@ export interface FightPack {
   fight: FightRef;
   t: PackTables;
   full?: PackFull;
+  /** Why the full read didn't work last time, and when it was tried (it's tried again later). */
+  fullError?: string;
+  fullTriedAt?: number;
 }
 
 const q = encodeURIComponent;
@@ -308,7 +311,8 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
     getFightEvents(host, code, ref, 'Healing', deadline, run),
     getFightEvents(host, code, ref, 'DamageTaken', deadline, run),
     getFightEvents(host, code, ref, 'Casts', deadline, run, true),
-    run(() => getAbilities(host, code)),
+    // Spell names: tried twice, as events without them would only show spell numbers
+    run(() => getAbilities(host, code).catch(() => getAbilities(host, code))),
     early.length ? readBuffs(host, code, ref, early, run) : tables.then((t) => readBuffs(host, code, ref, [...idsFrom(t)], run)),
     tables.then((t) => readGear(host, code, ref.id, t, run)),
     tables,
@@ -531,7 +535,11 @@ async function readBuffs(host: string, code: string, ref: FightRef, ids: number[
   for (let i = 0; i < ids.length; i += 8) batches.push(ids.slice(i, i + 8));
   await Promise.all(batches.map((batch) => run(async () => {
     const fields = batch.map((id) => `b${id}: table(dataType:Buffs, fightIDs:$fid, sourceID:${Math.trunc(id)})`).join('\n');
-    const r = await getTables(host, code, ref.id, fields, 25_000);
+    // Optional: if a batch is slow or fails, those players just have no buffs listed
+    const r = await getTables(host, code, ref.id, fields, 25_000).catch((e) => {
+      console.error(`buffs for ${code} fight ${ref.id} not read:`, (e as Error).message);
+      return {} as Record<string, any>;
+    });
     for (const id of batch) {
       const data = r[`b${id}`]?.data;
       if (!data) continue;
@@ -644,6 +652,8 @@ export async function getPack(host: string, code: string, ref: FightRef, want: S
 async function loadPack(host: string, code: string, given: FightRef, want: Stage, deadline: number): Promise<FightPack> {
   const stored = await readPack(code, given.id);
   if (stored && (stored.stage === 'full' || want === 'tables')) return stored;
+  // A full read that just failed isn't tried again straight away (a player's analysis asks several times at once)
+  if (stored?.fullTriedAt && Date.now() - stored.fullTriedAt < 2 * 60_000) return stored;
 
   // The fight as the report has it (never what a request says), and a player list that includes it
   let { meta } = await getMeta(host, code, { timeoutMs: 15_000 });
@@ -669,8 +679,12 @@ async function loadPack(host: string, code: string, given: FightRef, want: Stage
     await writePack(host, code, done, digestFromPack(host, done)).catch(() => undefined);
     return done;
   } catch (e) {
-    if (e instanceof WclTimeout || /Warcraft Logs/i.test((e as Error).message)) return pack; // the tables still answer; the full read is tried again later
-    throw e;
+    // The tables still answer; note why, so the page can say so, and try again later
+    const message = (e as Error).message || String(e);
+    console.error(`full read of ${code} fight ${ref.id} failed:`, e);
+    const noted: FightPack = { ...pack, fullError: message.slice(0, 300), fullTriedAt: Date.now() };
+    await writePack(host, code, noted, digestFromPack(host, noted)).catch(() => undefined);
+    return noted;
   }
 }
 

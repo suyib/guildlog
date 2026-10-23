@@ -311,8 +311,19 @@ async function raidEnd(i: Interaction): Promise<Outcome> {
     // Add it to Past raids on the site, which saves it in full over the next hour or so
     const logger = raid.logger_id ? await discord<DUser>(`/users/${raid.logger_id}`).catch(() => null) : null;
     await registerRaid({ host: raid.host, code: raid.report_code, source: 'discord', loggerName: logger ? nameOf(logger) : null, addedBy: me }).catch((e) => console.error('couldn\u2019t add to past raids', e));
+    await startReading(raid.report_code);
     return { content: `Summary for ${raid.title ?? 'the raid'} posted in <#${channelId}>.` };
   });
+}
+
+/**
+ * Start reading a raid for Past raids straight away, in a call of its own (so it gets a full time
+ * limit), instead of waiting for the 5-minute job. Quietly does nothing if CRON_SECRET isn't set.
+ */
+async function startReading(code: string) {
+  const secret = process.env.CRON_SECRET?.trim().replace(/^['"]|['"]$/g, '');
+  if (!secret) return;
+  await fetch(`${env.site()}/api/discord?task=raid&code=${encodeURIComponent(code)}`, { headers: { authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(8_000) }).catch(() => undefined);
 }
 
 // ---------- /raids and the page buttons ----------

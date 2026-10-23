@@ -332,6 +332,9 @@ button.secondary:hover:not(:disabled) { background: rgba(0, 124, 173, 0.18); }
 .death-list .recap { flex-basis: 100%; padding-left: 24px; display: grid; gap: 4px; color: var(--ink); font-weight: 400; }
 .death-list .recap li { color: var(--ink); font-weight: 400; }
 .recap-line { flex-basis: 100%; padding-left: 46px; }
+.stored-data { display: grid; gap: 10px; margin-top: 8px; }
+.stored-data .check { display: grid; gap: 10px; }
+.findings-plain { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; }
 .trend { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12px; }
 .trend li { display: grid; grid-template-columns: 52px 1fr 32px; gap: 8px; align-items: center; }
 .trend progress.bar { width: 100%; height: 6px; }

@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.25.1',
+    date: '2026-10-23',
+    changes: [
+      'A raid ended with /raidend starts being read straight away, so it\u2019s on the calendar within a minute or two.',
+      'Officers: Check stored data and Read now on each Past raids card; guild masters and admins can also read a raid again from scratch.',
+      'An analysis of a fight that isn\u2019t fully read yet now says so and why, instead of quietly leaving out mana, tank swings and the rest. Tank swings also show in the Overview\u2019s fight facts.',
+    ],
+  },
+  {
     version: '0.25.0',
     date: '2026-10-23',
     changes: [

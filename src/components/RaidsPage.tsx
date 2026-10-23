@@ -2,8 +2,8 @@
 // well), attendance over time and how kill times are improving. Saved raids still open when
 // Warcraft Logs is down.
 import { useEffect, useMemo, useState } from 'react';
-import type { RaidCard, SavedRaid } from '../../server/types';
-import { type Me, addRaid, deleteRaid, loadMe, loadRaids } from '../api';
+import type { RaidCard, RaidCheck, SavedRaid } from '../../server/types';
+import { type Me, addRaid, checkRaid, deleteRaid, loadMe, loadRaids, readRaidNow } from '../api';
 import { mmss } from '../format';
 import Glyph from './Glyph';
 import { ClassIcon, SeverityDot, classCss } from './icons';
@@ -107,7 +107,10 @@ export default function RaidsPage() {
         {error && <p className="error">{error}</p>}
         {!raids && !error && <p className="muted">Loading…</p>}
         {waiting.length > 0 && (
-          <p className="muted small">Being read from Warcraft Logs: {waiting.map((r) => r.title ?? r.code).join(', ')}</p>
+          <div className="muted small">
+            Being read from Warcraft Logs: {waiting.map((r) => r.title ?? r.code).join(', ')}
+            {me?.officer && waiting.map((r) => <StoredData key={r.code} code={r.code} label={r.title ?? r.code} canRestart={me.rank === 'admin' || me.rank === 'guild_master'} onChanged={refresh} />)}
+          </div>
         )}
       </section>
 
@@ -122,7 +125,7 @@ export default function RaidsPage() {
           <Overview raids={dated} />
           <div className="grid-raids">
             <Calendar raids={dated} month={month} onMonth={setMonth} selected={selected} onSelect={setSelected} />
-            {current ? <RaidCardView raid={current} archiveDays={archiveDays} canDelete={me?.rank === 'admin' || me?.rank === 'guild_master'} onDeleted={() => { setSelected(null); refresh(); }} /> : <section className="panel"><p className="muted">Pick a raid on the calendar.</p></section>}
+            {current ? <RaidCardView raid={current} archiveDays={archiveDays} canDelete={me?.rank === 'admin' || me?.rank === 'guild_master'} officer={!!me?.officer} onDeleted={() => { setSelected(null); refresh(); }} onChanged={refresh} /> : <section className="panel"><p className="muted">Pick a raid on the calendar.</p></section>}
           </div>
           <Attendance raids={dated} range={range} onRange={setRange} onSelect={(code) => {
             setSelected(code);
@@ -280,7 +283,7 @@ function RaidChip({ raid, on, onClick, wide = false }: { raid: SavedRaid; on: bo
 
 // ---------- The raid card ----------
 
-function RaidCardView({ raid, archiveDays, canDelete, onDeleted }: { raid: SavedRaid; archiveDays: number; canDelete: boolean; onDeleted: () => void }) {
+function RaidCardView({ raid, archiveDays, canDelete, officer, onDeleted, onChanged }: { raid: SavedRaid; archiveDays: number; canDelete: boolean; officer: boolean; onDeleted: () => void; onChanged: () => void }) {
   const c = raid.card;
   // Deleting asks once more on the same button row before anything is removed
   const [confirming, setConfirming] = useState(false);
@@ -331,6 +334,7 @@ function RaidCardView({ raid, archiveDays, canDelete, onDeleted }: { raid: Saved
           )}
         </div>
       </div>
+      {officer && <StoredData code={raid.code} canRestart={canDelete} onChanged={onChanged} />}
       {confirming && <p className="warning">This removes the raid from Past raids along with everything stored for it, including saved analyses of this log. Adding it again reads it from Warcraft Logs as a new raid.</p>}
       {deleteError && <p className="error">{deleteError}</p>}
 
@@ -557,5 +561,81 @@ function Progress({ raids }: { raids: SavedRaid[] }) {
         })}
       </ul>
     </section>
+  );
+}
+
+/**
+ * Officers: what's stored for a raid, kill by kill, and why something might be missing, with
+ * Read now (carry on straight away) and, for guild masters and admins, Read again from scratch.
+ */
+function StoredData({ code, label, canRestart, onChanged }: { code: string; label?: string; canRestart: boolean; onChanged: () => void }) {
+  const [check, setCheck] = useState<RaidCheck | null>(null);
+  const [busy, setBusy] = useState<'check' | 'read' | 'fresh' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmFresh, setConfirmFresh] = useState(false);
+  useEffect(() => {
+    setCheck(null);
+    setError(null);
+    setConfirmFresh(false);
+  }, [code]);
+  async function run(kind: 'check' | 'read' | 'fresh') {
+    setBusy(kind);
+    setError(null);
+    setConfirmFresh(false);
+    try {
+      setCheck(kind === 'check' ? await checkRaid(code) : await readRaidNow(code, kind === 'fresh'));
+      if (kind !== 'check') onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <div className="stored-data">
+      <div className="raid-card-links">
+        <button type="button" className="ghost" disabled={busy !== null} onClick={() => run('check')}>{busy === 'check' ? 'Checking…' : `Check stored data${label ? `: ${label}` : ''}`}</button>
+        <button type="button" className="ghost" disabled={busy !== null} onClick={() => run('read')}>{busy === 'read' ? 'Reading (up to a minute)…' : 'Read now'}</button>
+        {canRestart && !confirmFresh && <button type="button" className="ghost" disabled={busy !== null} onClick={() => setConfirmFresh(true)}>Read again from scratch</button>}
+        {canRestart && confirmFresh && (
+          <>
+            <button type="button" className="ghost danger" disabled={busy !== null} onClick={() => run('fresh')}>{busy === 'fresh' ? 'Reading…' : 'Yes, read it again'}</button>
+            <button type="button" className="ghost" disabled={busy !== null} onClick={() => setConfirmFresh(false)}>Cancel</button>
+          </>
+        )}
+      </div>
+      {confirmFresh && <p className="warning">This forgets everything stored for the raid and reads it from Warcraft Logs again, like a new raid. Saved analyses stay.</p>}
+      {error && <p className="error">{error}</p>}
+      {check && (
+        <div className="check">
+          <dl className="facts">
+            <div><dt>Past raids</dt><dd>{check.status ?? 'not added'}{check.total ? ` · ${check.saved} of ${check.total}` : ''}</dd></div>
+            <div><dt>On the calendar</dt><dd>{check.onCalendar ? 'yes' : 'no'}</dd></div>
+            <div><dt>Report</dt><dd>{check.report}</dd></div>
+            <div><dt>Guild benchmarks</dt><dd>{check.benchmarkRows === null ? 'table missing' : `${check.benchmarkRows} rows`}</dd></div>
+          </dl>
+          {check.kills.length > 0 && (
+            <div className="scroll">
+              <table className="grid">
+                <thead><tr><th>Kill</th><th>Read</th><th className="r">Players</th><th className="r">Mana</th><th className="r">Tank swings</th><th className="r">DoTs</th></tr></thead>
+                <tbody>
+                  {check.kills.map((k) => (
+                    <tr key={k.fightId} className={k.stage !== 'full' ? 'warn' : ''}>
+                      <td>{k.boss}{k.problem && <div className="muted small">{k.problem}</div>}</td>
+                      <td>{k.stage ?? 'not yet'}</td>
+                      <td className="r">{k.players || '–'}</td>
+                      <td className="r">{k.stage === 'full' ? k.withMana : '–'}</td>
+                      <td className="r">{k.stage === 'full' ? k.tanksWithSwings : '–'}</td>
+                      <td className="r">{k.stage === 'full' ? k.withDots : '–'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {check.advice.length > 0 && <ul className="findings-plain">{check.advice.map((a, i) => <li key={i}>{a}</li>)}</ul>}
+        </div>
+      )}
+    </div>
   );
 }

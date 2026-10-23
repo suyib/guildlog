@@ -142,6 +142,7 @@ export function snapshotFromPack(host: string, code: string, pack: FightPack, ac
     snapshot.dps = Math.round(row.total / (snapshot.fightSeconds || 1));
   }
   snapshot.server = row?.server ?? null;
+  if (!pack.full) snapshot.partial = pack.fullError ?? 'Not read in full yet.';
   // Deaths with the 10 seconds before them; potions, DoTs, mana, mitigation and the boss's debuffs
   const recaps = deathRecaps(pack).get(id);
   if (recaps) snapshot.deaths = recaps;

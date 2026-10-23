@@ -6,7 +6,7 @@
 //   GET ?task=wcltest&key=CRON_SECRET    shows what each Warcraft Logs sign-in address answers (for troubleshooting)
 import { waitUntil } from '@vercel/functions';
 import { discord, env, postToChannel, verifyDiscordRequest } from '../server/discord/api.js';
-import { archiveTick } from '../server/archive.js';
+import { archiveNow, archiveTick } from '../server/archive.js';
 import { pruneSignIns } from '../server/users.js';
 import { audit, auditTask } from '../server/discord/audit.js';
 import { COMMANDS, type Interaction, handle, reminderMessage } from '../server/discord/commands.js';
@@ -94,6 +94,14 @@ export async function GET(req: Request): Promise<Response> {
         .catch((e) => console.error('saving raids failed', e)),
     );
     return text(`Sent ${sent} of ${due.length} due reminders. Saving past raids in the background.`);
+  }
+  // Read one raid now (started by /raidend so a new raid is on the calendar within a minute)
+  if (task === 'raid') {
+    const code = url.searchParams.get('code') ?? '';
+    if (!/^[A-Za-z0-9]+$/.test(code)) return text('Missing code', 400);
+    const started = Date.now();
+    waitUntil(archiveNow(code, started + 55_000).catch((e) => console.error('reading raid failed', code, e)));
+    return text(`Reading ${code} in the background.`);
   }
   if (task === 'wcltest') return text((await signInCheck()).join('\n'));
   if (task === 'logtest') {

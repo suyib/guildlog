@@ -63,6 +63,8 @@ export interface PlayerSnapshot {
   mitigation?: Mitigation;
   /** Debuffs the raid kept on the boss. */
   raidDebuffs?: RaidDebuff[];
+  /** Set when the fight hasn't been read in full yet: why, so the page can say what's missing. */
+  partial?: string;
 
   /** Healing for the fight (no over-time line), so healers can be compared on healing. Missing before v0.17.0. */
   healing?: Healing;
@@ -492,6 +494,36 @@ export interface RaidOverview {
   }[];
   /** Kills not read yet; asking again fills them in. */
   pending: number;
+}
+
+/** What's stored for a raid, for officers checking why something isn't showing. */
+export interface RaidCheck {
+  code: string;
+  title: string | null;
+  /** null: not on Past raids. */
+  status: SavedRaid['status'] | null;
+  saved: number;
+  total: number;
+  runs: number;
+  onCalendar: boolean;
+  hasCard: boolean;
+  /** The report's fight list: stored once the log is finished. */
+  report: 'finished' | 'live' | 'not stored';
+  kills: {
+    fightId: number;
+    boss: string;
+    /** full: every event read; tables: only the summary tables so far; null: not read. */
+    stage: string | null;
+    players: number;
+    withMana: number;
+    tanksWithSwings: number;
+    withDots: number;
+    withPotionData: number;
+    problem: string | null;
+  }[];
+  /** Rows in the guild benchmarks for this raid (null: the kill_stats table is missing, run the migration). */
+  benchmarkRows: number | null;
+  advice: string[];
 }
 
 // ---------- Insights from the stored fight (v0.25.0) ----------

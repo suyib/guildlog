@@ -8,7 +8,7 @@ import { personalPage, raidSummary } from '../server/discord/pages';
 import { overallRaid } from '../server/overall';
 import { getMeta, getPack, readPack, reportRegion, storedDigests, trimPack } from '../server/pack';
 import { rowsFromPack, snapshotFromPack } from '../server/pipeline';
-import { deleteRaid, registerRaid } from '../server/archive';
+import { checkRaid, deleteRaid, registerRaid } from '../server/archive';
 import { buildFindings, buildStrengths, healingFeedback } from '../server/analysis';
 import { guildContext, recordKills, trendFor } from '../server/benchmarks';
 import { finish } from '../server/pipeline';
@@ -122,6 +122,7 @@ function wcl(query: string, vars: any) {
   asked.push(query.replace(/\s+/g, ' ').slice(0, 80));
   const report: Record<string, any> = {};
   const ev0 = query.match(/events\(dataType:(\w+)/);
+  if (ev0 && eventsDown) throw new Error('Warcraft Logs API error 502: events unavailable');
   if (ev0) {
     const list = ev[ev0[1]].filter((e) => e.timestamp >= vars.st && e.timestamp < vars.et).sort((a, b) => a.timestamp - b.timestamp);
     // Pages of 50 events, so paging is exercised too
@@ -217,6 +218,7 @@ process.env.WCL_CLIENT_SECRET = 'secret';
 process.env.SUPABASE_URL = 'https://db.example';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
 let wclDown = false;
+let eventsDown = false;
 globalThis.fetch = (async (input: string | URL, init: RequestInit = {}) => {
   const url = new URL(String(input));
   if (url.hostname === 'db.example') return new Response(JSON.stringify(db(url, init)), { status: 200 });
@@ -399,9 +401,35 @@ const trend = await trendFor('Suy');
 assert.equal(trend.length, 3, 'three raid weeks');
 assert.deepEqual(trend.map((w) => w.parse), [40, 55, 91], 'oldest first');
 
-// ---------- Deleting a raid leaves nothing behind; adding it again reads it as new ----------
+// ---------- Checking what's stored ----------
 await getPack(HOST, CODE, fightRef, 'full');
 await registerRaid({ host: HOST, code: CODE, source: 'site' });
+const checked = await checkRaid(CODE);
+assert.equal(checked.status, 'queued');
+assert.deepEqual(checked.kills.map((k) => [k.boss, k.stage, k.players, k.withMana, k.tanksWithSwings, k.withDots, k.problem]), [['Gruul', 'full', 4, 1, 1, 1, null]]);
+assert.ok(checked.benchmarkRows! > 0);
+assert.equal(checked.onCalendar, false, 'not read by the job yet');
+
+// A full read that fails: the tables still answer, the reason is kept, and it isn't retried at once
+const failRef = { ...fightRef, id: 3 };
+packs.delete(`${CODE}:3`);
+eventsDown = true;
+const before2 = wclCalls;
+const halfway = await getPack(HOST, CODE, failRef, 'full');
+assert.equal(halfway.stage, 'tables');
+assert.match(halfway.fullError!, /events unavailable/);
+const partial = snapshotFromPack(HOST, CODE, halfway, { id: 1, name: 'Suy', className: 'Hunter' });
+assert.match(partial.partial!, /events unavailable/, 'the page says why');
+const callsAfterFail = wclCalls;
+await getPack(HOST, CODE, failRef, 'full');
+assert.equal(wclCalls, callsAfterFail, 'not tried again straight away');
+assert.ok(callsAfterFail > before2);
+assert.match((await checkRaid(CODE)).kills[0].problem!, /events unavailable/);
+eventsDown = false;
+packs.delete(`${CODE}:3`);
+await getPack(HOST, CODE, fightRef, 'full');
+
+// ---------- Deleting a raid leaves nothing behind; adding it again reads it as new ----------
 assert.ok(packs.size > 0 && raidRows.has(CODE));
 assert.equal(await deleteRaid(CODE), null);
 assert.equal(raidRows.has(CODE), false, 'off Past raids');

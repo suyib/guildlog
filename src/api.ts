@@ -14,6 +14,7 @@ import type {
   Rank,
   HomeData,
   ProfileData,
+  RaidCheck,
   RaidOverview,
   RaidsList,
   ReportSummary,
@@ -54,6 +55,8 @@ export const loadProfile = () => call<ProfileData>('/api/raids?view=profile');
 export const loadRaids = () => call<RaidsList>('/api/raids');
 export const addRaid = (url: string) => post<SavedRaid>('/api/raids', { url });
 export const deleteRaid = (code: string) => post<{ ok: true }>('/api/raids', { delete: code });
+export const checkRaid = (code: string) => call<RaidCheck>(`/api/raids?view=check&code=${encodeURIComponent(code)}`);
+export const readRaidNow = (code: string, fresh = false) => post<RaidCheck>('/api/raids', { read: code, fresh });
 export const loadSaved = (id: string) => call<AnalysisResult>(`/api/history?id=${encodeURIComponent(id)}`);
 
 export interface Progress { label: string; state: 'loading' | 'done' | 'failed'; seconds?: number }

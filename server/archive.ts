@@ -8,9 +8,9 @@ import { forgetKills, recordKills } from './benchmarks.js';
 import { dbEnabled, rest } from './db.js';
 import type { FightDigest } from './discord/digest.js';
 import { GAME } from './game.js';
-import { digestRows, getMeta, getPack, storedDigests, trimPack } from './pack.js';
+import { digestRows, getMeta, getPack, readPack, storedDigests, trimPack } from './pack.js';
 import { raidFeedback } from './raidFeedback.js';
-import type { FightRef, RaidCard, RaidsList, SavedRaid } from './types.js';
+import type { FightRef, RaidCard, RaidCheck, RaidsList, SavedRaid } from './types.js';
 import { type ReportMeta, WclTimeout, gql } from './wcl.js';
 
 const q = encodeURIComponent;
@@ -267,6 +267,62 @@ export async function deleteRaid(code: string): Promise<string | null> {
 /** Every stored fight of a report, and its fight list. */
 export async function forgetFights(code: string) {
   await rest(`fight_packs?report_code=eq.${q(code)}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+}
+
+/** What's stored for a raid and why something might be missing (officers, from the raid's card). */
+export async function checkRaid(code: string, host?: string): Promise<RaidCheck> {
+  if (!dbEnabled()) throw new Error('Past raids need the database (Supabase) to be set up.');
+  const raid: RaidRow | undefined = (await rest(`guild_raids?report_code=eq.${q(code)}`))?.[0];
+  const metaRow: { stage: string; digest: ReportMeta } | undefined = (await rest(`fight_packs?report_code=eq.${q(code)}&fight_id=eq.0&select=stage,digest`))?.[0];
+  const stages = new Map((await digestRows(code).catch(() => [])).map((r) => [r.fightId, r.stage]));
+  const meta = metaRow?.digest ?? (raid || host ? (await getMeta(raid?.host ?? host!, code).catch(() => null))?.meta : null) ?? null;
+  const kills = meta ? killsOf(meta) : [];
+  const benchmarkRows: number | null = await rest(`kill_stats?report_code=eq.${q(code)}&select=fight_id`).then((r: any[]) => r?.length ?? 0).catch(() => null);
+  const killRows: RaidCheck['kills'] = [];
+  for (const k of kills) {
+    const pack = stages.has(k.id) ? await readPack(code, k.id).catch(() => null) : null;
+    const players = Object.values(pack?.full?.players ?? {});
+    killRows.push({
+      fightId: k.id,
+      boss: k.name,
+      stage: stages.get(k.id) ?? null,
+      players: players.length,
+      withMana: players.filter((p) => p.mana?.some((v) => v >= 0)).length,
+      tanksWithSwings: players.filter((p) => p.mit).length,
+      withDots: players.filter((p) => p.dots?.length).length,
+      withPotionData: players.filter((p) => p.casts.length).length,
+      problem: pack?.fullError ?? (stages.get(k.id) === 'legacy' ? 'Kept from before v0.23.0: it will be read again.' : null),
+    });
+  }
+  const advice: string[] = [];
+  if (!raid) advice.push('This log isn\u2019t on Past raids. Add it on the Past raids page (or end it with /raidend) to keep it and add it to the guild benchmarks.');
+  else if (raid.status === 'queued' || raid.status === 'saving') advice.push('Still being read. Press Read now to carry on straight away instead of waiting for the 5-minute job.');
+  if (raid && !raid.start_time) advice.push('Not on the calendar yet: its report hasn\u2019t been read. Read now fixes that, and if it keeps happening, check the 5-minute job (?task=reminders) is still running.');
+  if (killRows.some((k) => k.stage === 'tables')) advice.push('Some kills only have their summary tables so far. Read now tries the full read again.');
+  if (killRows.some((k) => k.stage === 'full' && k.players && !k.withMana)) advice.push('Nobody has mana on a fully read kill: Warcraft Logs didn\u2019t send mana with the casts for this log.');
+  if (killRows.some((k) => k.stage === 'full' && !k.tanksWithSwings)) advice.push('No boss melee swings were found on a fully read kill, so tank dodges and parries can\u2019t be shown for it.');
+  if (benchmarkRows === null) advice.push('The kill_stats table is missing: run supabase/migrate-0.23.sql in Supabase.');
+  else if (raid && !benchmarkRows && kills.length) advice.push('Not in the guild benchmarks yet: they\u2019re added when the raid is read (Read now).');
+  return {
+    code,
+    title: raid?.title ?? meta?.title ?? null,
+    status: raid?.status ?? null,
+    saved: raid?.saved ?? 0,
+    total: raid?.total ?? 0,
+    runs: raid?.runs ?? 0,
+    onCalendar: !!raid?.start_time && raid.status !== 'empty',
+    hasCard: !!raid?.card,
+    report: metaRow ? (metaRow.stage === 'meta-final' ? 'finished' : 'live') : 'not stored',
+    kills: killRows,
+    benchmarkRows,
+    advice,
+  };
+}
+
+/** Read a raid again from the start: its stored fights and benchmarks go, and it's queued like a new raid. */
+export async function rereadRaid(code: string) {
+  await Promise.all([forgetFights(code), forgetKills(code)]);
+  await patchRaid(code, { status: 'queued', runs: 0, saved: 0, card: null, title: null, start_time: null, end_time: null });
 }
 
 /** True while a raid is on Past raids. */

@@ -34,6 +34,11 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
   return (
     <div className="result">
       <FightHeader result={result} />
+      {me.partial && (
+        <p className="warning">
+          <strong>This fight hasn&rsquo;t been read in full yet</strong>, so potions, damage over time, mana, tank swings, death recaps and the cast timeline are missing ({me.partial.replace(/\.$/, '')}). Click Analyze again in a couple of minutes, or an officer can use Read now on the raid&rsquo;s Past raids card.
+        </p>
+      )}
       {crossClass.length > 0 && (section === 'overview' || section === 'compare') && (
         <p className="warning">
           <strong>Different {crossClass.every((p) => p.s.className === me.className) ? 'spec' : 'class or spec'}:</strong>{' '}
@@ -178,6 +183,8 @@ function Overview({ result }: { result: AnalysisResult }) {
     ['Bloodlust uptime', pct(lust(me))],
     ['Deaths', String(me.deaths.length)],
     ['Damage taken', compact(me.damageTaken.reduce((t, x) => t + x.total, 0))],
+    ...(me.mitigation ? [['Boss swings avoided', `${pct(me.mitigation.avoidPct, 1)} of ${n0(me.mitigation.swings)}`] as [string, string]] : []),
+    ...(me.mitigation && tankCanBeCritCapped(me.host) ? [['Crits taken', String(me.mitigation.crits)] as [string, string]] : []),
   ];
 
   return (
