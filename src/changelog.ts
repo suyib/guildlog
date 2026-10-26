@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.33.4',
+    date: '2026-10-26',
+    changes: [
+      'Under a fight\u2019s title: a Rankings link and the guild\u2019s ranks on that boss, or \u201cNo ranking available\u201d. The boss picture is no longer a link.',
+      'Clicking a boss under Progress on the home page opens its fastest kill.',
+      'An optional \u201cBuy me a coffee\u201d link in the sidebar (set SUPPORT_URL in Vercel to show it).',
+    ],
+  },
+  {
     version: '0.33.3',
     date: '2026-10-26',
     changes: [

@@ -200,8 +200,10 @@ const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 
 /** Warcraft Logs' rank colors, in the site's parse colors. */
 const RANK_CSS: Record<string, string> = { common: 'parse-gray', uncommon: 'parse-green', rare: 'parse-blue', epic: 'parse-purple', legendary: 'parse-orange', astounding: 'parse-pink', artifact: 'parse-pink' };
 
+const fightLink = (b: { host: string; code: string; fightId: number }) => `/?log=${encodeURIComponent(`https://${b.host}/reports/${b.code}?fight=${b.fightId}`)}`;
+
 /** Progress in each raid, one accordion per raid (the biggest open): every boss with its first kill,
- * kills and fastest kill, and the guild's ranks as a subtitle. Boss rankings are on the Rankings page. */
+ * kills and fastest kill (a boss opens its fastest kill), and the guild's ranks as a subtitle. */
 function Progress({ zones, wcl }: { zones: ZoneProgress[]; wcl: HomeData['wcl'] }) {
   const main = mainZone(zones, (z) => z.total).id;
   return (
@@ -224,11 +226,11 @@ function Progress({ zones, wcl }: { zones: ZoneProgress[]; wcl: HomeData['wcl'] 
                 <tbody>
                   {z.bosses.map((b) => (
                     <tr key={b.encounterId}>
-                      <td><a href={`/#/rankings?zone=${z.id}&boss=${b.encounterId}`} className={b.kills ? 'boss-link' : 'boss-link muted'} title="Rankings for this boss">{b.name}</a></td>
+                      <td>{b.best ? <a href={fightLink(b.best)} className="boss-link" title="Open the fastest kill">{b.name}</a> : <span className="muted">{b.name}</span>}</td>
                       <td className="muted">{b.firstKill ? day(b.firstKill) : 'Not yet'}</td>
                       <td className="r">{b.kills || '–'}</td>
                       <td className="r">
-                        {b.best ? <a href={`/?log=${encodeURIComponent(`https://${b.best.host}/reports/${b.best.code}?fight=${b.best.fightId}`)}`}>{mmss(b.best.seconds)}</a> : '–'}
+                        {b.best ? <a href={fightLink(b.best)}>{mmss(b.best.seconds)}</a> : '–'}
                       </td>
                     </tr>
                   ))}

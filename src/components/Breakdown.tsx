@@ -27,7 +27,7 @@ export default function Breakdown({ data, host, onPick }: { data: FightBreakdown
     <div className="result">
       <header className="fight-head">
         <div className="fight-id">
-          <a href={`/#/rankings?boss=${fight.encounterID}`} className="boss-head-link" title={`${fight.name} rankings`}><BossIcon id={fight.encounterID} size="big" /></a>
+          <BossIcon id={fight.encounterID} size="big" />
           <div>
             <div className="eyebrow">
               {fight.name} · <span className={fight.kill ? 'kill' : 'wipe'}>{fight.kill ? 'Kill' : 'Wipe'}</span> · {mmss(fight.seconds)} · {players.length} players

@@ -95,6 +95,12 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'ranking
         </div>
       )}
 
+      {__SUPPORT_URL__ && (
+        <a href={__SUPPORT_URL__} target="_blank" rel="noreferrer" className="support-link">
+          <Glyph name="coffee" size={16} />Buy me a coffee
+        </a>
+      )}
+
       <div className="side-version">
         v{__APP_VERSION__} <a href="/#/changelog" className="changelog-link">Changelog</a>
         <a href="/terms" className="changelog-link">Terms</a>
