@@ -1,8 +1,8 @@
 // The home page around "Analyze a log", as a guild page like Warcraft Logs': who the guild is,
 // progress and ranks, best parses, the roster by role, the raid schedule and recent reports.
-import { useEffect, useState } from 'react';
-import type { GuildRankings, HomeData, SavedRaid, WclRank, ZoneProgress } from '../../server/types';
-import { loadHome } from '../api';
+import { Fragment, useEffect, useState } from 'react';
+import type { BossRanks, GuildRankings, HomeData, SavedRaid, WclRank, ZoneProgress } from '../../server/types';
+import { loadBossRanks, loadHome } from '../api';
 import { mmss, n0 } from '../format';
 import Glyph from './Glyph';
 import { ClassIcon, classCss, parseCss } from './icons';
@@ -101,7 +101,7 @@ export function HomeExtras() {
 
       <div className="grid-2-1">
         <div className="home-col">
-          {d.zones.length > 0 && <Progress zones={d.zones} wclUrl={d.wcl?.url ?? null} />}
+          {d.zones.length > 0 && <Progress zones={d.zones} wcl={d.wcl} />}
           {d.rankings.length > 0 && <Rankings list={d.rankings} />}
           {d.roster.length > 0 && <Composition roster={d.roster} />}
           {d.recentAnalyses.length > 0 && <RecentAnalyses list={d.recentAnalyses} />}
@@ -199,13 +199,15 @@ const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 
 const RANK_CSS: Record<string, string> = { common: 'parse-gray', uncommon: 'parse-green', rare: 'parse-blue', epic: 'parse-purple', legendary: 'parse-orange', astounding: 'parse-pink', artifact: 'parse-pink' };
 
 /** Progress in each raid: every boss with its first kill, kills and fastest kill (ranks are on the rank card). */
-function Progress({ zones, wclUrl }: { zones: ZoneProgress[]; wclUrl: string | null }) {
+function Progress({ zones, wcl }: { zones: ZoneProgress[]; wcl: HomeData['wcl'] }) {
+  const [open, setOpen] = useState<string | null>(null);
   return (
     <section className="panel">
       <div className="panel-head">
         <h2 className="panel-title">Progress</h2>
-        {wclUrl && <a href={wclUrl} target="_blank" rel="noreferrer" className="small">Rankings on Warcraft Logs</a>}
+        {wcl && <a href={wcl.url} target="_blank" rel="noreferrer" className="small">Rankings on Warcraft Logs</a>}
       </div>
+      <p className="muted small">Click a boss for its guild rankings: first kills and fastest kills.</p>
       <div className="zones">
         {zones.map((z) => (
           <div key={z.id} className="zone">
@@ -216,22 +218,98 @@ function Progress({ zones, wclUrl }: { zones: ZoneProgress[]; wclUrl: string | n
             <table className="grid">
               <thead><tr><th>Boss</th><th>First kill</th><th className="r">Kills</th><th className="r">Fastest</th></tr></thead>
               <tbody>
-                {z.bosses.map((b) => (
-                  <tr key={b.encounterId}>
-                    <td className={b.kills ? '' : 'muted'}>{b.name}</td>
-                    <td className="muted">{b.firstKill ? day(b.firstKill) : 'Not yet'}</td>
-                    <td className="r">{b.kills || '–'}</td>
-                    <td className="r">
-                      {b.best ? <a href={`/?log=${encodeURIComponent(`https://${b.best.host}/reports/${b.best.code}?fight=${b.best.fightId}`)}`}>{mmss(b.best.seconds)}</a> : '–'}
-                    </td>
-                  </tr>
-                ))}
+                {z.bosses.map((b) => {
+                  const key = `${z.id}-${b.encounterId}`;
+                  const isOpen = open === key;
+                  return (
+                    <Fragment key={b.encounterId}>
+                      <tr>
+                        <td>
+                          <button type="button" className={`link-button boss-toggle${b.kills ? '' : ' muted'}`} aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : key)}>
+                            {b.name}
+                          </button>
+                        </td>
+                        <td className="muted">{b.firstKill ? day(b.firstKill) : 'Not yet'}</td>
+                        <td className="r">{b.kills || '–'}</td>
+                        <td className="r">
+                          {b.best ? <a href={`/?log=${encodeURIComponent(`https://${b.best.host}/reports/${b.best.code}?fight=${b.best.fightId}`)}`}>{mmss(b.best.seconds)}</a> : '–'}
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr className="boss-ranks-row">
+                          <td colSpan={4}><BossRankings host={z.host} zoneId={z.id} encounterId={b.encounterId} wcl={wcl} /></td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         ))}
       </div>
     </section>
+  );
+}
+
+const SCOPE_LABEL: Record<BossRanks['scope'], string> = { world: 'World', region: 'Region', realm: 'Realm' };
+const killedAt = (ms: number) => new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+/** A boss's guild rankings from Warcraft Logs, like Raider.IO's: by first kill or fastest kill, world, region or realm. */
+function BossRankings({ host, zoneId, encounterId, wcl }: { host: string; zoneId: number; encounterId: number; wcl: HomeData['wcl'] }) {
+  const [metric, setMetric] = useState<BossRanks['metric']>('progress');
+  const [scope, setScope] = useState<BossRanks['scope']>('world');
+  const [data, setData] = useState<BossRanks | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    setData(null);
+    setError(null);
+    loadBossRanks(host, encounterId, metric, scope).then((d) => live && setData(d)).catch((e) => live && setError((e as Error).message));
+    return () => { live = false; };
+  }, [host, encounterId, metric, scope]);
+  const scopes: BossRanks['scope'][] = wcl?.region ? (wcl.serverSlug ? ['world', 'region', 'realm'] : ['world', 'region']) : ['world'];
+  const where = (r: BossRanks['top'][number]) => [r.server, r.region].filter(Boolean).join(' · ');
+  return (
+    <div className="boss-ranks">
+      <div className="row wrap-center">
+        <div className="seg" role="group" aria-label="Ranked by">
+          <button type="button" className={metric === 'progress' ? 'on' : ''} aria-pressed={metric === 'progress'} onClick={() => setMetric('progress')}>First kill</button>
+          <button type="button" className={metric === 'speed' ? 'on' : ''} aria-pressed={metric === 'speed'} onClick={() => setMetric('speed')}>Fastest</button>
+        </div>
+        {scopes.length > 1 && (
+          <div className="seg" role="group" aria-label="Where">
+            {scopes.map((x) => <button key={x} type="button" className={scope === x ? 'on' : ''} aria-pressed={scope === x} onClick={() => setScope(x)}>{x === 'region' && wcl?.region ? wcl.region : x === 'realm' && wcl?.server ? wcl.server : SCOPE_LABEL[x]}</button>)}
+          </div>
+        )}
+        <a href={`https://${host}/zone/rankings/${zoneId}#boss=${encounterId}&metric=${metric}`} target="_blank" rel="noreferrer" className="small">On Warcraft Logs</a>
+      </div>
+      {error && <p className="error small">{error}</p>}
+      {!data && !error && <p className="muted small"><span className="spinner small" aria-hidden="true" /> Loading rankings&hellip;</p>}
+      {data && (
+        <>
+          <p className="small">
+            {data.mine
+              ? <>Your guild: <strong>#{n0(data.mine.rank)}</strong> {SCOPE_LABEL[data.scope].toLowerCase()}{data.metric === 'speed' && data.mine.seconds !== null ? ` (${mmss(data.mine.seconds)})` : ''}</>
+              : <span className="muted">{data.checked ? `Your guild isn\u2019t in the top ${n0(data.checked)} yet.` : 'No kills ranked yet.'}</span>}
+          </p>
+          {data.top.length > 0 && (
+            <table className="grid">
+              <thead><tr><th className="r">#</th><th>Guild</th><th className="r">{data.metric === 'progress' ? 'Killed' : 'Time'}</th></tr></thead>
+              <tbody>
+                {data.top.map((r) => (
+                  <tr key={`${r.rank}-${r.guild}`} className={r.mine ? 'mine' : ''}>
+                    <td className="r">{r.rank}</td>
+                    <td><strong>{r.guild}</strong> <span className="muted small">{where(r)}</span></td>
+                    <td className="r muted">{data.metric === 'progress' ? (r.at ? killedAt(r.at) : '–') : r.seconds !== null ? mmss(r.seconds) : '–'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

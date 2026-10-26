@@ -9,6 +9,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.32.0',
+    date: '2026-10-26',
+    changes: [
+      'Boss rankings on the home page, like Raider.IO\u2019s: click a boss in Progress to see the top guilds from Warcraft Logs by first kill or fastest kill, for the world, your region or your realm, with your guild\u2019s place highlighted.',
+    ],
+  },
+  {
     version: '0.31.3',
     date: '2026-10-26',
     changes: ['The home page shows a loader until the guild\u2019s details are in, instead of filling in piece by piece.'],

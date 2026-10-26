@@ -93,6 +93,8 @@ The bot runs on the same Vercel project (no extra server) as a single function, 
 
 **Bug reports.** A **Report a bug** button (under each raid summary and in `/help`) opens a short form. Reports are kept in `bug_reports` and listed on the Admin page, where officers can mark them fixed (and tell the reporter by DM), reopen them, or (guild masters and admins) delete them. They're also posted to `DISCORD_BUG_CHANNEL_ID` or sent to `DISCORD_OWNER_ID` by DM, if either is set. Needs `supabase/migrate-0.28.sql` run once.
 
+**Boss rankings.** Clicking a boss under Progress on the home page shows the guild rankings for that boss from Warcraft Logs, by first kill or fastest kill, for the world, the guild's region or its realm (region and realm need `WCL_GUILD_ID`, or `GUILD_NAME`, `GUILD_REALM` and `GUILD_REGION`). The top 20 are shown, and the first 300 places are checked for the guild. Each list is kept for an hour.
+
 **Guild details.** The home page shows the Discord server's name and picture. Guild masters and admins can replace either (and add an About line) under **Guild details** on the Admin page; clearing a field goes back to Discord's. Kept in `site_settings`. Needs `supabase/migrate-0.31.sql` run once.
 
 **Activity log (optional).** Set `DISCORD_LOG_CHANNEL_ID` to a private channel and the bot posts one line per command or button press: who, what (command and which options were used, never what was typed), where, when, and whether it worked or the error if not. Failed reminders and command registration are logged too. Mentions in the log don't ping anyone. To check it's set up, open `https://guildlog.uk/api/discord?task=logtest&key=YOUR_CRON_SECRET`: it posts a test line, or says what's wrong.

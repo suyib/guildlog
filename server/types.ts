@@ -468,7 +468,7 @@ export interface HomeData {
   /** The signed-in person's claimed characters. */
   myCharacters: { name: string; status: string }[];
   /** The guild on Warcraft Logs (when GUILD_NAME, GUILD_REALM and GUILD_REGION, or WCL_GUILD_ID, are set). */
-  wcl: { id: number; url: string; name: string; server: string | null; region: string | null; faction: string | null } | null;
+  wcl: { id: number; url: string; name: string; server: string | null; serverSlug: string | null; region: string | null; faction: string | null } | null;
   /** Progress in each raid, from Past raids, with Warcraft Logs ranks when available. Newest raid first. */
   zones: ZoneProgress[];
   /** When raids started and how long they ran, last 8 weeks (the page works out the usual days and times). */
@@ -477,6 +477,18 @@ export interface HomeData {
   roster: { name: string; className: string; specName: string; role: 'tank' | 'healer' | 'dps' | null; raids: number; of: number; itemLevel: number | null }[];
   /** Everyone's best parse on each boss of each raid, last 8 weeks (healers by healing), in the order of zones. */
   rankings: GuildRankings[];
+}
+
+/** One boss's guild rankings on Warcraft Logs: by first kill (progress) or fastest kill (speed). */
+export interface BossRanks {
+  encounterId: number;
+  metric: 'progress' | 'speed';
+  scope: 'world' | 'region' | 'realm';
+  top: { rank: number; guild: string; server: string | null; region: string | null; at: number | null; seconds: number | null; mine: boolean }[];
+  /** This guild's place, if it was in the places checked. */
+  mine: { rank: number; at: number | null; seconds: number | null } | null;
+  /** How many places were checked for this guild. */
+  checked: number;
 }
 
 export interface GuildRankings {
@@ -493,6 +505,8 @@ export interface WclRank { number: number; color: string | null }
 export interface ZoneProgress {
   id: number;
   name: string;
+  /** The Warcraft Logs site its raids were logged on. */
+  host: string;
   killed: number;
   total: number;
   bosses: {

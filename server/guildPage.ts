@@ -39,7 +39,7 @@ export async function wclGuild(zoneIds: number[]): Promise<{ guild: Guild | null
   const host = GAME.hosts[0];
   const empty = { guild: null, ranks: new Map<number, ZoneProgress['ranks']>() };
   if (!g) return empty;
-  const base = await gql<any>(host, `query(${g.decl}){guildData{guild(${g.args}){id name faction{name} server{name region{slug}}}}}`, g.vars, 10_000).catch(() => null);
+  const base = await gql<any>(host, `query(${g.decl}){guildData{guild(${g.args}){id name faction{name} server{name slug region{slug}}}}}`, g.vars, 10_000).catch(() => null);
   const info = base?.guildData?.guild;
   if (!info?.id) {
     cached = { at: Date.now(), ...empty };
@@ -50,6 +50,7 @@ export async function wclGuild(zoneIds: number[]): Promise<{ guild: Guild | null
     url: `https://${host}/guild/id/${info.id}`,
     name: info.name,
     server: info.server?.name ?? null,
+    serverSlug: info.server?.slug ?? null,
     region: info.server?.region?.slug?.toUpperCase() ?? null,
     faction: info.faction?.name ?? null,
   };
@@ -91,7 +92,7 @@ export async function zoneProgress(raids: SavedRaid[]): Promise<ZoneProgress[]> 
   for (const r of dated) {
     const z = zoneOf.get(r.code);
     if (!z) continue;
-    const zone = zones.get(z.id) ?? { id: z.id, name: z.name, killed: 0, total: 0, bosses: [], ranks: null, last: r.startTime! };
+    const zone = zones.get(z.id) ?? { id: z.id, name: z.name, host: r.host, killed: 0, total: 0, bosses: [], ranks: null, last: r.startTime! };
     zone.last = r.startTime!;
     for (const b of r.card!.bosses) {
       let boss = zone.bosses.find((x) => x.encounterId === b.encounterId);

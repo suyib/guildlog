@@ -5,12 +5,14 @@
 // (One function for all three, to stay within the free Vercel plan's function limit.)
 //   POST { url }     officers: add a raid from a Warcraft Logs link; it's read over the next runs
 //   POST { delete }  guild masters and admins: remove a raid and everything stored for it
+//   GET ?view=boss&host=&encounter=&metric=progress|speed&scope=world|region|realm  a boss's guild rankings
 //   GET ?view=check&code=  officers: what's stored for a raid, kill by kill, and why something might be missing
 //   POST { read, fresh? }  officers: read a raid now (fresh, guild masters and admins: from the start again)
 import { waitUntil } from '@vercel/functions';
 import { archiveNow, checkRaid, deleteRaid, forgetFights, isListed, listRaids, registerRaid, rereadRaid } from '../server/archive.js';
 import { rest } from '../server/db.js';
 import { json, readSession, requireSession } from '../server/auth.js';
+import { bossRanks } from '../server/bossRanks.js';
 import { homeData, profileData } from '../server/home.js';
 import { auditTask } from '../server/discord/audit.js';
 import { requireOfficer, requireRank } from '../server/officers.js';
@@ -28,6 +30,9 @@ export async function GET(req: Request): Promise<Response> {
       const check = await requireOfficer(req);
       if ('denied' in check) return check.denied;
       return json(await checkRaid(params.get('code') ?? ''));
+    }
+    if (view === 'boss') {
+      return json(await bossRanks(params.get('host') ?? '', Number(params.get('encounter')), params.get('metric') ?? '', params.get('scope') ?? ''), 200, { 'Cache-Control': 'private, max-age=600' });
     }
     if (view === 'home' || view === 'profile') {
       const session = await readSession(req.headers.get('cookie'), process.env.SESSION_SECRET!);
