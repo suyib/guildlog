@@ -271,9 +271,9 @@ async function raidStart(i: Interaction): Promise<Outcome> {
   } catch (e) {
     return reply({ content: (e as Error).message });
   }
-  // Always the log channel, wherever /raidstart was typed (the channel it was typed in only if none is set)
-  const channelId = env.raidLogChannel() || (i.guild_id ? i.channel_id : '');
-  if (!channelId) return reply({ content: 'No log channel is set up yet (DISCORD_RAID_LOG_CHANNEL_ID in Vercel).' });
+  // Where it was typed: a thread or a channel (a thread's ID is its channel ID). From a DM, the raid channel.
+  const channelId = (i.guild_id ? i.channel_id : '') || env.raidChannel();
+  if (!channelId) return reply({ content: 'Use /raidstart in the server, in the thread or channel the raid should be posted in.' });
   const logger = (opt(o, 'logger') as string | undefined) ?? userOf(i).id;
   const note = opt(o, 'note') as string | undefined;
   return deferred(i, async () => {
@@ -304,9 +304,9 @@ async function raidEnd(i: Interaction): Promise<Outcome> {
         ? { content: `Only <@${open.started_by}>, who started ${open.title ?? 'the current raid'}, can end it.` }
         : { content: 'There\u2019s no raid in progress. Start one with `/raidstart` first.' };
     }
-    // Always the summary channel, wherever /raidend was typed (the channel it was typed in only if none is set)
-    const channelId = env.raidSummaryChannel() || (i.guild_id ? i.channel_id! : '');
-    if (!channelId) return { content: 'No summary channel is set up yet (DISCORD_RAID_SUMMARY_CHANNEL_ID in Vercel).' };
+    // Where it was typed: a thread or a channel. From a DM, the raid channel.
+    const channelId = (i.guild_id ? i.channel_id! : '') || env.raidChannel();
+    if (!channelId) return { content: 'Use /raidend in the server, in the thread or channel the summary should be posted in.' };
     const digest = await raidDigest(raid.host, raid.report_code, 40_000, { fresh: true });
     await postToChannel(channelId, raidSummary(digest, raid.logger_id));
     await endRaid(raid.report_code);

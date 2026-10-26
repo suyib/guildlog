@@ -85,7 +85,7 @@ The bot runs on the same Vercel project (no extra server) as a single function, 
 4. Open `https://guildlog.uk/api/discord?task=register&key=YOUR_CRON_SECRET` to register the commands (again whenever they change).
 5. For reminders, have a free scheduler (e.g. cron-job.org) open `https://guildlog.uk/api/discord?task=reminders&key=YOUR_CRON_SECRET` every 5 minutes. Vercel also runs it once a day as a backup.
 
-**Raid channels.** `/raidstart` always posts the live log link in `DISCORD_RAID_LOG_CHANNEL_ID`, and `/raidend` always posts the summary in `DISCORD_RAID_SUMMARY_CHANNEL_ID`, wherever the command is typed. Either falls back to `DISCORD_RAID_CHANNEL_ID`, then to the channel the command was typed in. (The bot's activity log, `DISCORD_LOG_CHANNEL_ID`, is separate.)
+**Raid posts.** `/raidstart` and `/raidend` post in the thread (or channel) they're typed in, so each raid can have its own thread. The bot needs **Send Messages in Threads** there (and, for a private thread, to be added to it). Used from a DM to the bot, they post in `DISCORD_RAID_CHANNEL_ID`.
 
 **Bug reports.** A **Report a bug** button (under each raid summary and in `/help`) opens a short form. Reports go to `DISCORD_BUG_CHANNEL_ID` if set (a channel in a separate test server works, once the bot is added there), otherwise to `DISCORD_OWNER_ID` by DM.
 

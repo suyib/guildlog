@@ -7,11 +7,8 @@ export const env = {
   appId: () => must('DISCORD_APP_ID'),
   token: () => must('DISCORD_BOT_TOKEN'),
   guildId: () => process.env.DISCORD_GUILD_ID?.trim() ?? '',
+  /** Where /raidstart and /raidend post when they're used outside the server (in a DM to the bot). */
   raidChannel: () => process.env.DISCORD_RAID_CHANNEL_ID?.trim() ?? '',
-  /** Where /raidstart posts the live log link (else the raid channel). */
-  raidLogChannel: () => process.env.DISCORD_RAID_LOG_CHANNEL_ID?.trim() || env.raidChannel(),
-  /** Where /raidend posts the raid summary (else the raid channel). */
-  raidSummaryChannel: () => process.env.DISCORD_RAID_SUMMARY_CHANNEL_ID?.trim() || env.raidChannel(),
   adminChannel: () => process.env.DISCORD_ADMIN_CHANNEL_ID?.trim() ?? '',
   adminRole: () => process.env.DISCORD_ADMIN_ROLE_ID?.trim() ?? '',
   /** Where bug reports go: a channel (e.g. in a separate test server the bot is in), else a DM to the owner. */
