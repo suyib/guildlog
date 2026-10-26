@@ -8,6 +8,7 @@ import { type GlyphName, useNav } from '../nav';
 import { healingFeedback, isHealerSnapshot } from '../../server/analysis';
 import { DamageDonut, DpsChart, GearTable, StatsList } from './charts';
 import Feedback, { FeedbackPanels } from './Feedback';
+import BossRankLine from './BossRankLine';
 import Glyph from './Glyph';
 import { ClassIcon, GameIcon, classCss, compareLabel, parseCss } from './icons';
 import Timeline from './Timeline';
@@ -73,6 +74,7 @@ function FightHeader({ result }: { result: AnalysisResult }) {
           <h1>
             <span className={classCss(me.className)}>{me.name}</span> <span className="spec">{spaced(me.specName)} {me.className}</span>
           </h1>
+          <BossRankLine host={me.host} encounterId={me.encounterId} name={me.encounterName} />
         </div>
       </div>
       <div className="fight-actions">

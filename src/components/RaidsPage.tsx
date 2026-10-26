@@ -6,7 +6,7 @@ import type { RaidCard, RaidCheck, SavedRaid } from '../../server/types';
 import { type Me, addRaid, checkRaid, deleteRaid, loadMe, loadRaids, readRaidNow } from '../api';
 import { mmss } from '../format';
 import Glyph from './Glyph';
-import { ClassIcon, SeverityDot, classCss } from './icons';
+import { BossIcon, ClassIcon, SeverityDot, classCss } from './icons';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const ROLE_LABEL = { tank: 'Tanks', healer: 'Healers', dps: 'Damage', unknown: 'Role not known' } as const;
@@ -645,11 +645,4 @@ function StoredData({ code, label, canRestart, onChanged }: { code: string; labe
       )}
     </div>
   );
-}
-
-/** A boss's picture from Warcraft Logs (by encounter); a plain circle if there isn't one. GAME CONTENT */
-function BossIcon({ id }: { id: number }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) return <span className="boss-icon" aria-hidden="true" />;
-  return <img className="boss-icon" src={`https://assets.rpglogs.com/img/warcraft/bosses/${Math.trunc(id)}-icon.jpg`} width={32} height={32} alt="" loading="lazy" onError={() => setFailed(true)} />;
 }

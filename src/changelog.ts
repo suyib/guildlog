@@ -9,6 +9,19 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.33.2',
+    date: '2026-10-26',
+    changes: ['Tidying: the last bit of inline styling is gone (game icons that don\u2019t load now show an empty frame), and unused styles were removed.'],
+  },
+  {
+    version: '0.33.1',
+    date: '2026-10-26',
+    changes: [
+      'Rankings: a dropdown picks the whole raid or one boss. The Progress and Speed tabs now work like the other toggles, and say so when there\u2019s no rank yet instead of showing dashes.',
+      'Every fight analysis shows the boss\u2019s picture under the title, linking to its rankings, with the guild\u2019s first-kill ranks (hover for world, region or realm).',
+    ],
+  },
+  {
     version: '0.33.0',
     date: '2026-10-26',
     changes: [

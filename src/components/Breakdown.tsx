@@ -2,6 +2,7 @@
 import type { FightBreakdown } from '../../server/types';
 import { compact, mmss, n0, pct } from '../format';
 import { DpsChart } from './charts';
+import BossRankLine from './BossRankLine';
 import Glyph from './Glyph';
 import { ClassIcon, GameIcon, SeverityDot, classCss, parseCss } from './icons';
 import { recapLine } from '../../server/insights';
@@ -10,7 +11,7 @@ type Player = FightBreakdown['players'][number];
 const spaced = (s: string) => s.replace(/([a-z])([A-Z])/g, '$1 $2');
 const ROLE_LABEL = { tank: 'Tanks', healer: 'Healers', dps: 'Damage' } as const;
 
-export default function Breakdown({ data, onPick }: { data: FightBreakdown; onPick: (playerId: number) => void }) {
+export default function Breakdown({ data, host, onPick }: { data: FightBreakdown; host: string; onPick: (playerId: number) => void }) {
   const { fight, totals, players } = data;
   const healers = [...players].filter((p) => p.healing > 0).sort((a, b) => b.hps - a.hps).slice(0, 12);
   const topDps = Math.max(...players.map((p) => p.dps), 1);
@@ -33,6 +34,7 @@ export default function Breakdown({ data, onPick }: { data: FightBreakdown; onPi
               ({counts.tank} tank{counts.tank === 1 ? '' : 's'}, {counts.healer} healer{counts.healer === 1 ? '' : 's'}, {counts.dps} damage)
             </div>
             <h1>Whole raid</h1>
+            <BossRankLine host={host} encounterId={fight.encounterID} name={fight.name} />
           </div>
         </div>
         <span className="muted small">Click anyone to analyze their fight.</span>

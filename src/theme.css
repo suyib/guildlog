@@ -262,10 +262,13 @@ button.secondary:hover:not(:disabled) { background: rgba(0, 124, 173, 0.18); }
 .spinner { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--primary-light); animation: spin 0.8s linear infinite; }
 .spinner.small { display: inline-block; width: 12px; height: 12px; border-width: 2px; vertical-align: -2px; margin-right: 4px; }
 .boss-ranks { display: grid; gap: 10px; padding: 6px 2px; }
+.boss-icon.small { width: 22px; height: 22px; }
+.boss-rank-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; margin-top: 4px; font: 600 13px var(--font-mono); color: var(--ink-2); }
+.boss-rank-link { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; font: 600 13px var(--font-sans); }
+.boss-rank-link:hover { text-decoration: none; }
+.boss-rank-link:hover .boss-icon { outline: 2px solid var(--primary-light); }
 .boss-link { color: inherit; font-weight: 600; }
 .boss-link:hover { color: var(--primary-light); }
-.boss-picker { display: flex; flex-wrap: wrap; gap: 6px; }
-.boss-picker button.on { border-color: var(--primary-light); background: rgba(0, 124, 173, 0.28); }
 .zone-ranks { display: inline-flex; align-items: baseline; margin-left: 10px; font: 600 13px var(--font-mono); }
 .rank-sep { margin: 0 6px; color: var(--ink-4); }
 .rank-tip { position: relative; cursor: help; }
@@ -387,7 +390,6 @@ button.secondary:hover:not(:disabled) { background: rgba(0, 124, 173, 0.18); }
 .rank-card:hover { text-decoration: none; }
 .rank-card > span { display: flex; flex-direction: column; padding: 8px; border-radius: 12px; background: var(--raised); }
 .rank-world { grid-column: 1 / -1; }
-.rank-kind { align-self: flex-start; }
 .rank-world strong { font: 800 36px var(--font-mono); }
 .rank-sub strong { font: 700 20px var(--font-mono); }
 .roster-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }

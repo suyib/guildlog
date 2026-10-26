@@ -5,6 +5,7 @@ import type { BossRanks, HomeData, WclRank, ZoneProgress } from '../../server/ty
 import { loadBossRanks } from '../api';
 import { mmss, n0 } from '../format';
 import { RANK_CSS, ZonePicker, mainZone, useHome } from './Home';
+import { BossIcon } from './icons';
 
 /** Raid and boss from the link (#/rankings?zone=&boss=), when there is one. */
 function fromLink(): { zone: number | null; boss: number | null } {
@@ -17,6 +18,7 @@ export default function RankingsPage() {
   const d = useHome();
   const [link] = useState(fromLink);
   const [zoneId, setZoneId] = useState<number | null>(link.zone);
+  /** null: the whole raid. */
   const [boss, setBoss] = useState<number | null>(link.boss);
 
   if (d === undefined) return <section className="panel home-loading" aria-busy="true"><span className="spinner" aria-hidden="true" /><span className="muted">Loading rankings&hellip;</span></section>;
@@ -28,8 +30,9 @@ export default function RankingsPage() {
       </section>
     );
   }
-  const zone = d.zones.find((z) => z.id === zoneId) ?? mainZone(d.zones, (z) => z.total);
-  const picked = zone.bosses.find((b) => b.encounterId === boss) ?? zone.bosses[0];
+  // A link to a boss without its raid: the raid it's in
+  const zone = d.zones.find((z) => z.id === zoneId) ?? d.zones.find((z) => boss && z.bosses.some((b) => b.encounterId === boss)) ?? mainZone(d.zones, (z) => z.total);
+  const picked = zone.bosses.find((b) => b.encounterId === boss) ?? null;
   const pickZone = (id: number) => {
     setZoneId(id);
     setBoss(null);
@@ -40,26 +43,27 @@ export default function RankingsPage() {
       <section className="panel">
         <div className="panel-head">
           <h1>Rankings</h1>
-          <ZonePicker zones={d.zones} value={zone.id} onChange={pickZone} />
+          <div className="row wrap-center">
+            <ZonePicker zones={d.zones} value={zone.id} onChange={pickZone} />
+            <select value={picked?.encounterId ?? ''} onChange={(e) => setBoss(e.target.value ? Number(e.target.value) : null)} aria-label="Whole raid or one boss">
+              <option value="">Whole raid</option>
+              {zone.bosses.map((b) => <option key={b.encounterId} value={b.encounterId}>{b.name}</option>)}
+            </select>
+          </div>
         </div>
-        <p className="help">The guild&rsquo;s ranks from Warcraft Logs{d.wcl ? '' : ' (set WCL_GUILD_ID to see your own)'}, and every boss&rsquo;s top guilds by first kill or fastest kill.</p>
+        <p className="help">The guild&rsquo;s ranks from Warcraft Logs{d.wcl ? '' : ' (set WCL_GUILD_ID to see your own)'}: the whole raid, or one boss&rsquo;s top guilds by first kill or fastest kill.</p>
       </section>
 
-      {zone.ranks && <RankCard key={zone.id} zones={[zone]} url={d.wcl?.url ?? null} />}
-
-      <section className="panel">
-        <div className="panel-head">
-          <h2 className="panel-title">{zone.name} bosses</h2>
-        </div>
-        <div className="boss-picker" role="group" aria-label="Boss">
-          {zone.bosses.map((b) => (
-            <button key={b.encounterId} type="button" className={`ghost${picked?.encounterId === b.encounterId ? ' on' : ''}`} aria-pressed={picked?.encounterId === b.encounterId} onClick={() => setBoss(b.encounterId)}>
-              {b.name}
-            </button>
-          ))}
-        </div>
-        {picked && <BossRankings key={`${zone.id}-${picked.encounterId}`} host={zone.host} zoneId={zone.id} encounterId={picked.encounterId} wcl={d.wcl} />}
-      </section>
+      {picked ? (
+        <section className="panel">
+          <div className="panel-head">
+            <h2 className="panel-title with-icon"><BossIcon id={picked.encounterId} small />{picked.name}</h2>
+          </div>
+          <BossRankings key={`${zone.id}-${picked.encounterId}`} host={zone.host} zoneId={zone.id} encounterId={picked.encounterId} wcl={d.wcl} />
+        </section>
+      ) : (
+        <RankCard key={zone.id} zone={zone} url={d.wcl?.url ?? null} />
+      )}
     </>
   );
 }
@@ -126,28 +130,31 @@ function BossRankings({ host, zoneId, encounterId, wcl }: { host: string; zoneId
 }
 
 /** A raid's ranks, world rank big, with Progress and Speed tabs (links to Warcraft Logs). */
-function RankCard({ zones, url }: { zones: ZoneProgress[]; url: string | null }) {
-  const [zoneId, setZoneId] = useState(() => mainZone(zones, (z) => z.total).id);
-  const zone = zones.find((z) => z.id === zoneId) ?? zones[0];
-  const [pick, setKind] = useState<'progress' | 'speed'>('progress');
-  const kind = zone.ranks?.[pick] ? pick : pick === 'progress' ? 'speed' : 'progress';
+function RankCard({ zone, url }: { zone: ZoneProgress; url: string | null }) {
+  const [kind, setKind] = useState<'progress' | 'speed'>('progress');
   const set = zone.ranks?.[kind];
+  const any = !!set && !!(set.world || set.region || set.server);
   const num = (r: WclRank | null | undefined) => (r ? <strong className={RANK_CSS[r.color ?? ''] ?? ''}>{n0(r.number)}</strong> : <strong className="muted">–</strong>);
   return (
     <section className="panel">
       <div className="panel-head">
-        <h2 className="panel-title">{zones.length < 2 ? <>{zone.name} </> : 'Ranks '}<span className="muted">{zone.killed}/{zone.total}</span></h2>
-        <ZonePicker zones={zones} value={zone.id} onChange={setZoneId} />
+        <h2 className="panel-title">{zone.name} <span className="muted">{zone.killed}/{zone.total}</span></h2>
+        <div className="seg" role="group" aria-label="Rank">
+          <button type="button" className={kind === 'progress' ? 'on' : ''} aria-pressed={kind === 'progress'} onClick={() => setKind('progress')}>Progress</button>
+          <button type="button" className={kind === 'speed' ? 'on' : ''} aria-pressed={kind === 'speed'} onClick={() => setKind('speed')}>Speed</button>
+        </div>
       </div>
-      <div className="seg rank-kind" role="group" aria-label="Rank">
-        <button type="button" className={kind === 'progress' ? 'on' : ''} aria-pressed={kind === 'progress'} onClick={() => setKind('progress')}>Progress</button>
-        <button type="button" className={kind === 'speed' ? 'on' : ''} aria-pressed={kind === 'speed'} onClick={() => setKind('speed')}>Speed</button>
-      </div>
-      <a href={url ?? undefined} target="_blank" rel="noreferrer" className="rank-card">
-        <span className="rank-world"><span className="muted small">World</span>{num(set?.world)}</span>
-        <span className="rank-sub"><span className="muted small">Region</span>{num(set?.region)}</span>
-        <span className="rank-sub"><span className="muted small">Realm</span>{num(set?.server)}</span>
-      </a>
+      {any ? (
+        <a href={url ?? undefined} target="_blank" rel="noreferrer" className="rank-card">
+          <span className="rank-world"><span className="muted small">World</span>{num(set?.world)}</span>
+          <span className="rank-sub"><span className="muted small">Region</span>{num(set?.region)}</span>
+          <span className="rank-sub"><span className="muted small">Realm</span>{num(set?.server)}</span>
+        </a>
+      ) : (
+        <p className="muted">
+          {url ? `No ${kind} rank on Warcraft Logs for this raid yet.` : 'Set WCL_GUILD_ID in Vercel to see the guild\u2019s ranks.'} Pick a boss above for its top guilds.
+        </p>
+      )}
     </section>
   );
 }

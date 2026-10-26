@@ -1,3 +1,4 @@
+import { useState } from 'react';
 // Game icons. Warcraft Logs gives each ability and buff an icon file name (e.g. ability_hunter_steadyshot.jpg);
 // the images themselves come from Wowhead's public icon CDN, which uses the same names.
 
@@ -18,8 +19,10 @@ const CLASS_ICON: Record<string, string> = {
 const iconName = (file?: string | null) => (file ? file.replace(/\.(jpg|png|gif)$/i, '').toLowerCase() : '');
 
 export function GameIcon({ file, size = 18, alt = '' }: { file?: string | null; size?: number; alt?: string }) {
+  const [failed, setFailed] = useState(false);
   const name = iconName(file);
-  if (!name || name === 'pet' || !/^[a-z0-9_-]+$/.test(name)) return <BlankIcon size={size} />;
+  // An empty frame when there's no icon, or the image doesn't load
+  if (failed || !name || name === 'pet' || !/^[a-z0-9_-]+$/.test(name)) return <BlankIcon size={size} />;
   return (
     <img
       className="icon"
@@ -28,9 +31,7 @@ export function GameIcon({ file, size = 18, alt = '' }: { file?: string | null; 
       height={size}
       alt={alt}
       loading="lazy"
-      onError={(e) => {
-        (e.currentTarget as HTMLImageElement).style.visibility = 'hidden';
-      }}
+      onError={() => setFailed(true)}
     />
   );
 }
@@ -44,7 +45,7 @@ export function ClassIcon({ className, size = 18 }: { className: string; size?: 
   return <GameIcon file={CLASS_ICON[className] ?? 'inv_misc_questionmark'} size={size} alt={className} />;
 }
 
-/** CSS class that colors a name in its WoW class color (see styles.css). */
+/** CSS class that colors a name in its WoW class color (see theme.css). */
 export const classCss = (className: string) => `cls-${(className || 'unknown').toLowerCase()}`;
 
 /** Warcraft Logs-style parse color bands. */
@@ -71,4 +72,13 @@ export function compareLabel(key: string | undefined): string {
   if (key.startsWith('p:')) return `vs ${key.slice(2)}`;
   if (key.startsWith('l:')) return `vs ${key.split(':').slice(4).join(':')} (other log)`;
   return key;
+}
+
+/** A boss's picture from Warcraft Logs (by encounter); a plain circle if there isn't one. GAME CONTENT */
+export function BossIcon({ id, small = false }: { id: number; small?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const cls = small ? 'boss-icon small' : 'boss-icon';
+  const size = small ? 22 : 32;
+  if (failed) return <span className={cls} aria-hidden="true" />;
+  return <img className={cls} src={`https://assets.rpglogs.com/img/warcraft/bosses/${Math.trunc(id)}-icon.jpg`} width={size} height={size} alt="" loading="lazy" onError={() => setFailed(true)} />;
 }

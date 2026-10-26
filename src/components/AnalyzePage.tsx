@@ -525,6 +525,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
       {breakdown && !result && (
         <Breakdown
           data={breakdown}
+          host={report?.host ?? 'fresh.warcraftlogs.com'}
           onPick={(id) => {
             setPlayerId(id);
             setCompareWith('none');
