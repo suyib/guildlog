@@ -1,6 +1,7 @@
 // People on the site, for the Admin page: one row per Discord account (sign-ins, server, rank,
 // display name, officer note, access) and a log of every sign-in attempt. Edits follow the ranks:
 // each rank can change people below it (admins can change everyone, other admins included).
+import { applyBugEdit, listBugs } from './bugs.js';
 import { dbEnabled, rest } from './db.js';
 import { RANK_LABEL, type Rank, assignable, canEdit, effectiveRank, forgetBlockedCache, siteAdminIds } from './ranks.js';
 import type { AdminEdit, AdminOverview, AdminPerson, AdminSignIn, AdminUser } from './types.js';
@@ -96,11 +97,12 @@ async function people(viewerId: string | null, viewerRank: Rank): Promise<AdminP
 /** Everything the Admin page shows, for someone of rank `rank`. */
 export async function adminOverview(viewerId: string | null, rank: Rank): Promise<AdminOverview> {
   const since = new Date(Date.now() - SIGNIN_LOG_DAYS * 86_400_000).toISOString();
-  const [list, signIns] = await Promise.all([
+  const [list, signIns, bugs] = await Promise.all([
     people(viewerId, rank),
     rest(`site_signins?at=gte.${q(since)}&order=at.desc&limit=500`) as Promise<SignIn[]>,
+    listBugs(),
   ]);
-  return { me: { id: viewerId, rank, assignable: assignable(rank) }, people: list, signIns: signIns ?? [], signInLogDays: SIGNIN_LOG_DAYS };
+  return { me: { id: viewerId, rank, assignable: assignable(rank) }, people: list, signIns: signIns ?? [], signInLogDays: SIGNIN_LOG_DAYS, bugs };
 }
 
 /**
@@ -109,6 +111,7 @@ export async function adminOverview(viewerId: string | null, rank: Rank): Promis
  * for the activity log.
  */
 export async function applyEdit(edit: AdminEdit, actor: { id: string | null; name: string; rank: Rank }): Promise<string> {
+  if (edit.action === 'bug' || edit.action === 'bugDelete') return applyBugEdit(edit, actor);
   const list = await people(actor.id, actor.rank);
   const target = list.find((p) => p.id === edit.id);
   if (!target) throw new Error('That person isn’t on the list.');

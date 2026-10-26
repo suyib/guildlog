@@ -89,7 +89,7 @@ The bot runs on the same Vercel project (no extra server) as a single function, 
 
 **Raid posts.** `/raidstart` and `/raidend` post in the thread (or channel) they're typed in, so each raid can have its own thread. The bot needs **Send Messages in Threads** there (and, for a private thread, to be added to it). Used from a DM to the bot, they post in `DISCORD_RAID_CHANNEL_ID`.
 
-**Bug reports.** A **Report a bug** button (under each raid summary and in `/help`) opens a short form. Reports go to `DISCORD_BUG_CHANNEL_ID` if set (a channel in a separate test server works, once the bot is added there), otherwise to `DISCORD_OWNER_ID` by DM.
+**Bug reports.** A **Report a bug** button (under each raid summary and in `/help`) opens a short form. Reports are kept in `bug_reports` and listed on the Admin page, where officers can mark them fixed (and tell the reporter by DM), reopen them, or (guild masters and admins) delete them. They're also posted to `DISCORD_BUG_CHANNEL_ID` or sent to `DISCORD_OWNER_ID` by DM, if either is set. Needs `supabase/migrate-0.28.sql` run once.
 
 **Activity log (optional).** Set `DISCORD_LOG_CHANNEL_ID` to a private channel and the bot posts one line per command or button press: who, what (command and which options were used, never what was typed), where, when, and whether it worked or the error if not. Failed reminders and command registration are logged too. Mentions in the log don't ping anyone. To check it's set up, open `https://guildlog.uk/api/discord?task=logtest&key=YOUR_CRON_SECRET`: it posts a test line, or says what's wrong.
 

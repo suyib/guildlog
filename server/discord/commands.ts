@@ -1,6 +1,7 @@
 // Slash commands and button handlers for the Guild Logs bot.
 // Rule of thumb: anything about one person's character is sent by DM (or shown only to them);
 // only raid-wide information is posted in channels.
+import { saveBug } from '../bugs.js';
 import { characterLevel } from '../blizzard.js';
 import { registerRaid } from '../archive.js';
 import { level, siteAdminIds, storedPerson } from '../ranks.js';
@@ -704,13 +705,19 @@ function bugSubmit(i: Interaction): Outcome {
     allowed_mentions: { parse: [] },
   };
   return deferred(i, async () => {
+    // Kept for the Admin page; also sent to a channel or the owner's DMs when one is set up
+    const place = !i.guild_id ? 'DMs' : i.channel_id ? `#${(await discord<{ name?: string }>(`/channels/${i.channel_id}`).catch(() => null))?.name ?? i.channel_id}` : 'the server';
+    const saved = await saveBug({ discordId: u.id, username: u.username, place, raid: code ? { host, code } : null, what: fields.get('what') || '(nothing written)', doing: fields.get('doing') || null })
+      .then(() => true)
+      .catch((e) => {
+        console.error('bug report not saved', e);
+        return false;
+      });
     const channel = env.bugChannel();
     const owner = env.ownerId();
-    if (channel) await postToChannel(channel, report);
-    else if (owner) {
-      if (!(await sendDm(owner, report))) throw new Error('the report couldn\u2019t be delivered');
-    } else throw new Error('bug reports aren\u2019t set up yet');
-    return { content: 'Thanks, your report has been sent to suy.' };
+    const sent = channel ? await postToChannel(channel, report).then(() => true).catch(() => false) : owner ? await sendDm(owner, report) : false;
+    if (!saved && !sent) throw new Error('the report couldn\u2019t be saved or sent');
+    return { content: 'Thanks, your report has been sent. Officers see it on the Admin page.' };
   });
 }
 

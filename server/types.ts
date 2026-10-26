@@ -407,6 +407,27 @@ export interface AdminOverview {
   people: AdminPerson[];
   signIns: AdminSignIn[];
   signInLogDays: number;
+  /** Bug reports, open ones first (missing until the bug_reports table exists). */
+  bugs: BugReport[];
+}
+
+/** A bug report sent with the Report a bug button in Discord. */
+export interface BugReport {
+  id: string;
+  at: string;
+  discordId: string | null;
+  username: string | null;
+  /** Where it was sent from (a channel or DMs). */
+  place: string | null;
+  /** The raid summary it was sent from, if any. */
+  raid: { host: string; code: string } | null;
+  what: string;
+  doing: string | null;
+  status: 'open' | 'resolved';
+  /** Officers' note: what was done about it. */
+  note: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
 }
 
 /** One change on the Admin page. */
@@ -416,7 +437,10 @@ export type AdminEdit =
   | { action: 'note'; id: string; note: string | null }
   | { action: 'blocked'; id: string; blocked: boolean }
   | { action: 'addCharacter'; id: string; character: string; realm: string | null }
-  | { action: 'claim'; id: string; claimId: string; status: 'approved' | 'rejected' | 'removed' };
+  | { action: 'claim'; id: string; claimId: string; status: 'approved' | 'rejected' | 'removed' }
+  /** Bug reports (id: the report's id). tell: DM the reporter that it's been fixed, with the note. */
+  | { action: 'bug'; id: string; status?: 'open' | 'resolved'; note?: string | null; tell?: boolean }
+  | { action: 'bugDelete'; id: string };
 
 // ---------- Home page and profiles ----------
 

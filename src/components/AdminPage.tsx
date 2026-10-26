@@ -1,7 +1,7 @@
 // Admin (officers and above): everyone who has signed in or used the bot, with their rank, and
 // editing for anyone below you: rank, display name, officer note, site access and characters.
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import type { AdminEdit, AdminOverview, AdminPerson, AdminSignIn, Rank } from '../../server/types';
+import type { AdminEdit, AdminOverview, AdminPerson, AdminSignIn, BugReport, Rank } from '../../server/types';
 import { RANK_LABEL, loadAdmin, saveAdminEdit } from '../api';
 import Glyph from './Glyph';
 
@@ -65,6 +65,8 @@ export default function AdminPage() {
         <Kpi glyph="users" label="Raiders" value={String(count('raider'))} sub={`${data.people.filter((p) => p.blocked).length} with access turned off`} />
         <Kpi glyph="alert" label="Problems" value={String(problems)} sub={`failed sign-ins, last ${data.signInLogDays} days`} />
       </div>
+
+      <BugReports bugs={data.bugs ?? []} canDelete={data.me.rank === 'admin' || data.me.rank === 'guild_master'} onSaved={refresh} />
 
       <section className="panel">
         <div className="panel-head">
@@ -258,5 +260,94 @@ function Kpi({ glyph, label, value, sub }: { glyph: 'users' | 'shield' | 'alert'
       <div className="kpi-value">{value}</div>
       <div className="kpi-sub">{sub}</div>
     </div>
+  );
+}
+
+/** Bug reports from the Report a bug button in Discord: open ones first, each one a card to act on. */
+function BugReports({ bugs, canDelete, onSaved }: { bugs: BugReport[]; canDelete: boolean; onSaved: () => void }) {
+  const [show, setShow] = useState<'open' | 'resolved' | 'all'>('open');
+  const open = bugs.filter((b) => b.status === 'open').length;
+  const list = bugs.filter((b) => show === 'all' || b.status === show);
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2 className="panel-title">Bug reports{open ? ` (${open} open)` : ''}</h2>
+        <div className="seg" role="group" aria-label="Show">
+          {(['open', 'resolved', 'all'] as const).map((s) => (
+            <button key={s} type="button" className={show === s ? 'on' : ''} aria-pressed={show === s} onClick={() => setShow(s)}>
+              {s === 'open' ? 'Open' : s === 'resolved' ? 'Fixed' : 'All'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="muted small">Sent with the Report a bug button in Discord (under each raid summary and in /help).</p>
+      {list.length === 0 ? <p className="muted">{show === 'open' ? 'No open bug reports.' : 'Nothing here.'}</p> : (
+        <div className="bug-grid">
+          {list.map((b) => <BugCard key={b.id} bug={b} canDelete={canDelete} onSaved={onSaved} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function BugCard({ bug: b, canDelete, onSaved }: { bug: BugReport; canDelete: boolean; onSaved: () => void }) {
+  const [note, setNote] = useState(b.note ?? '');
+  const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  async function save(edit: AdminEdit) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const r = await saveAdminEdit(edit);
+      setMessage({ ok: true, text: r.done.charAt(0).toUpperCase() + r.done.slice(1) + '.' });
+      onSaved();
+    } catch (e) {
+      setMessage({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+      setConfirmDelete(false);
+    }
+  }
+  const noteValue = note.trim() || null;
+  return (
+    <article className={`bug-card${b.status === 'resolved' ? ' resolved' : ''}`}>
+      <header className="bug-head">
+        <span className={`badge ${b.status === 'open' ? 'badge-warn' : 'badge-ok'}`}>{b.status === 'open' ? 'Open' : 'Fixed'}</span>
+        <span className="muted small" title={when(b.at)}>{ago(b.at)} · {b.username ?? 'Unknown'}{b.place ? ` · ${b.place}` : ''}</span>
+      </header>
+      <p className="bug-what">{b.what}</p>
+      {b.doing && <p className="muted small bug-what"><strong>Doing:</strong> {b.doing}</p>}
+      {b.raid && (
+        <div className="raid-card-links">
+          <a className="button ghost" href={`/?log=${encodeURIComponent(`https://${b.raid.host}/reports/${b.raid.code}`)}`}>Open the raid</a>
+          <a className="button ghost" href={`https://${b.raid.host}/reports/${b.raid.code}`} target="_blank" rel="noreferrer">Warcraft Logs</a>
+        </div>
+      )}
+      <label className="bug-note">
+        <span className="comp-label">Note</span>
+        <textarea value={note} maxLength={500} rows={2} onChange={(e) => setNote(e.target.value)} placeholder="What was done about it (sent with Fix & tell them)" />
+      </label>
+      {b.status === 'resolved' && b.resolvedAt && <p className="muted small">Fixed {ago(b.resolvedAt)}{b.resolvedBy ? ` by ${b.resolvedBy}` : ''}.</p>}
+      <div className="raid-card-links">
+        {b.status === 'open' ? (
+          <>
+            {b.discordId && <button type="button" disabled={busy} onClick={() => save({ action: 'bug', id: b.id, status: 'resolved', note: noteValue, tell: true })}>Fix &amp; tell them</button>}
+            <button type="button" className="ghost" disabled={busy} onClick={() => save({ action: 'bug', id: b.id, status: 'resolved', note: noteValue })}>Mark fixed</button>
+          </>
+        ) : (
+          <button type="button" className="ghost" disabled={busy} onClick={() => save({ action: 'bug', id: b.id, status: 'open', note: noteValue })}>Reopen</button>
+        )}
+        {noteValue !== (b.note ?? null) && <button type="button" className="ghost" disabled={busy} onClick={() => save({ action: 'bug', id: b.id, note: noteValue })}>Save note</button>}
+        {canDelete && !confirmDelete && <button type="button" className="ghost danger" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete</button>}
+        {canDelete && confirmDelete && (
+          <>
+            <button type="button" className="ghost danger" disabled={busy} onClick={() => save({ action: 'bugDelete', id: b.id })}>Yes, delete</button>
+            <button type="button" className="ghost" disabled={busy} onClick={() => setConfirmDelete(false)}>Cancel</button>
+          </>
+        )}
+      </div>
+      {message && <p className={message.ok ? 'muted small' : 'error'}>{message.text}</p>}
+    </article>
   );
 }

@@ -9,6 +9,18 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.28.0',
+    date: '2026-10-26',
+    changes: [
+      'Bug reports from the Report a bug button are kept and shown on the Admin page as cards: mark them fixed (optionally telling the reporter by DM, with a note), reopen them, or delete them. Sending a report no longer fails when no bug channel is set up.',
+    ],
+  },
+  {
+    version: '0.27.1',
+    date: '2026-10-26',
+    changes: ['Potions are only judged once at least half the night\u2019s bosses have been read in full, and say how many were checked.'],
+  },
+  {
     version: '0.27.0',
     date: '2026-10-26',
     changes: [

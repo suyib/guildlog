@@ -111,6 +111,16 @@ for (const page of ['summary', 'damage', 'rotation', 'gear', 'survival'] as cons
   assert.ok(e.fields!.length <= 25 && e.fields!.every((f) => f.value.length <= 1024 && f.value.length > 0), `${page} fits Discord`);
 }
 assert.equal(personalPage('overview', digest, 'Nobody', null), null);
+// Potions are only judged once at least half the bosses have been read in full
+{
+  const pots = { used: [{ name: 'Haste', seconds: 20 }], prePot: false };
+  const night = (read: number) => ({ ...digest, fights: Array.from({ length: 4 }, (_, i) => ({ ...digest.fights[0], id: i + 1, name: `Boss ${i + 1}`, players: [{ ...player('Suy', 1500, 90), ...(i < read ? { potions: pots } : {}) }] })) }) as unknown as RaidDigest;
+  const text = (read: number) => JSON.stringify(personalPage('summary', night(read), 'Suy', null));
+  assert.ok(!text(1).includes('Potions'), 'one boss of four isn\u2019t enough to judge');
+  assert.ok(text(2).includes('Used on every boss (2 of 4 bosses checked)'));
+  assert.ok(text(4).includes('Used on every boss.'));
+}
+
 // A boss where they did nothing (Chess Event, or dead at the pull) doesn't count against them
 {
   const chess = { id: 5, name: 'Chess Event', encounterID: 9, kill: true, startTime: 800000, endTime: 900000, seconds: 100, players: [{ ...player('Suy', 0, 0), total: 0 }] };
@@ -156,6 +166,45 @@ assert.equal(form.response.data.custom_id, 'bug:submit:fresh.warcraftlogs.com:AB
 assert.equal(form.response.data.components.length, 2);
 assert.equal((summary.components![1] as any).components.at(-1).custom_id, 'bug:open:fresh.warcraftlogs.com:ABC');
 assert.equal(describe({ type: 5, token: 't', data: { custom_id: 'bug:submit' } } as any), 'Sent a bug report');
+
+// Bug reports are kept for the Admin page: fixed (telling the reporter by DM), and deleted by guild masters only
+{
+  const { applyBugEdit, listBugs, saveBug } = await import('../server/bugs');
+  process.env.SUPABASE_URL = 'https://db.example';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
+  process.env.DISCORD_BOT_TOKEN = 'bot';
+  const realFetch = globalThis.fetch;
+  const rows: any[] = [];
+  const dms: string[] = [];
+  globalThis.fetch = (async (url: string, init: RequestInit = {}) => {
+    const u = new URL(String(url));
+    if (u.hostname === 'discord.com') {
+      if (u.pathname.endsWith('/users/@me/channels')) return new Response('{"id":"dm1"}', { status: 200 });
+      dms.push(JSON.parse(String(init.body)).content);
+      return new Response('{}', { status: 200 });
+    }
+    const id = u.searchParams.get('id')?.replace('eq.', '');
+    if (init.method === 'POST') rows.push({ id: '11111111-2222-3333-4444-555555555555', created_at: '2026-10-26T12:21:00Z', status: 'open', note: null, resolved_by: null, resolved_at: null, ...JSON.parse(String(init.body)) });
+    if (init.method === 'PATCH') Object.assign(rows.find((r) => r.id === id), JSON.parse(String(init.body)));
+    if (init.method === 'DELETE') rows.splice(rows.findIndex((r) => r.id === id), 1);
+    return new Response(JSON.stringify(init.method ? [] : id ? rows.filter((r) => r.id === id) : rows), { status: 200 });
+  }) as typeof fetch;
+  await saveBug({ discordId: '7', username: 'suy', place: '#tbc-test-raid-log', raid: { host: 'fresh.warcraftlogs.com', code: 'ABC' }, what: 'Potions said all 1 boss', doing: 'Quick summary' });
+  const [bug] = await listBugs();
+  assert.deepEqual([bug.status, bug.username, bug.place, bug.raid?.code, bug.what], ['open', 'suy', '#tbc-test-raid-log', 'ABC', 'Potions said all 1 boss']);
+  const officer = { id: '9', name: 'Officer', rank: 'officer' as const };
+  const done = await applyBugEdit({ action: 'bug', id: bug.id, status: 'resolved', note: 'Fixed in v0.27.1', tell: true }, officer);
+  assert.ok(done.startsWith('marked the bug report from suy') && done.endsWith('and told them by DM'));
+  assert.ok(dms[0].includes('Potions said all 1 boss') && dms[0].includes('Fixed in v0.27.1'), 'the reporter hears back, with the note');
+  assert.equal((await listBugs())[0].status, 'resolved');
+  await assert.rejects(applyBugEdit({ action: 'bugDelete', id: bug.id }, officer), /Only guild masters and admins/);
+  await applyBugEdit({ action: 'bugDelete', id: bug.id }, { ...officer, rank: 'guild_master' });
+  assert.equal((await listBugs()).length, 0);
+  globalThis.fetch = realFetch;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.DISCORD_BOT_TOKEN;
+}
 
 // Activity log: who, what and where, never what they typed
 const typed = { type: 2, token: 't', guild_id: 'g', channel_id: '55', member: { user: { id: '7', username: 'suy' }, roles: [] },

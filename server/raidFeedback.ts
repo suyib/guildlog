@@ -117,8 +117,10 @@ export function raidFeedback(fights: FightDigest[], opts: RaidFeedbackOptions = 
   }
 
   // ---- Potions (kills of 90 seconds or more, once read in full) ----
-  const potionRows = rows.filter(({ f, p }) => p.potions && f.seconds >= 90);
-  if (potionRows.length) {
+  // Only known for bosses read in full: judged once at least half of the long ones have been
+  const longFights = fights.filter((f) => f.seconds >= 90);
+  const readFights = longFights.filter((f) => f.players.some((p) => p.potions));
+  if (readFights.length && readFights.length * 2 >= longFights.length) {
     const without = people((p, f) => !!p.potions && f.seconds >= 90 && !p.potions.used.length && !p.potions.prePot);
     if (!without.length) good.push({ title: 'Everyone used a potion', detail: `On every boss${where} long enough to need one.` });
     else work.push({ title: `${plural(without.length, 'player')} skipped potions`, detail: 'A combat potion before the pull and another during the fight is free damage and healing.' });

@@ -321,12 +321,15 @@ function quickSummary(rows: Rows): { good: Point[]; work: Point[] } {
 function insightPoints(rows: Rows, healer: boolean): { good: Point[]; work: Point[] } {
   const good: Point[] = [];
   const work: Point[] = [];
-  // Potions on bosses of 90 seconds or more
-  const potRows = rows.filter((r) => r.p.potions && r.fight.seconds >= 90);
-  if (potRows.length) {
+  // Potions on bosses of 90 seconds or more: only known for bosses read in full, so judged once
+  // at least half of them have been (otherwise one boss would speak for the whole night)
+  const long = rows.filter((r) => r.fight.seconds >= 90);
+  const potRows = long.filter((r) => r.p.potions);
+  if (potRows.length && potRows.length * 2 >= long.length) {
     const none = potRows.filter((r) => !r.p.potions!.used.length && !r.p.potions!.prePot).map((r) => r.fight.name);
-    if (none.length) work.push({ title: 'Potions', detail: `None used on ${none.slice(0, 4).join(', ')}. One before the pull and one during the fight is free ${healer ? 'healing' : 'damage'}.` });
-    else good.push({ title: 'Potions', detail: `Used on all ${bosses(potRows.length)}.` });
+    const of = potRows.length < long.length ? ` (${potRows.length} of ${long.length} bosses checked)` : '';
+    if (none.length) work.push({ title: 'Potions', detail: `None used on ${none.slice(0, 4).join(', ')}${of}. One before the pull and one during the fight is free ${healer ? 'healing' : 'damage'}.` });
+    else good.push({ title: 'Potions', detail: potRows.length === 1 ? `Used on ${potRows[0].fight.name}.` : `Used on every boss${of}.` });
   }
   // Damage over time: uptime across the night, weighted by fight length
   const dots = new Map<string, { up: number; secs: number }>();
