@@ -520,6 +520,8 @@ export interface RaidCheck {
     withDots: number;
     withPotionData: number;
     problem: string | null;
+    /** What the read received from Warcraft Logs (fights read from v0.26.1 on). */
+    received?: string;
   }[];
   /** Rows in the guild benchmarks for this raid (null: the kill_stats table is missing, run the migration). */
   benchmarkRows: number | null;

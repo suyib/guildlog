@@ -94,8 +94,8 @@ async function readNow(req: Request, code: string, fresh: boolean, started: numb
       await rereadRaid(code);
       waitUntil(auditTask(`<@${session.uid}> (${session.name}) started reading ${code} again from scratch on Past raids`));
     } else {
-      // A raid that gave up ("partly stored") gets another go
-      await rest(`guild_raids?report_code=eq.${encodeURIComponent(code)}&status=eq.partial`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status: 'saving', runs: 0 }) });
+      // A raid that gave up ("partly stored"), or one already stored by an older version, gets another go
+      await rest(`guild_raids?report_code=eq.${encodeURIComponent(code)}&status=in.(partial,saved)`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status: 'saving', runs: 0 }) });
     }
     await archiveNow(code, started + 50_000);
     return json(await checkRaid(code));

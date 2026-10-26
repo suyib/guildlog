@@ -18,7 +18,8 @@ import { countsFrom, detailRows, num } from './tables.js';
 import type { FightRef, GearItem, Offline } from './types.js';
 import { type ReportMeta, getAbilities, getFightEvents, getReportMeta, getTables } from './wcl.js';
 
-export const PACK_VERSION = 1;
+/** Bump when what's read changes: stored fights from an older version are read again when opened. */
+export const PACK_VERSION = 2; // 2: spell names from the tables too, and what the read received (for Check stored data)
 
 /** Everyone's fight-wide tables, trimmed to the fields that are used (Warcraft Logs' own shapes). */
 export interface PackTables {
@@ -84,6 +85,17 @@ export interface PackFull {
   /** Bloodlust / Heroism casts: [centiseconds, sourceId, abilityId] */
   lust: number[][];
   deaths?: PackDeath[];
+  /** What the read received, for Check stored data. */
+  received?: {
+    /** Spell names from Warcraft Logs' spell list, and from its tables. */
+    spellList: number;
+    tableNames: number;
+    /** Players' casts, and how many came with mana. */
+    casts: number;
+    castsWithMana: number;
+    /** The fields on a player's cast (to see what Warcraft Logs sends). */
+    castFields: string[];
+  };
 }
 
 export interface FightPack {
@@ -123,7 +135,7 @@ async function writePack(host: string, code: string, pack: FightPack, digest: Fi
   await rest('fight_packs?on_conflict=report_code,fight_id', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ report_code: code, fight_id: pack.fight.id, host, stage: pack.stage, digest, pack: pack64(pack), updated_at: new Date().toISOString() }),
+    body: JSON.stringify({ report_code: code, fight_id: pack.fight.id, host, stage: pack.stage, digest: { ...digest, pv: pack.v }, pack: pack64(pack), updated_at: new Date().toISOString() }),
   });
 }
 
@@ -131,21 +143,24 @@ async function writePack(host: string, code: string, pack: FightPack, digest: Fi
  * Each stored fight's stage and digest for a report (small: the packs themselves aren't read).
  * Digests from an older version are worked out again from their packs, without Warcraft Logs.
  */
-export async function digestRows(code: string): Promise<{ fightId: number; stage: string; digest: FightDigest | null }[]> {
+export async function digestRows(code: string): Promise<{ fightId: number; stage: string; digest: FightDigest | null; current: boolean }[]> {
   if (!dbEnabled()) return [];
   const rows: PackRow[] = (await rest(`fight_packs?report_code=eq.${q(code)}&fight_id=gt.0&select=fight_id,stage,digest`)) ?? [];
   return Promise.all(rows.map(async (r) => {
     let digest = r.digest as FightDigest | null;
-    if ((r.stage === 'tables' || r.stage === 'full') && digest?.v !== DIGEST_VERSION) digest = (await refreshDigest(code, r.fight_id).catch(() => null)) ?? digest;
-    return { fightId: r.fight_id, stage: r.stage, digest };
+    const current = digest?.pv === PACK_VERSION;
+    if (current && (r.stage === 'tables' || r.stage === 'full') && digest?.v !== DIGEST_VERSION) digest = (await refreshDigest(code, r.fight_id).catch(() => null)) ?? digest;
+    // current: read by this version of the site (older stored fights are read again)
+    return { fightId: r.fight_id, stage: r.stage, digest, current };
   }));
 }
 
 /** Which of a report's fights are stored, and how far (just the stage, nothing else is read). */
 export async function storedStages(code: string): Promise<Map<number, string>> {
   if (!dbEnabled()) return new Map();
-  const rows: PackRow[] = (await rest(`fight_packs?report_code=eq.${q(code)}&fight_id=gt.0&select=fight_id,stage`)) ?? [];
-  return new Map(rows.map((r) => [r.fight_id, r.stage]));
+  const rows: { fight_id: number; stage: string; pv: number | null }[] = (await rest(`fight_packs?report_code=eq.${q(code)}&fight_id=gt.0&select=fight_id,stage,pv:digest->pv`)) ?? [];
+  // A fight read by an older version of the site counts as not read yet
+  return new Map(rows.map((r) => [r.fight_id, Number(r.pv) === PACK_VERSION ? r.stage : 'outdated']));
 }
 
 /** The stored digests of a report's fights, in fight order. */
@@ -162,7 +177,7 @@ async function refreshDigest(code: string, fightId: number): Promise<FightDigest
   if (!row?.pack) return null;
   const pack = unpack64<FightPack>(row.pack);
   if (pack.v !== PACK_VERSION) return null;
-  const digest = digestFromPack(row.host, pack);
+  const digest = { ...digestFromPack(row.host, pack), pv: pack.v };
   await rest(`fight_packs?report_code=eq.${q(code)}&fight_id=eq.${fightId}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ digest }) }).catch(() => undefined);
   return digest;
 }
@@ -272,11 +287,11 @@ async function readTables(host: string, code: string, fightId: number): Promise<
       details: playerDetails(fightIDs:$fid, includeCombatantInfo:true)`, 25_000)),
   ]);
   return {
-    damage: entriesOf(a.damage, ['id', 'name', 'type', 'icon', 'total', 'activeTime'], ['name', 'total', 'type'], ['name', 'total']),
+    damage: entriesOf(a.damage, ['id', 'name', 'type', 'icon', 'total', 'activeTime'], ['name', 'guid', 'total', 'type', 'abilityIcon'], ['name', 'total']),
     casts: entriesOf(a.casts, ['id', 'name', 'type', 'icon'], ['name', 'guid', 'total', 'abilityIcon']),
     taken: entriesOf(a.taken, ['id', 'name', 'type', 'total'], ['name', 'guid', 'total', 'abilityIcon']),
     deaths: { data: { entries: ((a.deaths?.data?.entries ?? []) as any[]).map((e) => ({ ...pick(e, ['id', 'name', 'deathTime', 'timestamp']), killingBlow: { name: e.killingBlow?.name ?? e.ability?.name ?? 'Unknown' } })) } },
-    healing: entriesOf(b.healing, ['id', 'name', 'type', 'petOwner', 'total', 'overheal', 'activeTime'], ['name', 'total', 'overheal']),
+    healing: entriesOf(b.healing, ['id', 'name', 'type', 'petOwner', 'total', 'overheal', 'activeTime'], ['name', 'guid', 'total', 'overheal', 'abilityIcon']),
     interrupts: countsFrom(b.interrupts),
     dispels: countsFrom(b.dispels),
     debuffs: ((b.debuffs?.data?.auras ?? []) as any[]).map((a) => pick(a, ['guid', 'name', 'totalUptime', 'totalUses', 'abilityIcon'])),
@@ -425,6 +440,9 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
   }
   const lust: number[][] = [];
   const manaAt = new Map<number, number[]>();
+  let playerCasts = 0;
+  let castsWithMana = 0;
+  let castFields: string[] = [];
   const buckets = Math.ceil(secs / 5);
   for (const e of casts) {
     if (e.type !== 'cast') continue;
@@ -432,8 +450,13 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
     if (owner === null) continue;
     used.add(e.abilityGameID);
     // Mana at the moment of each cast (resource type 0), kept every 5 seconds
-    const mana = e.sourceID === owner ? ((e.classResources ?? []) as any[]).find((r) => r?.type === 0 && num(r.max) > 0) : null;
+    const mana = e.sourceID === owner ? ((e.classResources ?? []) as any[]).find((r) => (r?.type === 0 || r?.type === undefined) && num(r?.max) > 0) : null;
+    if (e.sourceID === owner) {
+      playerCasts++;
+      if (!castFields.length) castFields = Object.keys(e).slice(0, 30);
+    }
     if (mana) {
+      castsWithMana++;
       const list = manaAt.get(owner) ?? new Array<number>(buckets).fill(-1);
       manaAt.set(owner, list);
       const b = Math.min(buckets - 1, Math.floor(sec(e.timestamp) / 5));
@@ -519,12 +542,21 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
       ...(mit.get(id) && mit.get(id)![0] >= 10 ? { mit: mit.get(id) } : {}),
     };
   }
+  // Spell names: Warcraft Logs' spell list, else its tables (which name every spell in them)
+  const tableNames = new Map<number, { name: string; icon?: string }>();
+  for (const tbl of [t.damage, t.healing, t.casts, t.taken]) {
+    for (const e of (tbl?.data?.entries ?? []) as any[]) {
+      for (const a of (e.abilities ?? []) as any[]) {
+        if (num(a?.guid) > 0 && a.name && !tableNames.has(num(a.guid))) tableNames.set(num(a.guid), { name: String(a.name), icon: typeof a.abilityIcon === 'string' ? a.abilityIcon : undefined });
+      }
+    }
+  }
   const names: PackFull['names'] = {};
   for (const id of used) {
-    const a = abilities.get(id) ?? buffNames.get(id);
+    const a = abilities.get(id) ?? tableNames.get(id) ?? buffNames.get(id);
     if (a) names[id] = a.icon ? [a.name, a.icon] : [a.name];
   }
-  return { names, players, raid: round(raid), lust, deaths };
+  return { names, players, raid: round(raid), lust, deaths, received: { spellList: abilities.size, tableNames: tableNames.size, casts: playerCasts, castsWithMana, castFields } };
 }
 
 /** Everyone's buffs (uptime, uses, and when Bloodlust and big cooldowns were up), eight players per request. */

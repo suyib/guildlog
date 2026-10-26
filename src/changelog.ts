@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.26.1',
+    date: '2026-10-26',
+    changes: [
+      'Spell names and icons come from Warcraft Logs\u2019 own tables when its spell list doesn\u2019t answer, instead of showing spell numbers.',
+      'Fights stored by an older version are read again (when opened, by the 5-minute job, or with Read now), and Check stored data shows what each read received, including mana.',
+    ],
+  },
+  {
     version: '0.26.0',
     date: '2026-10-26',
     changes: [

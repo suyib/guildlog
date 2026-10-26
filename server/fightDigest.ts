@@ -52,6 +52,8 @@ export const DIGEST_VERSION = 7; // 7: potions, DoTs, mana, mitigation, death re
 
 export interface FightDigest {
   v?: number;
+  /** The version of the stored fight it came from (an older one is read again). */
+  pv?: number;
   id: number;
   name: string;
   encounterID: number;

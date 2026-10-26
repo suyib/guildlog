@@ -94,7 +94,7 @@ const tables = {
     { id: 4, name: 'Shammy', type: 'Shaman', total: 0, abilities: [] },
   ] } },
   deaths: { data: { entries: [{ id: 1, name: 'Suy', deathTime: START + 100_000, killingBlow: { name: 'Cave In', guid: 99 }, events: new Array(50).fill({ big: 'payload' }) }] } },
-  healing: { data: { entries: [{ id: 2, name: 'Healz', type: 'Priest', total: 168_000, overheal: 40_000, activeTime: 110_000, abilities: [{ name: 'Greater Heal', total: 120_000, overheal: 40_000 }, { name: 'Renew', total: 48_000 }] }] } },
+  healing: { data: { entries: [{ id: 2, name: 'Healz', type: 'Priest', total: 168_000, overheal: 40_000, activeTime: 110_000, abilities: [{ name: 'Greater Heal', guid: 25213, total: 120_000, overheal: 40_000 }, { name: 'Renew', guid: 25222, total: 48_000 }] }] } },
   interrupts: { data: { entries: [{ entries: [{ details: [{ name: 'Tanky', total: 2 }] }] }] } },
   debuffs: { data: { auras: [{ guid: 25225, name: 'Sunder Armor', totalUptime: 110_000, totalUses: 5, bands: [] }, { guid: 26993, name: 'Faerie Fire', totalUptime: 60_000, totalUses: 1 }, { guid: 1, name: 'Something Else', totalUptime: 5_000 }] } },
   dispels: { data: { entries: [] } },
@@ -129,7 +129,7 @@ function wcl(query: string, vars: any) {
     report.events = { data: list.slice(0, 50), nextPageTimestamp: list.length > 50 ? list[50].timestamp : null };
     return { reportData: { report } };
   }
-  if (query.includes('masterData{abilities')) return { reportData: { report: { masterData: { abilities } } } };
+  if (query.includes('masterData{abilities')) return { reportData: { report: { masterData: { abilities: noSpellList ? [] : abilities } } } };
   if (query.includes('code title startTime')) return { reportData: { report: meta } };
   for (const m of query.matchAll(/(\w+): table\(dataType:(\w+), fightIDs:\$fid(?:, sourceID:(\d+))?[^)]*\)/g)) {
     const [, alias, kind, source] = m;
@@ -219,6 +219,7 @@ process.env.SUPABASE_URL = 'https://db.example';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
 let wclDown = false;
 let eventsDown = false;
+let noSpellList = false;
 globalThis.fetch = (async (input: string | URL, init: RequestInit = {}) => {
   const url = new URL(String(input));
   if (url.hostname === 'db.example') return new Response(JSON.stringify(db(url, init)), { status: 200 });
@@ -426,6 +427,20 @@ assert.equal(wclCalls, callsAfterFail, 'not tried again straight away');
 assert.ok(callsAfterFail > before2);
 assert.match((await checkRaid(CODE)).kills[0].problem!, /events unavailable/);
 eventsDown = false;
+packs.delete(`${CODE}:3`);
+await getPack(HOST, CODE, fightRef, 'full');
+
+// Warcraft Logs' spell list comes back empty: names (and icons) come from its tables instead
+noSpellList = true;
+packs.delete(`${CODE}:3`);
+const noList = await getPack(HOST, CODE, fightRef, 'full');
+const healNames = dashboardFromPack(noList, 2).healing!.abilities.map((a) => a.name);
+assert.deepEqual(healNames, ['Greater Heal', 'Renew'], 'healing spells named from the tables');
+assert.equal(noList.full!.received!.spellList, 0);
+assert.ok(noList.full!.received!.tableNames > 0);
+assert.equal(noList.full!.received!.castsWithMana, 40);
+assert.match((await checkRaid(CODE)).kills[0].received!, /0 from the spell list, \d+ from tables · mana on 40 of \d+ casts/);
+noSpellList = false;
 packs.delete(`${CODE}:3`);
 await getPack(HOST, CODE, fightRef, 'full');
 

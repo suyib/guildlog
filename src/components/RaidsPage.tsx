@@ -621,7 +621,7 @@ function StoredData({ code, label, canRestart, onChanged }: { code: string; labe
                 <tbody>
                   {check.kills.map((k) => (
                     <tr key={k.fightId} className={k.stage !== 'full' ? 'warn' : ''}>
-                      <td>{k.boss}{k.problem && <div className="muted small">{k.problem}</div>}</td>
+                      <td>{k.boss}{k.problem && <div className="muted small">{k.problem}</div>}{k.received && <div className="muted small">{k.received}</div>}</td>
                       <td>{k.stage ?? 'not yet'}</td>
                       <td className="r">{k.players || '–'}</td>
                       <td className="r">{k.stage === 'full' ? k.withMana : '–'}</td>
