@@ -263,10 +263,11 @@ button.secondary:hover:not(:disabled) { background: rgba(0, 124, 173, 0.18); }
 .spinner.small { display: inline-block; width: 12px; height: 12px; border-width: 2px; vertical-align: -2px; margin-right: 4px; }
 .boss-ranks { display: grid; gap: 10px; padding: 6px 2px; }
 .boss-icon.small { width: 22px; height: 22px; }
-.boss-rank-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; margin-top: 4px; font: 600 13px var(--font-mono); color: var(--ink-2); }
-.boss-rank-link { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; font: 600 13px var(--font-sans); }
-.boss-rank-link:hover { text-decoration: none; }
-.boss-rank-link:hover .boss-icon { outline: 2px solid var(--primary-light); }
+.boss-icon.big { width: 48px; height: 48px; border-radius: 12px; }
+.boss-head-link { flex: none; display: flex; border-radius: 12px; }
+.boss-head-link:hover .boss-icon, .boss-head-link:focus-visible .boss-icon { outline: 2px solid var(--primary-light); outline-offset: 2px; }
+.boss-rank-line { display: inline-flex; flex-wrap: wrap; align-items: center; margin-top: 4px; font: 600 13px var(--font-mono); color: var(--ink-2); }
+.boss-rank-line:hover { text-decoration: none; color: var(--ink); }
 .boss-link { color: inherit; font-weight: 600; }
 .boss-link:hover { color: var(--primary-light); }
 .zone-ranks { display: inline-flex; align-items: baseline; margin-left: 10px; font: 600 13px var(--font-mono); }

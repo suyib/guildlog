@@ -4,7 +4,7 @@ import { compact, mmss, n0, pct } from '../format';
 import { DpsChart } from './charts';
 import BossRankLine from './BossRankLine';
 import Glyph from './Glyph';
-import { ClassIcon, GameIcon, SeverityDot, classCss, parseCss } from './icons';
+import { BossIcon, ClassIcon, GameIcon, SeverityDot, classCss, parseCss } from './icons';
 import { recapLine } from '../../server/insights';
 
 type Player = FightBreakdown['players'][number];
@@ -27,7 +27,7 @@ export default function Breakdown({ data, host, onPick }: { data: FightBreakdown
     <div className="result">
       <header className="fight-head">
         <div className="fight-id">
-          <span className="kpi-icon big"><Glyph name="users" size={22} /></span>
+          <a href={`/#/rankings?boss=${fight.encounterID}`} className="boss-head-link" title={`${fight.name} rankings`}><BossIcon id={fight.encounterID} size="big" /></a>
           <div>
             <div className="eyebrow">
               {fight.name} · <span className={fight.kill ? 'kill' : 'wipe'}>{fight.kill ? 'Kill' : 'Wipe'}</span> · {mmss(fight.seconds)} · {players.length} players

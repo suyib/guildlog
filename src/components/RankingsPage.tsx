@@ -57,7 +57,7 @@ export default function RankingsPage() {
       {picked ? (
         <section className="panel">
           <div className="panel-head">
-            <h2 className="panel-title with-icon"><BossIcon id={picked.encounterId} small />{picked.name}</h2>
+            <h2 className="panel-title with-icon"><BossIcon id={picked.encounterId} size="small" />{picked.name}</h2>
           </div>
           <BossRankings key={`${zone.id}-${picked.encounterId}`} host={zone.host} zoneId={zone.id} encounterId={picked.encounterId} wcl={d.wcl} />
         </section>

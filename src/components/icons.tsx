@@ -74,11 +74,16 @@ export function compareLabel(key: string | undefined): string {
   return key;
 }
 
-/** A boss's picture from Warcraft Logs (by encounter); a plain circle if there isn't one. GAME CONTENT */
-export function BossIcon({ id, small = false }: { id: number; small?: boolean }) {
-  const [failed, setFailed] = useState(false);
-  const cls = small ? 'boss-icon small' : 'boss-icon';
-  const size = small ? 22 : 32;
-  if (failed) return <span className={cls} aria-hidden="true" />;
-  return <img className={cls} src={`https://assets.rpglogs.com/img/warcraft/bosses/${Math.trunc(id)}-icon.jpg`} width={size} height={size} alt="" loading="lazy" onError={() => setFailed(true)} />;
+/**
+ * A boss's picture from Warcraft Logs (by encounter); a plain circle if there isn't one. Classic logs
+ * can use a prefixed ID (51604 for 1604) that has no picture of its own, so that falls back to the
+ * plain ID. GAME CONTENT
+ */
+export function BossIcon({ id, size = 'normal' }: { id: number; size?: 'small' | 'normal' | 'big' }) {
+  const ids = [...new Set([Math.trunc(id), Math.trunc(id) % 10000])];
+  const [tried, setTried] = useState(0);
+  const cls = size === 'normal' ? 'boss-icon' : `boss-icon ${size}`;
+  const px = size === 'small' ? 22 : size === 'big' ? 48 : 32;
+  if (tried >= ids.length) return <span className={cls} aria-hidden="true" />;
+  return <img key={ids[tried]} className={cls} src={`https://assets.rpglogs.com/img/warcraft/bosses/${ids[tried]}-icon.jpg`} width={px} height={px} alt="" loading="lazy" onError={() => setTried((t) => t + 1)} />;
 }

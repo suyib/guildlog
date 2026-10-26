@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.33.3',
+    date: '2026-10-26',
+    changes: [
+      'Boss pictures show for Classic logs too, which number their bosses differently.',
+      'The whole-raid view of a fight uses the boss\u2019s picture as its big icon, linking to the boss\u2019s rankings. The line under a fight\u2019s title only appears when the guild is ranked on that boss.',
+    ],
+  },
+  {
     version: '0.33.2',
     date: '2026-10-26',
     changes: ['Tidying: the last bit of inline styling is gone (game icons that don\u2019t load now show an empty frame), and unused styles were removed.'],

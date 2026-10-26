@@ -1,10 +1,9 @@
-// Under a fight's title: the boss's picture (a link to its rankings) and the guild's first-kill
-// ranks for that boss, "#150 | #30 | #3", each with a tooltip. Ranks the guild doesn't have are left out.
+// Under a fight's title: the guild's first-kill ranks for that boss, "#150 | #30 | #3", each with a
+// tooltip, linking to the boss's rankings. Nothing when the guild isn't ranked on it.
 import { useEffect, useState } from 'react';
 import type { BossRanks } from '../../server/types';
 import { loadBossRanks } from '../api';
 import { n0 } from '../format';
-import { BossIcon } from './icons';
 
 const SCOPES: { scope: BossRanks['scope']; tip: string }[] = [
   { scope: 'world', tip: 'Worldwide first-kill rank' },
@@ -23,21 +22,16 @@ export default function BossRankLine({ host, encounterId, name }: { host: string
       live = false;
     };
   }, [host, encounterId]);
-  // Nothing at all when rankings can't be read (guests on a shared link can't open the Rankings page)
-  if (!ranks || ranks.every((r) => r === undefined)) return null;
-  const shown = SCOPES.map((s, i) => ({ ...s, rank: ranks[i] ?? null })).filter((s) => s.rank);
+  const shown = SCOPES.map((s, i) => ({ ...s, rank: ranks?.[i] ?? null })).filter((s) => s.rank);
+  if (!shown.length) return null;
   return (
-    <div className="boss-rank-line">
-      <a href={`/#/rankings?boss=${encounterId}`} className="boss-rank-link" title={`${name} rankings`}>
-        <BossIcon id={encounterId} small />
-        <span>Rankings</span>
-      </a>
+    <a href={`/#/rankings?boss=${encounterId}`} className="boss-rank-line" aria-label={`${name} rankings`}>
       {shown.map((s, i) => (
-        <span key={s.scope} className="rank-tip" tabIndex={0}>
+        <span key={s.scope} className="rank-tip">
           {i > 0 && <span className="rank-sep" aria-hidden="true">|</span>}#{n0(s.rank!)}
           <span role="tooltip" className="rank-tip-text">{s.tip}</span>
         </span>
       ))}
-    </div>
+    </a>
   );
 }
