@@ -6,17 +6,19 @@ import HistoryPage from './components/HistoryPage';
 import LegalPage from './components/LegalPage';
 import ProfilePage from './components/ProfilePage';
 import RaidsPage from './components/RaidsPage';
+import RankingsPage from './components/RankingsPage';
 import SavedPage from './components/SavedPage';
 import Sidebar from './components/Sidebar';
 import { NavProvider } from './nav';
 
-type Route = { page: 'analyze' } | { page: 'history' } | { page: 'raids' } | { page: 'admin' } | { page: 'me' } | { page: 'changelog' } | { page: 'saved'; id: string };
+type Route = { page: 'analyze' } | { page: 'history' } | { page: 'raids' } | { page: 'rankings' } | { page: 'admin' } | { page: 'me' } | { page: 'changelog' } | { page: 'saved'; id: string };
 
 // Shareable analyses live at /a/<id>; the rest of the app uses hash routes (#/, #/raids and #/history).
 function parseRoute(): Route {
   const h = window.location.hash.replace(/^#\/?/, '');
   if (h === 'history') return { page: 'history' };
   if (h === 'raids') return { page: 'raids' };
+  if (h === 'rankings' || h.startsWith('rankings?')) return { page: 'rankings' };
   if (h === 'admin') return { page: 'admin' };
   if (h === 'me') return { page: 'me' };
   if (h === 'changelog') return { page: 'changelog' };
@@ -49,6 +51,7 @@ export default function App() {
         <main className="content">
           {route.page === 'analyze' && <AnalyzePage />}
           {route.page === 'raids' && <RaidsPage />}
+          {route.page === 'rankings' && <RankingsPage key={window.location.hash} />}
           {route.page === 'admin' && <AdminPage />}
           {route.page === 'me' && <ProfilePage />}
           {route.page === 'history' && <HistoryPage />}

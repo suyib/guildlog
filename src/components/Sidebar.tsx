@@ -5,13 +5,13 @@ import { sectionsFor, useNav } from '../nav';
 import Glyph from './Glyph';
 import { ShareButton } from './ResultView';
 
-export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history' | 'admin' | 'me' | 'changelog' | 'saved' }) {
+export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'rankings' | 'history' | 'admin' | 'me' | 'changelog' | 'saved' }) {
   const { result, section, setSection, view } = useNav();
   const [me, setMe] = useState<Me | null>(null);
   useEffect(() => {
     loadMe().then(setMe);
   }, []);
-  const sections = sectionsFor(page === 'history' || page === 'changelog' || page === 'raids' || page === 'admin' || page === 'me' ? null : result, view);
+  const sections = sectionsFor(page === 'history' || page === 'changelog' || page === 'raids' || page === 'rankings' || page === 'admin' || page === 'me' ? null : result, view);
 
   return (
     <aside className="sidebar">
@@ -25,6 +25,7 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history
         <nav className="side-nav" aria-label="Pages">
           <a href="/" className={page === 'analyze' || page === 'saved' ? 'on' : ''}><Glyph name="compass" />Analyze</a>
           <a href="/#/raids" className={page === 'raids' ? 'on' : ''}><Glyph name="calendar" />Past raids</a>
+          <a href="/#/rankings" className={page === 'rankings' ? 'on' : ''}><Glyph name="bars" />Rankings</a>
           <a href="/#/history" className={page === 'history' ? 'on' : ''}><Glyph name="clock" />History</a>
           {me?.officer && <a href="/#/admin" className={page === 'admin' ? 'on' : ''}><Glyph name="shield" />Admin</a>}
         </nav>

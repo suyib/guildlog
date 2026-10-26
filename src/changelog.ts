@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.33.0',
+    date: '2026-10-26',
+    changes: [
+      'New Rankings page (in the sidebar): the guild\u2019s ranks in each raid (progress and speed; world, region and realm), and each boss\u2019s top guilds by first kill or fastest kill.',
+      'The home page is leaner: the rank card and boss rankings moved to Rankings. Each raid under Progress shows its ranks as a small \u201c#412 | #120 | #3\u201d (hover for world, region or realm), and clicking a boss opens its rankings.',
+    ],
+  },
+  {
     version: '0.32.1',
     date: '2026-10-26',
     changes: [
