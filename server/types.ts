@@ -57,8 +57,6 @@ export interface PlayerSnapshot {
   potions?: PotionUse;
   /** Your damage-over-time spells' uptime on their main target. */
   dots?: DotUptime[];
-  /** Mana across the fight, for anyone who uses mana. */
-  mana?: ManaInfo;
   /** The boss's melee swings at you (tanks). */
   mitigation?: Mitigation;
   /** Debuffs the raid kept on the boss. */
@@ -515,13 +513,9 @@ export interface RaidCheck {
     /** full: every event read; tables: only the summary tables so far; null: not read. */
     stage: string | null;
     players: number;
-    withMana: number;
     tanksWithSwings: number;
     withDots: number;
-    withPotionData: number;
     problem: string | null;
-    /** What the read received from Warcraft Logs (fights read from v0.26.1 on). */
-    received?: string;
   }[];
   /** Rows in the guild benchmarks for this raid (null: the kill_stats table is missing, run the migration). */
   benchmarkRows: number | null;
@@ -549,15 +543,6 @@ export interface PotionUse {
 
 export interface DotUptime { name: string; uptimePct: number; sharePct: number }
 
-export interface ManaInfo {
-  /** Mana in percent every 5 seconds. */
-  series: { t: number; pct: number }[];
-  endPct: number | null;
-  /** Seconds spent under 10% mana. */
-  lowSeconds: number;
-  /** When mana first ran out (under 5%) with the fight still going, seconds from the pull. */
-  oomAt: number | null;
-}
 
 export interface Mitigation {
   swings: number;

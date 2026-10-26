@@ -19,7 +19,7 @@ import type { FightRef, GearItem, Offline } from './types.js';
 import { type ReportMeta, getAbilities, getFightEvents, getReportMeta, getTables } from './wcl.js';
 
 /** Bump when what's read changes: stored fights from an older version are read again when opened. */
-export const PACK_VERSION = 3; // 3: mana read more leniently, with a sample; 2: spell names from the tables too, and what the read received
+export const PACK_VERSION = 3; // 3: (mana, since dropped); 2: spell names from the tables too
 
 /** Everyone's fight-wide tables, trimmed to the fields that are used (Warcraft Logs' own shapes). */
 export interface PackTables {
@@ -59,8 +59,6 @@ export interface PackPlayer {
   gear: GearItem[];
   /** Damage-over-time spells on their main target: [abilityId, uptime per mille, ticks]. */
   dots?: number[][];
-  /** Mana in percent every 5 seconds (-1 before it's known), for anyone who uses mana. */
-  mana?: number[];
   /** A boss's melee swings at this player: [swings, dodged, parried, missed, blocked, crits]. */
   mit?: number[];
 }
@@ -85,20 +83,6 @@ export interface PackFull {
   /** Bloodlust / Heroism casts: [centiseconds, sourceId, abilityId] */
   lust: number[][];
   deaths?: PackDeath[];
-  /** What the read received, for Check stored data. */
-  received?: {
-    /** Spell names from Warcraft Logs' spell list, and from its tables. */
-    spellList: number;
-    tableNames: number;
-    /** Players' casts, and how many came with mana. */
-    casts: number;
-    castsWithMana: number;
-    /** The fields on a player's cast (to see what Warcraft Logs sends). */
-    castFields: string[];
-    /** Casts whose classResources weren't empty, and one example of what's in it. */
-    castsWithResources?: number;
-    resourceSample?: string;
-  };
 }
 
 export interface FightPack {
@@ -328,7 +312,7 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
     getFightEvents(host, code, ref, 'DamageDone', deadline, run),
     getFightEvents(host, code, ref, 'Healing', deadline, run),
     getFightEvents(host, code, ref, 'DamageTaken', deadline, run),
-    getFightEvents(host, code, ref, 'Casts', deadline, run, true),
+    getFightEvents(host, code, ref, 'Casts', deadline, run),
     // Spell names: tried twice, as events without them would only show spell numbers
     run(() => getAbilities(host, code).catch(() => getAbilities(host, code))),
     early.length ? readBuffs(host, code, ref, early, run) : tables.then((t) => readBuffs(host, code, ref, [...idsFrom(t)], run)),
@@ -442,36 +426,11 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
     used.add(e.abilityGameID);
   }
   const lust: number[][] = [];
-  const manaAt = new Map<number, number[]>();
-  let playerCasts = 0;
-  let castsWithMana = 0;
-  let castFields: string[] = [];
-  let castsWithResources = 0;
-  let resourceSample = '';
-  const buckets = Math.ceil(secs / 5);
   for (const e of casts) {
     if (e.type !== 'cast') continue;
     const owner = ownerOf(e.sourceID);
     if (owner === null) continue;
     used.add(e.abilityGameID);
-    // Mana at the moment of each cast, kept every 5 seconds
-    const resources: any[] = e.sourceID === owner && Array.isArray(e.classResources) ? e.classResources : [];
-    const mana = manaOf(resources);
-    if (e.sourceID === owner) {
-      playerCasts++;
-      if (!castFields.length) castFields = Object.keys(e).slice(0, 30);
-      if (resources.length) {
-        castsWithResources++;
-        if (!resourceSample) resourceSample = JSON.stringify(resources).slice(0, 200);
-      }
-    }
-    if (mana) {
-      castsWithMana++;
-      const list = manaAt.get(owner) ?? new Array<number>(buckets).fill(-1);
-      manaAt.set(owner, list);
-      const b = Math.min(buckets - 1, Math.floor(sec(e.timestamp) / 5));
-      list[b] = Math.round(Math.min(1, mana.amount / mana.max) * 100);
-    }
     if (e.sourceID === owner) {
       P(owner).casts.push([cs(e.timestamp), e.abilityGameID]);
       if (LUST_IDS.has(e.abilityGameID)) lust.push([cs(e.timestamp), owner, e.abilityGameID]);
@@ -548,7 +507,6 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
       tb: w ? [...w.tb].map(([k, v]) => [...k.split(':').map(Number), Math.round(v)]).sort((x, y) => x[0] - y[0]) : [],
       gear: gear.get(id) ?? [],
       ...(dotsOf(id) ? { dots: dotsOf(id) } : {}),
-      ...(manaAt.has(id) ? { mana: manaAt.get(id) } : {}),
       ...(mit.get(id) && mit.get(id)![0] >= 10 ? { mit: mit.get(id) } : {}),
     };
   }
@@ -566,23 +524,7 @@ async function readFull(host: string, code: string, meta: ReportMeta, ref: Fight
     const a = abilities.get(id) ?? tableNames.get(id) ?? buffNames.get(id);
     if (a) names[id] = a.icon ? [a.name, a.icon] : [a.name];
   }
-  return { names, players, raid: round(raid), lust, deaths, received: { spellList: abilities.size, tableNames: tableNames.size, casts: playerCasts, castsWithMana, castFields, castsWithResources, resourceSample } };
-}
-
-/**
- * Mana from a cast's resources: the entry of type 0 (mana), with numbers that may come as text.
- * Null when there's no mana in it (rage, energy, or nothing recorded).
- */
-export function manaOf(resources: any[]): { amount: number; max: number } | null {
-  for (const r of resources) {
-    if (!r || typeof r !== 'object') continue;
-    const type = r.type ?? r.resourceType;
-    if (type !== undefined && Number(type) !== 0) continue;
-    const amount = Number(r.amount ?? r.current ?? r.value);
-    const max = Number(r.max ?? r.maxAmount ?? r.maximum);
-    if (Number.isFinite(amount) && Number.isFinite(max) && max > 0) return { amount, max };
-  }
-  return null;
+  return { names, players, raid: round(raid), lust, deaths };
 }
 
 /** Everyone's buffs (uptime, uses, and when Bloodlust and big cooldowns were up), eight players per request. */

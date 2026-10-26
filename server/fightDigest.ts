@@ -6,8 +6,8 @@ import { IGNORE_FOR_GAPS, cooldownFor } from './cooldowns.js';
 import { gearFrom, statsFrom, survivalFrom } from './dashboard.js';
 import type { FightPack } from './pack.js';
 import { detailRows, num, rankingRows } from './tables.js';
-import { deathRecaps, dotsFor, manaFor, mitigationFor, potionsFor, raidDebuffs } from './insights.js';
-import type { DeathRecap, DotUptime, GearItem, ManaInfo, Mitigation, PotionUse, RaidDebuff } from './types.js';
+import { deathRecaps, dotsFor, mitigationFor, potionsFor, raidDebuffs } from './insights.js';
+import type { DeathRecap, DotUptime, GearItem, Mitigation, PotionUse, RaidDebuff } from './types.js';
 
 export interface PlayerDigest {
   id: number;
@@ -43,12 +43,11 @@ export interface PlayerDigest {
   /** From v0.25.0, once the fight has been read in full. */
   potions?: PotionUse;
   dots?: DotUptime[];
-  mana?: Omit<ManaInfo, 'series'>;
   mitigation?: Mitigation;
 }
 
 /** Bump when what's in a digest changes; stored digests are then worked out again from the stored fight. */
-export const DIGEST_VERSION = 7; // 7: potions, DoTs, mana, mitigation, death recaps, boss debuffs; 6: from stored fights; 5: healing; 4: pet damage as "<pet> (pet)"; 3: roles
+export const DIGEST_VERSION = 7; // 7: potions, DoTs, mitigation, death recaps, boss debuffs; 6: from stored fights; 5: healing; 4: pet damage as "<pet> (pet)"; 3: roles
 
 export interface FightDigest {
   v?: number;
@@ -193,16 +192,14 @@ export function digestFromPack(host: string, pack: FightPack): FightDigest {
   return { v: DIGEST_VERSION, id: fight.id, name: fight.name, encounterID: fight.encounterID, kill: !!fight.kill, startTime: fight.startTime, endTime: fight.endTime, seconds, players, ...(debuffs ? { debuffs } : {}) };
 }
 
-/** Potions, DoTs, mana and mitigation, once the fight has been read in full. */
+/** Potions, DoTs and mitigation, once the fight has been read in full. */
 function extras(pack: FightPack, id: number): Partial<PlayerDigest> {
   if (!pack.full?.players[id]) return {};
-  const mana = manaFor(pack, id);
   const out: Partial<PlayerDigest> = {};
   const potions = potionsFor(pack, id);
   if (potions) out.potions = potions;
   const dots = dotsFor(pack, id);
   if (dots?.length) out.dots = dots;
-  if (mana) out.mana = { endPct: mana.endPct, lowSeconds: mana.lowSeconds, oomAt: mana.oomAt };
   const mitigation = mitigationFor(pack, id);
   if (mitigation) out.mitigation = mitigation;
   return out;

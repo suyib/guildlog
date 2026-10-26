@@ -6,10 +6,10 @@ import { dashboardFromPack } from '../server/dashboard';
 import { raidDigest } from '../server/discord/digest';
 import { personalPage, raidSummary } from '../server/discord/pages';
 import { overallRaid } from '../server/overall';
-import { getMeta, getPack, manaOf, readPack, reportRegion, storedDigests, trimPack } from '../server/pack';
+import { getMeta, getPack, readPack, reportRegion, storedDigests, trimPack } from '../server/pack';
 import { rowsFromPack, snapshotFromPack } from '../server/pipeline';
 import { checkRaid, deleteRaid, registerRaid } from '../server/archive';
-import { buildFindings, buildStrengths, healingFeedback } from '../server/analysis';
+import { buildFindings, buildStrengths } from '../server/analysis';
 import { guildContext, recordKills, trendFor } from '../server/benchmarks';
 import { finish } from '../server/pipeline';
 
@@ -59,8 +59,7 @@ for (let s = 0; s < 120; s++) {
     ev.DamageTaken.push({ timestamp: t + 900, type: 'damage', sourceID: 90, targetID: 3, abilityGameID: 1, hitType: k === 0 ? 7 : k === 1 ? 8 : k === 2 ? 2 : 1, amount: k < 2 ? 0 : 1500, ...(k === 4 ? { blocked: 300 } : {}) });
   }
   if (s % 3 === 0) {
-    // Healz runs out of mana around 1:17
-    ev.Casts.push({ timestamp: t, type: 'cast', sourceID: 2, abilityGameID: 25213, classResources: [{ amount: Math.max(0, 10_000 - s * 130), max: 10_000, type: 0 }] });
+    ev.Casts.push({ timestamp: t, type: 'cast', sourceID: 2, abilityGameID: 25213 });
     ev.Healing.push({ timestamp: t + 1500, type: 'heal', sourceID: 2, targetID: 3, abilityGameID: 25213, hitType: 1, amount: 3000, overheal: 1000 });
   }
   ev.Healing.push({ timestamp: t + 700, type: 'heal', sourceID: 2, targetID: 3, abilityGameID: 25222, hitType: 1, amount: 400, tick: true });
@@ -286,10 +285,6 @@ const tanky = snapshotFromPack(HOST, CODE, pack, { id: 3, name: 'Tanky', classNa
 assert.deepEqual(tanky.mitigation, { swings: 60, dodged: 6, parried: 6, missed: 0, blocked: 6, crits: 6, avoidPct: 20 });
 assert.ok(buildFindings(tanky, []).some((f) => f.title === 'Crit by the boss 6×' && f.detail.includes('490 defense')));
 assert.ok(buildFindings(tanky, []).some((f) => f.title === 'No potion used'));
-const healz = snapshotFromPack(HOST, CODE, pack, { id: 2, name: 'Healz', className: 'Priest' });
-assert.ok(healz.mana!.oomAt !== null && healz.mana!.oomAt >= 70 && healz.mana!.oomAt <= 80, `out of mana around 1:17 (${healz.mana!.oomAt})`);
-assert.equal(healz.mana!.series.length, 24);
-assert.ok(healingFeedback(healz, healz.healing!).work.some((f) => f.title.startsWith('Ran out of mana')));
 assert.ok(suy.buffs.some((b) => b.name === 'Leader of the Pack' && b.uptimePct === 100));
 
 const dash = dashboardFromPack(pack, 1);
@@ -370,8 +365,6 @@ wclDown = false;
 const dmText = JSON.stringify(personalPage('summary', raid, 'Suy', null));
 assert.ok(dmText.includes('Serpent Sting'), 'DoT uptime in the DM');
 assert.ok(dmText.includes('Potions'), 'potions in the DM');
-const healDm = JSON.stringify(personalPage('summary', raid, 'Healz', null));
-assert.ok(healDm.includes('Ran out of mana'), 'mana in the healer DM');
 const tankDm = JSON.stringify(personalPage('survival', raid, 'Tanky', null));
 assert.ok(tankDm.includes('avoided 20% of 60 swings') && tankDm.includes('crit 6'), 'tank mitigation in the DM');
 assert.match(JSON.stringify(personalPage('survival', raid, 'Suy', null)), /Cave In 9.0k, Melee 3.0k/, 'death recap in the DM');
@@ -407,7 +400,7 @@ await getPack(HOST, CODE, fightRef, 'full');
 await registerRaid({ host: HOST, code: CODE, source: 'site' });
 const checked = await checkRaid(CODE);
 assert.equal(checked.status, 'queued');
-assert.deepEqual(checked.kills.map((k) => [k.boss, k.stage, k.players, k.withMana, k.tanksWithSwings, k.withDots, k.problem]), [['Gruul', 'full', 4, 1, 1, 1, null]]);
+assert.deepEqual(checked.kills.map((k) => [k.boss, k.stage, k.players, k.tanksWithSwings, k.withDots, k.problem]), [['Gruul', 'full', 4, 1, 1, null]]);
 assert.ok(checked.benchmarkRows! > 0);
 assert.equal(checked.onCalendar, false, 'not read by the job yet');
 
@@ -430,21 +423,12 @@ eventsDown = false;
 packs.delete(`${CODE}:3`);
 await getPack(HOST, CODE, fightRef, 'full');
 
-// Mana however it's written: numbers as text, and only the mana entry (type 0)
-assert.deepEqual(manaOf([{ type: 1, amount: 50, max: 100 }, { type: '0', amount: '6000', max: '12000' }]), { amount: 6000, max: 12000 });
-assert.equal(manaOf([{ type: 3, amount: 100, max: 100 }]), null, 'energy isn\u2019t mana');
-assert.equal(manaOf([]), null);
-
 // Warcraft Logs' spell list comes back empty: names (and icons) come from its tables instead
 noSpellList = true;
 packs.delete(`${CODE}:3`);
 const noList = await getPack(HOST, CODE, fightRef, 'full');
 const healNames = dashboardFromPack(noList, 2).healing!.abilities.map((a) => a.name);
 assert.deepEqual(healNames, ['Greater Heal', 'Renew'], 'healing spells named from the tables');
-assert.equal(noList.full!.received!.spellList, 0);
-assert.ok(noList.full!.received!.tableNames > 0);
-assert.equal(noList.full!.received!.castsWithMana, 40);
-assert.match((await checkRaid(CODE)).kills[0].received!, /0 from the spell list, \d+ from tables · mana on 40 of \d+ casts/);
 noSpellList = false;
 packs.delete(`${CODE}:3`);
 await getPack(HOST, CODE, fightRef, 'full');

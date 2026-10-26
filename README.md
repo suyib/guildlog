@@ -112,7 +112,7 @@ Each boss fight is read from Warcraft Logs **once** and kept in `fight_packs` (c
 - A stored kill is roughly 60–120 KB; a raid night roughly 1 MB.
 - A finished log's fight list is reused too (3 hours after its last fight). Item and enchant names are learned once into `item_names`.
 - Logs that aren't on Past raids (comparisons with other guilds' logs) are removed after a week unused. Past raids keep each kill whole for `ARCHIVE_DAYS` (default 90), then just its tables and summary (about a fifth of the size): breakdowns, cards and the bot still work; a player's cast timeline would need a fresh read.
-- Potions, damage-over-time uptime, boss debuffs, death recaps, healer mana and tank mitigation all come from the same stored fight (no extra Warcraft Logs requests beyond the boss-debuffs table and mana on cast events). The spell lists and the defense-cap rule are in `server/gameData.ts` (GAME CONTENT).
+- Potions, damage-over-time uptime, boss debuffs, death recaps and tank mitigation all come from the same stored fight (no extra Warcraft Logs requests beyond the boss-debuffs table). The spell lists and the defense-cap rule are in `server/gameData.ts` (GAME CONTENT).
 - Guild benchmarks and trends use `kill_stats`: one small row per player per kill of the guild's Past raids. Deleting a raid removes its rows too.
 - Upgrading from v0.22 or earlier: run `supabase/migrate-0.23.sql` once after deploying (safe to run again; it also adds `kill_stats`). It keeps the bot's summaries, removes `snapshot_cache`, `saved_data` and `bot_raid_fights`, and queues Past raids to be read once into the new format.
 

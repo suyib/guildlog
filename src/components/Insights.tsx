@@ -1,8 +1,7 @@
-// Potions, boss debuffs, damage over time, death recaps, tank mitigation, mana and "against the
+// Potions, boss debuffs, damage over time, death recaps, tank mitigation and "against the
 // guild", from the stored fight (v0.25.0). Each panel says so when a fight was read before then.
-import type { AnalysisResult, DeathRecap, ManaInfo, Mitigation, PlayerSnapshot } from '../../server/types';
+import type { AnalysisResult, DeathRecap, Mitigation, PlayerSnapshot } from '../../server/types';
 import { compact, mmss, n0, pct } from '../format';
-import { DpsChart } from './charts';
 import Glyph from './Glyph';
 import { parseCss } from './icons';
 
@@ -132,20 +131,6 @@ export function MitigationFacts({ m, critCap }: { m: Mitigation; critCap: boolea
       <div><dt>Blocked</dt><dd>{n0(m.blocked)}</dd></div>
       {critCap && <div><dt>Crits taken</dt><dd className={m.crits ? 'warn-text' : ''}>{m.crits}</dd></div>}
     </dl>
-  );
-}
-
-/** Mana across the fight (healers). */
-export function ManaPanel({ mana }: { mana: ManaInfo }) {
-  if (mana.series.length < 3) return null;
-  return (
-    <section className="panel">
-      <h2 className="panel-title">Mana over the fight</h2>
-      <p className="muted small">
-        Finished with {mana.endPct ?? '–'}%{mana.oomAt !== null ? `, ran out at ${mmss(mana.oomAt)}` : ''}{mana.lowSeconds ? ` · ${mana.lowSeconds}s under 10%` : ''}.
-      </p>
-      <DpsChart series={mana.series.map((p) => ({ t: p.t, dps: p.pct }))} average={mana.series.reduce((t, p) => t + p.pct, 0) / mana.series.length} kind="mana" wide />
-    </section>
   );
 }
 

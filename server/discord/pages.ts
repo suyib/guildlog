@@ -317,7 +317,7 @@ function quickSummary(rows: Rows): { good: Point[]; work: Point[] } {
 }
 
 /**
- * Potions, damage over time, mana (healers) and being crit as a tank, across the night's bosses.
+ * Potions, damage over time and being crit as a tank, across the night's bosses.
  * Same thresholds as the site's analysis (server/analysis.ts insightFeedback).
  */
 function insightPoints(rows: Rows, healer: boolean): { good: Point[]; work: Point[] } {
@@ -341,12 +341,6 @@ function insightPoints(rows: Rows, healer: boolean): { good: Point[]; work: Poin
   const lowDots = dotAvg.filter((d) => d.up < 80);
   if (lowDots.length) work.push({ title: 'Keep your damage over time up', detail: `${lowDots.slice(0, 3).map((d) => `${d.name} ${d.up}%`).join(', ')} on average. Refresh just before it runs out.` });
   else if (dotAvg.length && dotAvg.every((d) => d.up >= 90)) good.push({ title: 'Damage over time kept up', detail: dotAvg.slice(0, 3).map((d) => `${d.name} ${d.up}%`).join(', ') + '.' });
-  // Mana, for healers
-  if (healer) {
-    const oom = rows.filter((r) => r.p.mana?.oomAt != null).map((r) => `${r.fight.name} (${mmss(r.p.mana!.oomAt!)})`);
-    if (oom.length) work.push({ title: 'Ran out of mana', detail: `On ${oom.slice(0, 3).join(', ')}. Pace bigger heals, use a mana potion or rune, and ask for a mana cooldown before you're empty.` });
-    else if (rows.some((r) => r.p.mana)) good.push({ title: 'Never ran out of mana', detail: `Mana lasted on every boss.` });
-  }
   // Tanks: crits from bosses' melee mean they're under the defense cap
   const tankRows = rows.filter((r) => r.p.role === 'tank' && r.p.mitigation && r.p.mitigation.swings >= 30 && tankCanBeCritCapped(pageHost));
   if (tankRows.length) {

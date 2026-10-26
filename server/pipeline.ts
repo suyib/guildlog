@@ -7,7 +7,7 @@ import { guildContext } from './benchmarks.js';
 import { saveAnalysis } from './db.js';
 import { healingFromPack } from './dashboard.js';
 import { type FightPack, getMeta, storedStages } from './pack.js';
-import { deathRecaps, dotsFor, manaFor, mitigationFor, potionsFor, raidDebuffs } from './insights.js';
+import { deathRecaps, dotsFor, mitigationFor, potionsFor, raidDebuffs } from './insights.js';
 import { detailRows, num, rankingRows } from './tables.js';
 import type { ActorRef, AnalysisResult, Comparison, Dashboard, FightPlayerRow, PlayerSnapshot, ReportSummary } from './types.js';
 import { type CastEvent, type Fight, parseReportUrl } from './wcl.js';
@@ -143,15 +143,13 @@ export function snapshotFromPack(host: string, code: string, pack: FightPack, ac
   }
   snapshot.server = row?.server ?? null;
   if (!pack.full) snapshot.partial = pack.fullError ?? 'Not read in full yet.';
-  // Deaths with the 10 seconds before them; potions, DoTs, mana, mitigation and the boss's debuffs
+  // Deaths with the 10 seconds before them; potions, DoTs, mitigation and the boss's debuffs
   const recaps = deathRecaps(pack).get(id);
   if (recaps) snapshot.deaths = recaps;
   const potions = potionsFor(pack, id);
   if (potions) snapshot.potions = potions;
   const dots = dotsFor(pack, id);
   if (dots?.length) snapshot.dots = dots;
-  const mana = manaFor(pack, id);
-  if (mana) snapshot.mana = mana;
   const mitigation = mitigationFor(pack, id);
   if (mitigation) snapshot.mitigation = mitigation;
   const debuffs = raidDebuffs(pack);

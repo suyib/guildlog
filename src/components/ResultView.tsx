@@ -11,7 +11,7 @@ import Feedback, { FeedbackPanels } from './Feedback';
 import Glyph from './Glyph';
 import { ClassIcon, GameIcon, classCss, compareLabel, parseCss } from './icons';
 import Timeline from './Timeline';
-import { DeathList, DotsPanel, GuildPanel, ManaPanel, MitigationFacts, PotionsAndDebuffs } from './Insights';
+import { DeathList, DotsPanel, GuildPanel, MitigationFacts, PotionsAndDebuffs } from './Insights';
 import { tankCanBeCritCapped } from '../../server/gameData';
 
 const OTHER_CLASS = 'other class';
@@ -36,7 +36,7 @@ export default function ResultView({ result }: { result: AnalysisResult }) {
       <FightHeader result={result} />
       {me.partial && (
         <p className="warning">
-          <strong>This fight hasn&rsquo;t been read in full yet</strong>, so potions, damage over time, mana, tank swings, death recaps and the cast timeline are missing ({me.partial.replace(/\.$/, '')}). Click Analyze again in a couple of minutes, or an officer can use Read now on the raid&rsquo;s Past raids card.
+          <strong>This fight hasn&rsquo;t been read in full yet</strong>, so potions, damage over time, tank swings, death recaps and the cast timeline are missing ({me.partial.replace(/\.$/, '')}). Click Analyze again in a couple of minutes, or an officer can use Read now on the raid&rsquo;s Past raids card.
         </p>
       )}
       {crossClass.length > 0 && (section === 'overview' || section === 'compare') && (
@@ -294,15 +294,6 @@ function HealingOverview({ result, h }: { result: AnalysisResult; h: Healing }) 
       </div>
 
       <FeedbackPanels work={feedback.work} good={feedback.good} />
-
-      {me.mana ? <ManaPanel mana={me.mana} /> : (
-        <section className="panel">
-          <h2 className="panel-title">Mana over the fight</h2>
-          <p className="muted small">
-            {me.partial ? 'Shows once this fight has been read in full.' : 'Warcraft Logs didn\u2019t send mana for this fight. An officer can see why with Check stored data on the raid\u2019s Past raids card.'}
-          </p>
-        </section>
-      )}
 
       <GuildPanel result={result} value={h.hps} />
 

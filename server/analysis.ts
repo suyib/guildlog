@@ -509,7 +509,7 @@ export function healingFeedback(me: PlayerSnapshot, h: Healing, ref?: PlayerSnap
 const short = (v: number) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}m` : v >= 1e3 ? `${Math.round(v / 1e3)}k` : String(Math.round(v)));
 
 /**
- * Potions, damage-over-time uptime, mana (healers) and being crit as a tank, from the whole
+ * Potions, damage-over-time uptime and being crit as a tank, from the whole
  * fight's events. Empty for fights read before v0.25.0. The Discord DMs use the same thresholds.
  */
 export function insightFeedback(me: PlayerSnapshot, healer: boolean): { work: Finding[]; good: Strength[] } {
@@ -537,18 +537,6 @@ export function insightFeedback(me: PlayerSnapshot, healer: boolean): { work: Fi
   }
   if (dots.length && !lowDots.length && dots.every((d) => d.uptimePct >= 90)) {
     good.push({ title: 'Damage over time kept up', detail: dots.map((d) => `${d.name} ${d.uptimePct}%`).join(', ') + '.' });
-  }
-
-  // Mana, for healers
-  const mana = me.mana;
-  if (healer && mana) {
-    if (mana.oomAt !== null) {
-      work.push({ severity: 'high', title: `Ran out of mana at ${mmss(mana.oomAt)}`, detail: `${mana.lowSeconds}s under 10% mana. Pace your bigger heals, use a mana potion or rune, and ask for Innervate or a mana cooldown before you're empty.` });
-    } else if (mana.endPct !== null && mana.endPct >= 50 && me.kill && me.fightSeconds >= 120) {
-      work.push({ severity: 'low', title: `Finished with ${mana.endPct}% mana`, detail: 'You had mana to spare: bigger heals or more of them were affordable.' });
-    } else if (mana.endPct !== null && mana.endPct <= 30) {
-      good.push({ title: 'Mana used well', detail: `Finished with ${mana.endPct}% without running out.` });
-    }
   }
 
   // Tanks: crits from the boss's melee mean you're under the defense cap

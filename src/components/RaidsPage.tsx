@@ -617,14 +617,13 @@ function StoredData({ code, label, canRestart, onChanged }: { code: string; labe
           {check.kills.length > 0 && (
             <div className="scroll">
               <table className="grid">
-                <thead><tr><th>Kill</th><th>Read</th><th className="r">Players</th><th className="r">Mana</th><th className="r">Tank swings</th><th className="r">DoTs</th></tr></thead>
+                <thead><tr><th>Kill</th><th>Read</th><th className="r">Players</th><th className="r">Tank swings</th><th className="r">DoTs</th></tr></thead>
                 <tbody>
                   {check.kills.map((k) => (
                     <tr key={k.fightId} className={k.stage !== 'full' ? 'warn' : ''}>
-                      <td>{k.boss}{k.problem && <div className="muted small">{k.problem}</div>}{k.received && <div className="muted small">{k.received}</div>}</td>
+                      <td>{k.boss}{k.problem && <div className="muted small">{k.problem}</div>}</td>
                       <td>{k.stage ?? 'not yet'}</td>
                       <td className="r">{k.players || '–'}</td>
-                      <td className="r">{k.stage === 'full' ? k.withMana : '–'}</td>
                       <td className="r">{k.stage === 'full' ? k.tanksWithSwings : '–'}</td>
                       <td className="r">{k.stage === 'full' ? k.withDots : '–'}</td>
                     </tr>

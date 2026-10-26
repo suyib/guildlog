@@ -9,6 +9,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.26.3',
+    date: '2026-10-26',
+    changes: ['Mana over the fight is removed: this game version\u2019s logs don\u2019t record the mana pool in a form Warcraft Logs can read. Fights are read with less data as a result.'],
+  },
+  {
     version: '0.26.2',
     date: '2026-10-26',
     changes: [

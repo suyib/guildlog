@@ -287,12 +287,9 @@ export async function checkRaid(code: string, host?: string): Promise<RaidCheck>
       boss: k.name,
       stage: stages.get(k.id) ?? null,
       players: players.length,
-      withMana: players.filter((p) => p.mana?.some((v) => v >= 0)).length,
       tanksWithSwings: players.filter((p) => p.mit).length,
       withDots: players.filter((p) => p.dots?.length).length,
-      withPotionData: players.filter((p) => p.casts.length).length,
       problem: pack?.fullError ?? (stages.get(k.id) === 'legacy' ? 'Kept from before v0.23.0: it will be read again.' : stages.get(k.id) === 'outdated' ? 'Read by an older version of the site: it will be read again (Read now does it straight away).' : null),
-      ...(pack?.full?.received ? { received: receivedLine(pack.full.received) } : {}),
     });
   }
   const advice: string[] = [];
@@ -300,7 +297,6 @@ export async function checkRaid(code: string, host?: string): Promise<RaidCheck>
   else if (raid.status === 'queued' || raid.status === 'saving') advice.push('Still being read. Press Read now to carry on straight away instead of waiting for the 5-minute job.');
   if (raid && !raid.start_time) advice.push('Not on the calendar yet: its report hasn\u2019t been read. Read now fixes that, and if it keeps happening, check the 5-minute job (?task=reminders) is still running.');
   if (killRows.some((k) => k.stage === 'tables' || k.stage === 'outdated')) advice.push('Some kills only have their summary tables so far. Read now tries the full read again.');
-  if (killRows.some((k) => k.stage === 'full' && k.players && !k.withMana)) advice.push('Nobody has mana on a fully read kill. If the kill shows what was received, Warcraft Logs didn\u2019t send mana with the casts: send a screenshot of this check. If it doesn\u2019t, it was read by an older version: use Read again from scratch.');
   if (killRows.some((k) => k.stage === 'full' && !k.tanksWithSwings)) advice.push('No boss melee swings were found on a fully read kill, so tank dodges and parries can\u2019t be shown for it.');
   if (benchmarkRows === null) advice.push('The kill_stats table is missing: run supabase/migrate-0.23.sql in Supabase.');
   else if (raid && !benchmarkRows && kills.length) advice.push('Not in the guild benchmarks yet: they\u2019re added when the raid is read (Read now).');
@@ -318,15 +314,6 @@ export async function checkRaid(code: string, host?: string): Promise<RaidCheck>
     benchmarkRows,
     advice,
   };
-}
-
-/** "Spell names: 0 from the spell list, 214 from tables · mana on 0 of 1,820 casts (cast fields: …)". */
-function receivedLine(r: NonNullable<NonNullable<import('./pack.js').FightPack['full']>['received']>): string {
-  const n = (v: number) => v.toLocaleString('en-US');
-  const why = r.castsWithMana ? '' : r.castsWithResources === undefined
-    ? ` (cast fields: ${r.castFields.join(', ') || 'none'})`
-    : r.castsWithResources ? ` (${n(r.castsWithResources)} casts had resources, e.g. ${r.resourceSample})` : ' (every cast\u2019s resources were empty: the log was probably recorded without Advanced Combat Logging)';
-  return `Spell names: ${n(r.spellList)} from the spell list, ${n(r.tableNames)} from tables · mana on ${n(r.castsWithMana)} of ${n(r.casts)} casts${why}`;
 }
 
 /** Read a raid again from the start: its stored fights and benchmarks go, and it's queued like a new raid. */

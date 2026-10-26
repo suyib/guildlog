@@ -486,7 +486,6 @@ progress.uptime-bar { height: 8px; color: var(--primary-light); }
 /* Healing (green) and damage taken (red) versions of the over-the-fight chart */
 .chart .heal-line { stroke: var(--win); }
 .chart .taken-line { stroke: var(--high); }
-.chart .mana-line { stroke: var(--primary-light); }
 .chart .dps-dot.hps { fill: var(--win); }
 .chart .dps-dot.taken { fill: var(--high); }
 .key-line.hps { border-top-color: var(--win); }

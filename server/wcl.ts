@@ -222,11 +222,10 @@ export type EventKind = 'DamageDone' | 'Healing' | 'DamageTaken' | 'Casts';
  */
 export async function getFightEvents(
   host: string, code: string, fight: { id: number; startTime: number; endTime: number }, kind: EventKind,
-  deadline: number, run: <T>(job: () => Promise<T>) => Promise<T>, withResources = false,
+  deadline: number, run: <T>(job: () => Promise<T>) => Promise<T>,
 ): Promise<any[]> {
-  // withResources: each event also carries the caster's mana (and other resources) at that moment
   const q = `query($code:String!,$fid:[Int]!,$st:Float,$et:Float){reportData{report(code:$code){
-    events(dataType:${kind}, fightIDs:$fid, startTime:$st, endTime:$et, limit:10000${withResources ? ', includeResources:true' : ''}){data nextPageTimestamp}
+    events(dataType:${kind}, fightIDs:$fid, startTime:$st, endTime:$et, limit:10000){data nextPageTimestamp}
   }}}`;
   const length = fight.endTime - fight.startTime;
   const slices = Math.min(8, Math.max(1, Math.ceil(length / 90_000)));

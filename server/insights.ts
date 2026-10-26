@@ -1,13 +1,12 @@
-// Potions, damage-over-time uptime, mana, tank mitigation, boss debuffs and death recaps, worked out
+// Potions, damage-over-time uptime, tank mitigation, boss debuffs and death recaps, worked out
 // from a stored fight (no Warcraft Logs requests). Shared by the site's analysis, the whole-raid
 // breakdown and the Discord DMs, so they all say the same thing.
 import { MAINTENANCE, NOT_A_DOT, isPotion } from './gameData.js';
 import type { FightPack } from './pack.js';
 import { num } from './tables.js';
-import type { DeathRecap, DotUptime, ManaInfo, Mitigation, PotionUse, RaidDebuff } from './types.js';
+import type { DeathRecap, DotUptime, Mitigation, PotionUse, RaidDebuff } from './types.js';
 
 const nameOf = (pack: FightPack, id: number) => pack.full?.names[id]?.[0] ?? `Spell ${id}`;
-const seconds = (pack: FightPack) => (pack.fight.endTime - pack.fight.startTime) / 1000;
 
 /** Potions used in the fight, and whether one was running at the pull. Undefined until the fight has been read in full. */
 export function potionsFor(pack: FightPack, id: number): PotionUse | undefined {
@@ -30,22 +29,6 @@ export function dotsFor(pack: FightPack, id: number): DotUptime[] | undefined {
     .sort((x, y) => y.sharePct - x.sharePct);
 }
 
-/** Mana across the fight (gaps filled from the last known value). */
-export function manaFor(pack: FightPack, id: number): ManaInfo | undefined {
-  const raw = pack.full?.players[id]?.mana;
-  if (!raw || !raw.some((v) => v >= 0)) return undefined;
-  const filled: number[] = [];
-  let last = raw.find((v) => v >= 0)!;
-  for (const v of raw) filled.push((last = v >= 0 ? v : last));
-  const total = seconds(pack);
-  const oomIndex = filled.findIndex((v, i) => v < 5 && (i + 1) * 5 < total * 0.9);
-  return {
-    series: filled.map((pct, i) => ({ t: i * 5, pct })),
-    endPct: filled.at(-1) ?? null,
-    lowSeconds: filled.filter((v) => v < 10).length * 5,
-    oomAt: oomIndex >= 0 ? oomIndex * 5 : null,
-  };
-}
 
 /** The boss's melee swings at this player (tanks): dodged, parried, missed, blocked and crits. */
 export function mitigationFor(pack: FightPack, id: number): Mitigation | undefined {
