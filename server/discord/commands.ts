@@ -717,7 +717,12 @@ function bugSubmit(i: Interaction): Outcome {
     const owner = env.ownerId();
     const sent = channel ? await postToChannel(channel, report).then(() => true).catch(() => false) : owner ? await sendDm(owner, report) : false;
     if (!saved && !sent) throw new Error('the report couldn\u2019t be saved or sent');
-    return { content: 'Thanks, your report has been sent. Officers see it on the Admin page.' };
+    // Names the owner (as a clickable mention, without pinging them) when DISCORD_OWNER_ID is set
+    const suy = owner ? `<@${owner}>` : 'suy';
+    return {
+      content: `Thanks for reporting this! I\u2019ll look into it as soon as I can. If it\u2019s urgent or something\u2019s broken, please DM ${suy} directly.`,
+      allowed_mentions: { parse: [] },
+    };
   });
 }
 

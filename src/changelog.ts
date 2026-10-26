@@ -9,6 +9,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.28.1',
+    date: '2026-10-26',
+    changes: ['Discord: a friendlier reply after reporting a bug, saying to DM suy directly if it\u2019s urgent.'],
+  },
+  {
     version: '0.28.0',
     date: '2026-10-26',
     changes: [
