@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.26.2',
+    date: '2026-10-26',
+    changes: [
+      'Mana is read more reliably from Warcraft Logs, for the mana-over-the-fight chart on a healer\u2019s Overview (it says why when there\u2019s none). Stored fights are read again to pick it up.',
+      'Casts per minute lists everything cast, so healers see their heals and totems, not only damage spells.',
+    ],
+  },
+  {
     version: '0.26.1',
     date: '2026-10-26',
     changes: [

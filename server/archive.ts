@@ -323,7 +323,10 @@ export async function checkRaid(code: string, host?: string): Promise<RaidCheck>
 /** "Spell names: 0 from the spell list, 214 from tables · mana on 0 of 1,820 casts (cast fields: …)". */
 function receivedLine(r: NonNullable<NonNullable<import('./pack.js').FightPack['full']>['received']>): string {
   const n = (v: number) => v.toLocaleString('en-US');
-  return `Spell names: ${n(r.spellList)} from the spell list, ${n(r.tableNames)} from tables · mana on ${n(r.castsWithMana)} of ${n(r.casts)} casts${r.castsWithMana ? '' : ` (cast fields: ${r.castFields.join(', ') || 'none'})`}`;
+  const why = r.castsWithMana ? '' : r.castsWithResources === undefined
+    ? ` (cast fields: ${r.castFields.join(', ') || 'none'})`
+    : r.castsWithResources ? ` (${n(r.castsWithResources)} casts had resources, e.g. ${r.resourceSample})` : ' (every cast\u2019s resources were empty: the log was probably recorded without Advanced Combat Logging)';
+  return `Spell names: ${n(r.spellList)} from the spell list, ${n(r.tableNames)} from tables · mana on ${n(r.castsWithMana)} of ${n(r.casts)} casts${why}`;
 }
 
 /** Read a raid again from the start: its stored fights and benchmarks go, and it's queued like a new raid. */

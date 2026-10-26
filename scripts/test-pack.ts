@@ -6,7 +6,7 @@ import { dashboardFromPack } from '../server/dashboard';
 import { raidDigest } from '../server/discord/digest';
 import { personalPage, raidSummary } from '../server/discord/pages';
 import { overallRaid } from '../server/overall';
-import { getMeta, getPack, readPack, reportRegion, storedDigests, trimPack } from '../server/pack';
+import { getMeta, getPack, manaOf, readPack, reportRegion, storedDigests, trimPack } from '../server/pack';
 import { rowsFromPack, snapshotFromPack } from '../server/pipeline';
 import { checkRaid, deleteRaid, registerRaid } from '../server/archive';
 import { buildFindings, buildStrengths, healingFeedback } from '../server/analysis';
@@ -429,6 +429,11 @@ assert.match((await checkRaid(CODE)).kills[0].problem!, /events unavailable/);
 eventsDown = false;
 packs.delete(`${CODE}:3`);
 await getPack(HOST, CODE, fightRef, 'full');
+
+// Mana however it's written: numbers as text, and only the mana entry (type 0)
+assert.deepEqual(manaOf([{ type: 1, amount: 50, max: 100 }, { type: '0', amount: '6000', max: '12000' }]), { amount: 6000, max: 12000 });
+assert.equal(manaOf([{ type: 3, amount: 100, max: 100 }]), null, 'energy isn\u2019t mana');
+assert.equal(manaOf([]), null);
 
 // Warcraft Logs' spell list comes back empty: names (and icons) come from its tables instead
 noSpellList = true;

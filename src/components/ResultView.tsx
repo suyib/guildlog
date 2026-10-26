@@ -295,7 +295,14 @@ function HealingOverview({ result, h }: { result: AnalysisResult; h: Healing }) 
 
       <FeedbackPanels work={feedback.work} good={feedback.good} />
 
-      {me.mana && <ManaPanel mana={me.mana} />}
+      {me.mana ? <ManaPanel mana={me.mana} /> : (
+        <section className="panel">
+          <h2 className="panel-title">Mana over the fight</h2>
+          <p className="muted small">
+            {me.partial ? 'Shows once this fight has been read in full.' : 'Warcraft Logs didn\u2019t send mana for this fight. An officer can see why with Check stored data on the raid\u2019s Past raids card.'}
+          </p>
+        </section>
+      )}
 
       <GuildPanel result={result} value={h.hps} />
 
@@ -371,7 +378,10 @@ function Rotation({ result, all }: { result: AnalysisResult; all: Row[] }) {
   const me = result.player;
   const same = all.filter((p) => p.sameClass);
   const icons = iconMap(all);
-  const castNames = Array.from(new Set(same.flatMap((p) => p.s.abilities.filter((a) => !a.isPet && a.casts > 0).slice(0, 6).map((a) => a.name)))).slice(0, 8);
+  // Everything cast (healing spells and totems too, not only damage), most cast first; auto attacks left out
+  const castTotals = new Map<string, number>();
+  for (const p of same) for (const [name, n] of Object.entries(p.s.castCounts)) if (!/^(Auto Shot|Shoot|Melee|Auto Attack|Attack)$/.test(name)) castTotals.set(name, (castTotals.get(name) ?? 0) + n);
+  const castNames = [...castTotals].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name]) => name);
   const cdNames = Array.from(new Set(same.flatMap((p) => p.s.cooldowns.map((c) => c.name))));
 
   return (
