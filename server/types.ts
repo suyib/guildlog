@@ -475,11 +475,12 @@ export interface HomeData {
   schedule: { start: string; seconds: number }[];
   /** Everyone in a raid in the last 8 weeks, most raids first. */
   roster: { name: string; className: string; specName: string; role: 'tank' | 'healer' | 'dps' | null; raids: number; of: number; itemLevel: number | null }[];
-  /** Everyone's best parse on each boss of the newest raid, last 8 weeks (healers by healing). */
-  rankings: GuildRankings | null;
+  /** Everyone's best parse on each boss of each raid, last 8 weeks (healers by healing), in the order of zones. */
+  rankings: GuildRankings[];
 }
 
 export interface GuildRankings {
+  zoneId: number;
   zone: string;
   bosses: { id: number; name: string }[];
   players: { name: string; className: string; role: 'tank' | 'healer' | 'dps'; best: (number | null)[]; avg: number | null }[];

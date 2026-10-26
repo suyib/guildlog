@@ -79,7 +79,11 @@ async function zonesOf(raids: SavedRaid[]): Promise<Map<string, { id: number; na
   return new Map(rows.filter((r) => r.zone?.id).map((r) => [r.report_code, r.zone!]));
 }
 
-/** Progress in each raid, newest raid first: every boss with its first kill, number of kills and fastest kill. */
+/**
+ * Progress in each raid: every boss with its first kill, number of kills and fastest kill. Biggest
+ * raid first (most bosses), then the most recently raided, so the order doesn't change week to week
+ * when several raids are current.
+ */
 export async function zoneProgress(raids: SavedRaid[]): Promise<ZoneProgress[]> {
   const dated = raids.filter((r) => r.startTime && r.card).sort((a, b) => a.startTime!.localeCompare(b.startTime!));
   const zoneOf = await zonesOf(dated);
@@ -100,7 +104,7 @@ export async function zoneProgress(raids: SavedRaid[]): Promise<ZoneProgress[]> 
     zones.set(z.id, zone);
   }
   return [...zones.values()]
-    .sort((a, b) => b.last.localeCompare(a.last))
+    .sort((a, b) => b.bosses.length - a.bosses.length || b.last.localeCompare(a.last))
     .map(({ last, ...z }) => ({ ...z, killed: z.bosses.filter((b) => b.kills).length, total: z.bosses.length }));
 }
 
@@ -121,33 +125,38 @@ export function roster(raids: SavedRaid[]): HomeData['roster'] {
 }
 
 /**
- * Everyone's best parse on each boss of the newest raid in the last 8 weeks (healers by healing),
- * from kill_stats, plus each raider's latest item level for the roster.
+ * Everyone's best parse on each boss of each raid in the last 8 weeks (healers by healing), from
+ * kill_stats in one read, plus each raider's latest item level for the roster.
  */
-export async function rankings(zone: ZoneProgress | undefined, people: HomeData['roster']): Promise<GuildRankings | null> {
-  if (!dbEnabled() || !zone?.bosses.length) return null;
+export async function rankings(zones: ZoneProgress[], people: HomeData['roster']): Promise<GuildRankings[]> {
+  const want = zones.filter((z) => z.bosses.length).slice(0, 4);
+  if (!dbEnabled() || !want.length) return [];
   const since = new Date(Date.now() - 8 * WEEK).toISOString();
-  const ids = zone.bosses.map((b) => Math.trunc(b.encounterId)).join(',');
+  const ids = want.flatMap((z) => z.bosses.map((b) => Math.trunc(b.encounterId))).join(',');
   const rows: { name: string; class_name: string; role: string | null; healer: boolean; encounter_id: number; parse: number | null; hps_parse: number | null; item_level: number | null }[] =
-    (await rest(`kill_stats?encounter_id=in.(${ids})&start_time=gte.${q(since)}&select=name,class_name,role,healer,encounter_id,parse,hps_parse,item_level&order=start_time.asc&limit=5000`).catch(() => [])) ?? [];
-  if (!rows.length) return null;
-  const col = new Map(zone.bosses.map((b, i) => [b.encounterId, i]));
-  const players = new Map<string, GuildRankings['players'][number]>();
+    (await rest(`kill_stats?encounter_id=in.(${ids})&start_time=gte.${q(since)}&select=name,class_name,role,healer,encounter_id,parse,hps_parse,item_level&order=start_time.asc&limit=10000`).catch(() => [])) ?? [];
   const ilvl = new Map<string, number>();
-  for (const r of rows) {
-    const role = r.healer || r.role === 'healer' ? 'healer' : r.role === 'tank' ? 'tank' : 'dps';
-    const p = players.get(r.name) ?? { name: r.name, className: r.class_name, role, best: zone.bosses.map(() => null), avg: null };
-    p.role = role;
-    const v = role === 'healer' ? r.hps_parse : r.parse;
-    const i = col.get(r.encounter_id)!;
-    if (v !== null && v !== undefined) p.best[i] = Math.max(p.best[i] ?? 0, Number(v));
-    if (r.item_level) ilvl.set(r.name, Number(r.item_level));
-    players.set(r.name, p);
-  }
+  for (const r of rows) if (r.item_level) ilvl.set(r.name, Number(r.item_level));
   for (const p of people) p.itemLevel = ilvl.get(p.name) ?? null;
-  const out = [...players.values()].map((p) => {
-    const got = p.best.filter((v): v is number => v !== null);
-    return { ...p, avg: got.length ? Math.round((got.reduce((t, v) => t + v, 0) / got.length) * 10) / 10 : null };
-  });
-  return { zone: zone.name, bosses: zone.bosses.map((b) => ({ id: b.encounterId, name: b.name })), players: out.sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1)) };
+  return want
+    .map((zone) => {
+      const col = new Map(zone.bosses.map((b, i) => [b.encounterId, i]));
+      const players = new Map<string, GuildRankings['players'][number]>();
+      for (const r of rows) {
+        const i = col.get(r.encounter_id);
+        if (i === undefined) continue;
+        const role = r.healer || r.role === 'healer' ? 'healer' : r.role === 'tank' ? 'tank' : 'dps';
+        const p = players.get(r.name) ?? { name: r.name, className: r.class_name, role, best: zone.bosses.map(() => null), avg: null };
+        p.role = role;
+        const v = role === 'healer' ? r.hps_parse : r.parse;
+        if (v !== null && v !== undefined) p.best[i] = Math.max(p.best[i] ?? 0, Number(v));
+        players.set(r.name, p);
+      }
+      const list = [...players.values()].map((p) => {
+        const got = p.best.filter((v): v is number => v !== null);
+        return { ...p, avg: got.length ? Math.round((got.reduce((t, v) => t + v, 0) / got.length) * 10) / 10 : null };
+      });
+      return { zoneId: zone.id, zone: zone.name, bosses: zone.bosses.map((b) => ({ id: b.encounterId, name: b.name })), players: list.sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1)) };
+    })
+    .filter((r) => r.players.length);
 }

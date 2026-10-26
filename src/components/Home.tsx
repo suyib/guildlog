@@ -1,7 +1,7 @@
 // The home page around "Analyze a log", as a guild page like Warcraft Logs': who the guild is,
 // progress and ranks, best parses, the roster by role, the raid schedule and recent reports.
 import { useEffect, useState } from 'react';
-import type { GuildRankings, HomeData, RankSet, SavedRaid, WclRank, ZoneProgress } from '../../server/types';
+import type { GuildRankings, HomeData, SavedRaid, WclRank, ZoneProgress } from '../../server/types';
 import { loadHome } from '../api';
 import { mmss, n0 } from '../format';
 import Glyph from './Glyph';
@@ -93,13 +93,13 @@ export function HomeExtras() {
       <div className="grid-2-1">
         <div className="home-col">
           {d.zones.length > 0 && <Progress zones={d.zones} wclUrl={d.wcl?.url ?? null} />}
-          {d.rankings && d.rankings.players.length > 0 && <Rankings r={d.rankings} />}
+          {d.rankings.length > 0 && <Rankings list={d.rankings} />}
           {d.roster.length > 0 && <Composition roster={d.roster} />}
           {d.recentAnalyses.length > 0 && <RecentAnalyses list={d.recentAnalyses} />}
         </div>
 
         <aside className="home-col">
-          {d.zones[0]?.ranks && <RankCard zone={d.zones[0]} url={d.wcl?.url ?? null} />}
+          {d.zones.some((z) => z.ranks) && <RankCard zones={d.zones.filter((z) => z.ranks)} url={d.wcl?.url ?? null} />}
           {d.schedule.length > 0 && <Schedule raids={d.schedule} />}
 
           <section className="panel">
@@ -189,8 +189,7 @@ const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 
 /** Warcraft Logs' rank colors, in the site's parse colors. */
 const RANK_CSS: Record<string, string> = { common: 'parse-gray', uncommon: 'parse-green', rare: 'parse-blue', epic: 'parse-purple', legendary: 'parse-orange', astounding: 'parse-pink', artifact: 'parse-pink' };
 
-/** Progress in each raid: every boss with its first kill, kills and fastest kill, and the guild's
- * ranks for older raids (the newest raid's are on the rank card beside it). */
+/** Progress in each raid: every boss with its first kill, kills and fastest kill (ranks are on the rank card). */
 function Progress({ zones, wclUrl }: { zones: ZoneProgress[]; wclUrl: string | null }) {
   return (
     <section className="panel">
@@ -199,18 +198,12 @@ function Progress({ zones, wclUrl }: { zones: ZoneProgress[]; wclUrl: string | n
         {wclUrl && <a href={wclUrl} target="_blank" rel="noreferrer" className="small">Rankings on Warcraft Logs</a>}
       </div>
       <div className="zones">
-        {zones.map((z, i) => (
+        {zones.map((z) => (
           <div key={z.id} className="zone">
             <div className="zone-head">
               <strong>{z.name}</strong>
               <span className={`zone-count${z.killed === z.total ? ' full' : ''}`}>{z.killed}/{z.total}</span>
             </div>
-            {i > 0 && z.ranks && (z.ranks.progress || z.ranks.speed) && (
-              <div className="zone-ranks">
-                {z.ranks.progress && <Ranks label="Progress" set={z.ranks.progress} url={wclUrl} />}
-                {z.ranks.speed && <Ranks label="Speed" set={z.ranks.speed} url={wclUrl} />}
-              </div>
-            )}
             <table className="grid">
               <thead><tr><th>Boss</th><th>First kill</th><th className="r">Kills</th><th className="r">Fastest</th></tr></thead>
               <tbody>
@@ -231,12 +224,6 @@ function Progress({ zones, wclUrl }: { zones: ZoneProgress[]; wclUrl: string | n
       </div>
     </section>
   );
-}
-
-function Ranks({ label, set, url }: { label: string; set: RankSet; url: string | null }) {
-  const one = (name: string, r: WclRank | null) => (r ? <span key={name}>{name} <strong className={RANK_CSS[r.color ?? ''] ?? ''}>#{n0(r.number)}</strong></span> : null);
-  const body = <>{label}: {one('World', set.world)}{one('Region', set.region)}{one('Realm', set.server)}</>;
-  return url ? <a href={url} target="_blank" rel="noreferrer" className="rank-line">{body}</a> : <span className="rank-line">{body}</span>;
 }
 
 const ROLES = [['tank', 'Tanks'], ['healer', 'Healers'], ['dps', 'Damage']] as const;
@@ -274,18 +261,36 @@ function Composition({ roster }: { roster: HomeData['roster'] }) {
   );
 }
 
-/** Everyone's best parse on each boss of the newest raid, by role, like Warcraft Logs' Rankings tab. */
-function Rankings({ r }: { r: GuildRankings }) {
+/** Which raid to show first: the one with the most bosses (the most recent one on a tie). */
+const mainZone = <T,>(list: T[], bosses: (x: T) => number) => list.reduce((best, x) => (bosses(x) > bosses(best) ? x : best), list[0]);
+
+/** A raid picker, when there's more than one raid. */
+function ZonePicker({ zones, value, onChange }: { zones: { id: number; name: string }[]; value: number; onChange: (id: number) => void }) {
+  if (zones.length < 2) return null;
+  return (
+    <select value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label="Raid">
+      {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+    </select>
+  );
+}
+
+/** Everyone's best parse on each boss of a raid, by role, like Warcraft Logs' Rankings tab. */
+function Rankings({ list }: { list: GuildRankings[] }) {
+  const [zoneId, setZoneId] = useState(() => mainZone(list, (r) => r.bosses.length).zoneId);
   const [role, setRole] = useState<'dps' | 'healer' | 'tank'>('dps');
+  const r = list.find((x) => x.zoneId === zoneId) ?? list[0];
   const rows = r.players.filter((p) => p.role === role);
   return (
     <section className="panel">
       <div className="panel-head">
-        <h2 className="panel-title">Best parses: {r.zone}</h2>
-        <div className="seg" role="group" aria-label="Role">
-          {(['dps', 'healer', 'tank'] as const).map((x) => (
-            <button key={x} type="button" className={x === role ? 'on' : ''} onClick={() => setRole(x)}>{x === 'dps' ? 'Damage' : x === 'healer' ? 'Healers' : 'Tanks'}</button>
-          ))}
+        <h2 className="panel-title">Best parses{list.length < 2 ? `: ${r.zone}` : ''}</h2>
+        <div className="row wrap-center">
+          <ZonePicker zones={list.map((x) => ({ id: x.zoneId, name: x.zone }))} value={r.zoneId} onChange={setZoneId} />
+          <div className="seg" role="group" aria-label="Role">
+            {(['dps', 'healer', 'tank'] as const).map((x) => (
+              <button key={x} type="button" className={x === role ? 'on' : ''} aria-pressed={x === role} onClick={() => setRole(x)}>{x === 'dps' ? 'Damage' : x === 'healer' ? 'Healers' : 'Tanks'}</button>
+            ))}
+          </div>
         </div>
       </div>
       {rows.length === 0 ? (
@@ -313,19 +318,23 @@ function Rankings({ r }: { r: GuildRankings }) {
   );
 }
 
-/** The newest raid's ranks, world rank big, with Progress and Speed tabs (links to Warcraft Logs). */
-function RankCard({ zone, url }: { zone: ZoneProgress; url: string | null }) {
-  const [kind, setKind] = useState<'progress' | 'speed'>(zone.ranks?.progress ? 'progress' : 'speed');
+/** A raid's ranks, world rank big, with Progress and Speed tabs (links to Warcraft Logs). */
+function RankCard({ zones, url }: { zones: ZoneProgress[]; url: string | null }) {
+  const [zoneId, setZoneId] = useState(() => mainZone(zones, (z) => z.total).id);
+  const zone = zones.find((z) => z.id === zoneId) ?? zones[0];
+  const [pick, setKind] = useState<'progress' | 'speed'>('progress');
+  const kind = zone.ranks?.[pick] ? pick : pick === 'progress' ? 'speed' : 'progress';
   const set = zone.ranks?.[kind];
   const num = (r: WclRank | null | undefined) => (r ? <strong className={RANK_CSS[r.color ?? ''] ?? ''}>{n0(r.number)}</strong> : <strong className="muted">–</strong>);
   return (
     <section className="panel">
       <div className="panel-head">
-        <h2 className="panel-title">{zone.name} <span className="muted">{zone.killed}/{zone.total}</span></h2>
-        <div className="seg" role="group" aria-label="Rank">
-          <button type="button" className={kind === 'progress' ? 'on' : ''} onClick={() => setKind('progress')}>Progress</button>
-          <button type="button" className={kind === 'speed' ? 'on' : ''} onClick={() => setKind('speed')}>Speed</button>
-        </div>
+        <h2 className="panel-title">{zones.length < 2 ? <>{zone.name} </> : 'Ranks '}<span className="muted">{zone.killed}/{zone.total}</span></h2>
+        <ZonePicker zones={zones} value={zone.id} onChange={setZoneId} />
+      </div>
+      <div className="seg rank-kind" role="group" aria-label="Rank">
+        <button type="button" className={kind === 'progress' ? 'on' : ''} aria-pressed={kind === 'progress'} onClick={() => setKind('progress')}>Progress</button>
+        <button type="button" className={kind === 'speed' ? 'on' : ''} aria-pressed={kind === 'speed'} onClick={() => setKind('speed')}>Speed</button>
       </div>
       <a href={url ?? undefined} target="_blank" rel="noreferrer" className="rank-card">
         <span className="rank-world"><span className="muted small">World</span>{num(set?.world)}</span>

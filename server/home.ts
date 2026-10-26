@@ -54,7 +54,7 @@ export async function homeData(session: Session | null): Promise<HomeData> {
   const { guild: wcl, ranks } = await wclGuild(zones.map((z) => z.id)).catch(() => ({ guild: null, ranks: new Map() }));
   for (const z of zones) z.ranks = ranks.get(z.id) ?? null;
   const people = roster(list.raids);
-  const ranked = await rankings(zones[0], people).catch(() => null);
+  const ranked = await rankings(zones, people).catch(() => []);
   return {
     guild,
     nextRaid: next,

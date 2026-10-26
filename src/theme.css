@@ -358,9 +358,6 @@ button.secondary:hover:not(:disabled) { background: rgba(0, 124, 173, 0.18); }
 .zone { display: grid; gap: 8px; align-content: start; }
 .zone-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .zone-count { font: 700 15px var(--font-mono); }
-.zone-ranks { display: grid; gap: 2px; font-size: 12px; color: var(--ink-2); }
-.rank-line { display: flex; flex-wrap: wrap; gap: 4px 12px; color: inherit; }
-.rank-line:hover { text-decoration: none; color: var(--ink); }
 .roster { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .roster li { display: grid; grid-template-columns: 18px minmax(0, 1fr) 32px 32px; align-items: center; gap: 8px; font-size: 13px; }
 .composition { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 20px; }
@@ -370,6 +367,7 @@ button.secondary:hover:not(:disabled) { background: rgba(0, 124, 173, 0.18); }
 .rank-card:hover { text-decoration: none; }
 .rank-card > span { display: flex; flex-direction: column; padding: 8px; border-radius: 12px; background: var(--raised); }
 .rank-world { grid-column: 1 / -1; }
+.rank-kind { align-self: flex-start; }
 .rank-world strong { font: 800 36px var(--font-mono); }
 .rank-sub strong { font: 700 20px var(--font-mono); }
 .roster-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }

@@ -9,6 +9,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.31.1',
+    date: '2026-10-26',
+    changes: [
+      'With more than one current raid, the home page\u2019s rank card and Best parses each have a raid picker, and start on the raid with the most bosses instead of whichever was raided last. Progress lists the biggest raid first, then the most recently raided.',
+    ],
+  },
+  {
     version: '0.31.0',
     date: '2026-10-26',
     changes: [
