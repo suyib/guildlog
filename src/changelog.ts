@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.32.1',
+    date: '2026-10-26',
+    changes: [
+      'Home page: Best parses, Composition and Recently analyzed now use the full width of the page.',
+      'Progress lists each raid as its own section, one under another; the biggest raid starts open and the others open with a click.',
+    ],
+  },
+  {
     version: '0.32.0',
     date: '2026-10-26',
     changes: [

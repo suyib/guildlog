@@ -82,8 +82,8 @@ export function HomeHero() {
   );
 }
 
-/** Below "Analyze a log", laid out like a Warcraft Logs guild page: the main column has progress,
- * best parses and the roster by role; the side column has ranks, the schedule and recent reports. */
+/** Below "Analyze a log", laid out like a Warcraft Logs guild page: progress beside the ranks,
+ * schedule and recent reports, then best parses, the roster by role and recent analyses full width. */
 export function HomeExtras() {
   const d = useHome();
   if (!d) return null;
@@ -102,9 +102,6 @@ export function HomeExtras() {
       <div className="grid-2-1">
         <div className="home-col">
           {d.zones.length > 0 && <Progress zones={d.zones} wcl={d.wcl} />}
-          {d.rankings.length > 0 && <Rankings list={d.rankings} />}
-          {d.roster.length > 0 && <Composition roster={d.roster} />}
-          {d.recentAnalyses.length > 0 && <RecentAnalyses list={d.recentAnalyses} />}
         </div>
 
         <aside className="home-col">
@@ -154,6 +151,10 @@ export function HomeExtras() {
           )}
         </aside>
       </div>
+
+      {d.rankings.length > 0 && <Rankings list={d.rankings} />}
+      {d.roster.length > 0 && <Composition roster={d.roster} />}
+      {d.recentAnalyses.length > 0 && <RecentAnalyses list={d.recentAnalyses} />}
     </>
   );
 }
@@ -198,9 +199,11 @@ const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 
 /** Warcraft Logs' rank colors, in the site's parse colors. */
 const RANK_CSS: Record<string, string> = { common: 'parse-gray', uncommon: 'parse-green', rare: 'parse-blue', epic: 'parse-purple', legendary: 'parse-orange', astounding: 'parse-pink', artifact: 'parse-pink' };
 
-/** Progress in each raid: every boss with its first kill, kills and fastest kill (ranks are on the rank card). */
+/** Progress in each raid, one accordion per raid (the biggest open): every boss with its first kill,
+ * kills and fastest kill (ranks are on the rank card). */
 function Progress({ zones, wcl }: { zones: ZoneProgress[]; wcl: HomeData['wcl'] }) {
   const [open, setOpen] = useState<string | null>(null);
+  const main = mainZone(zones, (z) => z.total).id;
   return (
     <section className="panel">
       <div className="panel-head">
@@ -208,44 +211,46 @@ function Progress({ zones, wcl }: { zones: ZoneProgress[]; wcl: HomeData['wcl'] 
         {wcl && <a href={wcl.url} target="_blank" rel="noreferrer" className="small">Rankings on Warcraft Logs</a>}
       </div>
       <p className="muted small">Click a boss for its guild rankings: first kills and fastest kills.</p>
-      <div className="zones">
+      <div className="raid-feedback">
         {zones.map((z) => (
-          <div key={z.id} className="zone">
-            <div className="zone-head">
-              <strong>{z.name}</strong>
+          <details key={z.id} className="accordion" open={z.id === main}>
+            <summary>
+              {z.name}
               <span className={`zone-count${z.killed === z.total ? ' full' : ''}`}>{z.killed}/{z.total}</span>
-            </div>
-            <table className="grid">
-              <thead><tr><th>Boss</th><th>First kill</th><th className="r">Kills</th><th className="r">Fastest</th></tr></thead>
-              <tbody>
-                {z.bosses.map((b) => {
-                  const key = `${z.id}-${b.encounterId}`;
-                  const isOpen = open === key;
-                  return (
-                    <Fragment key={b.encounterId}>
-                      <tr>
-                        <td>
-                          <button type="button" className={`link-button boss-toggle${b.kills ? '' : ' muted'}`} aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : key)}>
-                            {b.name}
-                          </button>
-                        </td>
-                        <td className="muted">{b.firstKill ? day(b.firstKill) : 'Not yet'}</td>
-                        <td className="r">{b.kills || '–'}</td>
-                        <td className="r">
-                          {b.best ? <a href={`/?log=${encodeURIComponent(`https://${b.best.host}/reports/${b.best.code}?fight=${b.best.fightId}`)}`}>{mmss(b.best.seconds)}</a> : '–'}
-                        </td>
-                      </tr>
-                      {isOpen && (
-                        <tr className="boss-ranks-row">
-                          <td colSpan={4}><BossRankings host={z.host} zoneId={z.id} encounterId={b.encounterId} wcl={wcl} /></td>
+            </summary>
+            <div className="scroll">
+              <table className="grid zone-table">
+                <thead><tr><th>Boss</th><th>First kill</th><th className="r">Kills</th><th className="r">Fastest</th></tr></thead>
+                <tbody>
+                  {z.bosses.map((b) => {
+                    const key = `${z.id}-${b.encounterId}`;
+                    const isOpen = open === key;
+                    return (
+                      <Fragment key={b.encounterId}>
+                        <tr>
+                          <td>
+                            <button type="button" className={`link-button boss-toggle${b.kills ? '' : ' muted'}`} aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : key)}>
+                              {b.name}
+                            </button>
+                          </td>
+                          <td className="muted">{b.firstKill ? day(b.firstKill) : 'Not yet'}</td>
+                          <td className="r">{b.kills || '–'}</td>
+                          <td className="r">
+                            {b.best ? <a href={`/?log=${encodeURIComponent(`https://${b.best.host}/reports/${b.best.code}?fight=${b.best.fightId}`)}`}>{mmss(b.best.seconds)}</a> : '–'}
+                          </td>
                         </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        {isOpen && (
+                          <tr className="boss-ranks-row">
+                            <td colSpan={4}><BossRankings host={z.host} zoneId={z.id} encounterId={b.encounterId} wcl={wcl} /></td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </details>
         ))}
       </div>
     </section>
