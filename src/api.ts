@@ -22,13 +22,25 @@ import type {
   SnapshotTarget,
 } from '../server/types';
 
+/** Viewing a shared analysis without signing in: nothing else is asked for, and nothing reloads the page. */
+let publicView = false;
+export const setPublicView = (on: boolean) => {
+  publicView = on;
+};
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } });
   if (res.status === 401) {
-    window.location.reload(); // session expired: middleware shows the password page
+    if (publicView) throw new Error('Sign in with Discord to do this.');
+    window.location.reload(); // session expired: middleware shows the sign-in page
     throw new Error('Signed out');
   }
   const body = await res.json().catch(() => ({}));
+  // Left the guild's Discord since signing in: signed out, with a page saying why
+  if (res.status === 403 && body.notMember) {
+    window.location.href = '/api/login?left=1';
+    throw new Error(body.error);
+  }
   if (res.status === 504) throw new Error('Warcraft Logs took too long to respond. Try again in a moment.');
   if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
   return body as T;
@@ -64,7 +76,7 @@ export interface Progress { label: string; state: 'loading' | 'done' | 'failed';
 const portraitCache = new Map<string, Promise<string | null>>();
 /** Character portrait URL from the Blizzard API (null when not set up or not found). */
 export function loadPortrait(p: { host: string; reportCode: string; name: string; server?: string | null }): Promise<string | null> {
-  if (!p.server) return Promise.resolve(null);
+  if (!p.server || publicView) return Promise.resolve(null);
   const key = `${p.host}|${p.reportCode}|${p.server}|${p.name}`;
   if (!portraitCache.has(key)) {
     const q = new URLSearchParams({ host: p.host, code: p.reportCode, name: p.name, server: p.server });

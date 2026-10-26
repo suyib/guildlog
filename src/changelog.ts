@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.26.0',
+    date: '2026-10-26',
+    changes: [
+      'Shared analysis links open for anyone, read-only, with a Sign in with Discord button. Everything else (analyzing, Past raids, History) stays for guild members.',
+      'Someone who leaves the guild\u2019s Discord loses access within 10 minutes, with a page explaining why, instead of keeping it until their sign-in runs out.',
+    ],
+  },
+  {
     version: '0.25.3',
     date: '2026-10-26',
     changes: ['Discord: /raidstart and /raidend post in the thread (or channel) they\u2019re typed in, so each raid can have its own thread.'],

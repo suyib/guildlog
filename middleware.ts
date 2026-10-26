@@ -6,13 +6,17 @@ export const config = {
   matcher: ['/((?!api/login|favicon.ico|logo.png).*)'],
 };
 
-// Open without the password: the Terms and Privacy pages (Discord links to them), the built
-// app files those pages need, and the bot endpoints below. The app bundle holds no secrets; every API route stays protected.
+// Open without signing in: the Terms and Privacy pages (Discord links to them), shared analysis
+// links, the built app files those pages need, and the bot endpoints below. The app bundle holds no secrets; every API route stays protected.
 // Discord and the reminder scheduler can't enter a password, so these endpoints check their own
 // credentials instead (Discord's request signature, or the CRON_SECRET key).
 const BOT_ENDPOINTS = ['/api/discord'];
-const isPublic = (path: string) =>
-  path === '/terms' || path === '/privacy' || path.startsWith('/assets/') || BOT_ENDPOINTS.includes(path);
+// Shared analysis links (/a/<id>) open for anyone with the link, read-only: the page, and that one
+// analysis from /api/history?id=<id>. Analyses use random IDs, so they can't be guessed or listed.
+const ANALYSIS_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isPublic = (path: string, params: URLSearchParams) =>
+  path === '/terms' || path === '/privacy' || path.startsWith('/assets/') || BOT_ENDPOINTS.includes(path) ||
+  /^\/a\/[0-9a-f-]{36}\/?$/i.test(path) || (path === '/api/history' && ANALYSIS_ID.test(params.get('id') ?? ''));
 
 const COOKIE_NAME = 'gl_session';
 
@@ -100,7 +104,7 @@ ${error ? '<div class="err">Wrong password, try again.</div>' : ''}
 
 export default async function middleware(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  if (isPublic(url.pathname)) return new Response(null, { headers: { 'x-middleware-next': '1' } });
+  if (isPublic(url.pathname, url.searchParams)) return new Response(null, { headers: { 'x-middleware-next': '1' } });
   let ok = false;
   try {
     ok = await hasValidSession(request, process.env.SESSION_SECRET);

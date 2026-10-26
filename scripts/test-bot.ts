@@ -276,9 +276,49 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
   process.env.DISCORD_CLIENT_SECRET = 'x';
   process.env.DISCORD_APP_ID = 'app';
   assert.ok((await (await at()).text()).includes('Sign in with Discord'));
+  // Shared analysis links open for anyone; nothing else does
+  const open = (path: string) => mw(new Request(`https://guildlog.uk${path}`));
+  const id = '0b7e5a52-3c1d-4b8e-9f00-1234567890ab';
+  assert.equal((await open(`/a/${id}`)).headers.get('x-middleware-next'), '1', 'a shared link opens');
+  assert.equal((await open(`/api/history?id=${id}`)).headers.get('x-middleware-next'), '1', 'and its analysis loads');
+  assert.equal((await open('/api/history')).status, 401, 'the list of analyses stays private');
+  assert.equal((await open('/api/history?id=nope')).status, 401);
+  assert.equal((await open('/a/not-an-id')).status, 401);
+  assert.equal((await open('/api/snapshot')).status, 401, 'no analyzing without signing in');
+  assert.equal((await open('/#/raids')).status, 401);
   delete process.env.DISCORD_CLIENT_SECRET;
   delete process.env.DISCORD_GUILD_ID;
   delete process.env.SESSION_SECRET;
+}
+
+// Someone who leaves the guild's Discord is refused, even with a sign-in that hasn't expired
+{
+  const { requireSession, sessionCookie: mk } = await import('../server/auth');
+  process.env.SESSION_SECRET = 's';
+  process.env.DISCORD_GUILD_ID = 'G1';
+  process.env.DISCORD_BOT_TOKEN = 'bot';
+  const realFetch = globalThis.fetch;
+  const members = new Set(['1']);
+  let discordDown = false;
+  globalThis.fetch = (async (url: string) => {
+    const u = String(url);
+    if (u.includes('/members/')) {
+      if (discordDown) return new Response('oops', { status: 500 });
+      return members.has(u.split('/members/')[1]) ? new Response('{}', { status: 200 }) : new Response('{"message":"Unknown Member"}', { status: 404 });
+    }
+    return new Response('[]', { status: 200 });
+  }) as typeof fetch;
+  const req = async (uid: string) => new Request('https://guildlog.uk/api/x', { headers: { cookie: (await mk('s', { kind: 'discord', uid, name: 'X', gid: 'G1', officer: false })).split(';')[0] } });
+  assert.equal(await requireSession(await req('1')), null, 'a member gets in');
+  const refused = (await requireSession(await req('2')))!;
+  assert.equal(refused.status, 403);
+  assert.equal((await refused.json()).notMember, true, 'the page can send them to the explanation');
+  discordDown = true;
+  assert.equal(await requireSession(await req('3')), null, 'Discord unreachable: people carry on');
+  globalThis.fetch = realFetch;
+  delete process.env.SESSION_SECRET;
+  delete process.env.DISCORD_GUILD_ID;
+  delete process.env.DISCORD_BOT_TOKEN;
 }
 
 // Admin: only the Discord IDs in SITE_ADMIN_IDS, and never the guild password

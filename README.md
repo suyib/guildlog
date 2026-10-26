@@ -41,6 +41,8 @@ People sign in with their Discord account; only members of the guild's server (`
 
 Sessions last 7 days (30 with the password).
 
+**Who can see what.** Guild members (signed in with Discord, in the guild's server) can use everything. Anyone else is refused at sign-in with a page explaining why. Shared analysis links (`/a/<id>`) open for anyone with the link, read-only: guests see the analysis and its comparisons but can't change it or reach anything else. Signed-in members can change a shared analysis's comparison, which saves a new one. Membership is checked again every 10 minutes, so someone who leaves the server loses access.
+
 **Ranks.** Admin (only `SITE_ADMIN_IDS`), Guild master (the Discord server owner by default), Officer (Administrator, Manage Server or `DISCORD_ADMIN_ROLE_ID` on Discord by default) and Raider (everyone else). A rank set on the Admin page wins over Discord, and the bot's officer-only commands use the same ranks. Each rank can edit people below it and give them ranks below its own; admins can edit everyone. Run `supabase/schema.sql` again after updating (it adds the rank columns).
 
 **Admin page.** Officers and above see it. Set `SITE_ADMIN_IDS` to your Discord user ID (Discord → Settings → Advanced → Developer Mode, then right-click your name → Copy User ID; comma-separate several). Signed in with Discord, you'll see **Admin** in the menu: everyone who has signed in or used the bot, their server, officer or member, when they first connected (site and bot), when they last signed in, their claimed characters, and the sign-in log (90 days). Needs the `site_users` and `site_signins` tables: run `supabase/schema.sql` again. Sign-ins, failed sign-ins from non-members and officer actions are posted to the activity log channel.

@@ -117,8 +117,32 @@ export async function requireSession(req: Request): Promise<Response | null> {
   if (session.kind === 'discord' && session.uid) {
     const { isBlocked } = await import('./ranks.js');
     if (await isBlocked(session.uid)) return json({ error: 'Your access to Guild Logs has been turned off by an officer.' }, 403);
+    // Left the guild's Discord since signing in: refused too (checked every 10 minutes)
+    if (!(await stillMember(session.uid, session.gid))) return json({ error: 'You\u2019re no longer in the guild\u2019s Discord server.', notMember: true }, 403);
   }
   return null;
+}
+
+const memberCache = new Map<string, { member: boolean; at: number }>();
+
+/**
+ * Still in the guild's Discord server. Only a clear "not a member" answer from Discord counts:
+ * if Discord can't be reached, people already signed in carry on.
+ */
+export async function stillMember(uid: string, gid?: string): Promise<boolean> {
+  const { discord, env } = await import('./discord/api.js');
+  const guild = gid || env.guildId();
+  if (!guild || !process.env.DISCORD_BOT_TOKEN) return true;
+  const hit = memberCache.get(uid);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.member;
+  let member = true;
+  try {
+    await discord(`/guilds/${guild}/members/${uid}`);
+  } catch (e) {
+    member = !/Discord 404|Unknown Member/i.test((e as Error).message);
+  }
+  memberCache.set(uid, { member, at: Date.now() });
+  return member;
 }
 
 export function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {

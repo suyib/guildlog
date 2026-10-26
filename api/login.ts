@@ -42,6 +42,11 @@ export async function GET(req: Request): Promise<Response> {
     }, 200, { 'Cache-Control': 'no-store' });
   }
 
+  // Signed in, but no longer in the guild's Discord: sign out and say why
+  if (url.searchParams.has('left')) {
+    return page('Not in the guild\u2019s Discord', NOT_MEMBER, true, clearSessionCookie());
+  }
+
   if (url.searchParams.has('logout')) {
     return new Response(null, { status: 303, headers: { Location: '/', 'Set-Cookie': clearSessionCookie() } });
   }
@@ -92,7 +97,7 @@ export async function GET(req: Request): Promise<Response> {
     if (!m.member) {
       await recordSignIn({ kind: 'discord', result: 'not_member', ...who, detail: null });
       await auditTask(`<@${user.id}> (${user.username}) tried to sign in to the site but isn’t in the server`);
-      return page('Not in the guild’s Discord', 'Guild Logs is for members of the guild’s Discord server. Join the server, then sign in again.', true);
+      return page('Not in the guild’s Discord', NOT_MEMBER, true, undefined, next.startsWith('/a/') ? next : undefined);
     }
     // Access turned off on the Admin page
     const stored = await storedPerson(user.id);
@@ -135,14 +140,18 @@ export async function POST(req: Request): Promise<Response> {
 
 const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
-/** A small message page in the site's colors. */
-function page(title: string, message: string, retry = false): Response {
+const NOT_MEMBER = 'Guild Logs is only for members of the guild\u2019s Discord server, because it shows everyone\u2019s raid performance. If you\u2019re in the guild, join the server and sign in again. Shared analysis links still open for anyone, read-only.';
+
+/** A small message page in the site's colors (optionally signing out, or linking back to a shared analysis). */
+function page(title: string, message: string, retry = false, setCookie?: string, shared?: string): Response {
+  const headers: Record<string, string> = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' };
+  if (setCookie) headers['Set-Cookie'] = setCookie;
   return new Response(
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Guild Logs</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#302b27;color:#f5f3f5;font:15px/1.5 system-ui,sans-serif;padding:16px}
 main{background:#1d1a17;border-radius:18px;padding:28px;max-width:380px;width:100%;box-sizing:border-box}h1{font-size:18px;margin:0 0 8px}p{color:rgba(245,243,245,.7);margin:0 0 18px}
 a{display:inline-block;padding:10px 18px;border-radius:50px;background:#007cad;color:#fff;font-weight:700;text-decoration:none}</style></head>
-<body><main><h1>${esc(title)}</h1><p>${esc(message)}</p>${retry ? '<a href="/">Back to sign-in</a>' : ''}</main></body></html>`,
-    { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } },
+<body><main><h1>${esc(title)}</h1><p>${esc(message)}</p>${shared ? `<a href="${esc(shared)}">Back to the shared analysis</a> ` : ''}${retry ? '<a href="/">Back to sign-in</a>' : ''}</main></body></html>`,
+    { status: 200, headers },
   );
 }

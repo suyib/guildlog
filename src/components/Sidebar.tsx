@@ -20,12 +20,15 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history
         <span className="brand-name">Guild <span>Logs</span></span>
       </a>
 
-      <nav className="side-nav" aria-label="Pages">
-        <a href="/" className={page === 'analyze' || page === 'saved' ? 'on' : ''}><Glyph name="compass" />Analyze</a>
-        <a href="/#/raids" className={page === 'raids' ? 'on' : ''}><Glyph name="calendar" />Past raids</a>
-        <a href="/#/history" className={page === 'history' ? 'on' : ''}><Glyph name="clock" />History</a>
-        {me?.officer && <a href="/#/admin" className={page === 'admin' ? 'on' : ''}><Glyph name="shield" />Admin</a>}
-      </nav>
+      {/* Guests (a shared link, not signed in) only see the analysis they were sent */}
+      {me?.signedIn && (
+        <nav className="side-nav" aria-label="Pages">
+          <a href="/" className={page === 'analyze' || page === 'saved' ? 'on' : ''}><Glyph name="compass" />Analyze</a>
+          <a href="/#/raids" className={page === 'raids' ? 'on' : ''}><Glyph name="calendar" />Past raids</a>
+          <a href="/#/history" className={page === 'history' ? 'on' : ''}><Glyph name="clock" />History</a>
+          {me?.officer && <a href="/#/admin" className={page === 'admin' ? 'on' : ''}><Glyph name="shield" />Admin</a>}
+        </nav>
+      )}
 
       {sections.length > 0 && (
         <nav className="side-nav" aria-label="This analysis">
@@ -59,6 +62,14 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'history
           ) : (
             <p>This analysis wasn&rsquo;t saved, so there&rsquo;s no link yet. Check the Supabase settings in Vercel.</p>
           )}
+        </div>
+      )}
+
+      {me && !me.signedIn && (
+        <div className="side-card">
+          <strong>Guild member?</strong>
+          <p>Sign in with Discord to analyze your own fights.</p>
+          <a className="button" href={`/api/login?discord=1&next=${encodeURIComponent(window.location.pathname)}`}>Sign in with Discord</a>
         </div>
       )}
 
