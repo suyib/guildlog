@@ -6,6 +6,7 @@ import type { RaidCard, RaidCheck, SavedRaid } from '../../server/types';
 import { type Me, addRaid, checkRaid, deleteRaid, loadMe, loadRaids, readRaidNow } from '../api';
 import { mmss } from '../format';
 import Glyph from './Glyph';
+import { ZoneRanks, useHome } from './Home';
 import { BossIcon, ClassIcon, SeverityDot, classCss } from './icons';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -320,6 +321,7 @@ function RaidCardView({ raid, archiveDays, canDelete, officer, onDeleted, onChan
         <div>
           <div className="eyebrow">{longDate(when)} · {when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}{raid.loggerName ? ` · logged by ${raid.loggerName}` : ''}</div>
           <h2>{raid.title ?? raid.code}</h2>
+          {c && <RaidRanks encounterIds={c.bosses.map((b) => b.encounterId)} />}
           <p className={`muted small raid-status ${raid.status}`}>{statusText(raid, archiveDays)}</p>
         </div>
         <div className="raid-card-links">
@@ -375,7 +377,7 @@ function RaidCardView({ raid, archiveDays, canDelete, officer, onDeleted, onChan
           {partial && (
             <p className="muted small">Still reading the boss kills: {c.summarized ?? 0} of {c.kills} done. Deaths, item level, roles and the summary below fill in as each one is read.</p>
           )}
-          {!partial && <div className="raid-feedback">
+          {!partial && <div className="raid-feedback split">
             <details className="accordion">
               <summary>What went well <span className="muted">({c.feedback.good.length})</span></summary>
               {c.feedback.good.length === 0 ? <p className="muted small">Nothing to single out.</p> : (
@@ -643,6 +645,20 @@ function StoredData({ code, label, canRestart, onChanged }: { code: string; labe
           {check.advice.length > 0 && <ul className="findings-plain">{check.advice.map((a, i) => <li key={i}>{a}</li>)}</ul>}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The guild's ranks in this raid's zone (from the home page's data), with a link to Rankings. */
+function RaidRanks({ encounterIds }: { encounterIds: number[] }) {
+  const d = useHome();
+  const zone = d?.zones.find((z) => z.bosses.some((b) => encounterIds.includes(b.encounterId)));
+  if (!d || !zone) return null;
+  const ranked = [zone.ranks?.progress, zone.ranks?.speed].some((r) => r && (r.world || r.region || r.server));
+  return (
+    <div className="boss-rank-line">
+      <a href={`/#/rankings?zone=${zone.id}`} title={`${zone.name} rankings`}>Rankings</a>
+      {ranked ? <ZoneRanks ranks={zone.ranks} wcl={d.wcl} /> : <span className="muted">No ranking available</span>}
     </div>
   );
 }

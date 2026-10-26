@@ -7,7 +7,7 @@ import { mmss, n0 } from '../format';
 import Glyph from './Glyph';
 import { ClassIcon, classCss, parseCss } from './icons';
 
-export { RANK_CSS, mainZone, ZonePicker };
+export { RANK_CSS, mainZone, ZonePicker, ZoneRanks };
 
 let homePromise: Promise<HomeData | null> | null = null;
 /** Read once per page load and shared by both parts of the home page. undefined while loading, null if it failed. */

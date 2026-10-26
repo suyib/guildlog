@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.33.5',
+    date: '2026-10-26',
+    changes: [
+      'Past raids: each raid shows the guild\u2019s ranks in that raid under its title (hover for world, region or realm), with a link to Rankings.',
+      'What went well and What to work on sit side by side again, each still opening on its own.',
+    ],
+  },
+  {
     version: '0.33.4',
     date: '2026-10-26',
     changes: [
