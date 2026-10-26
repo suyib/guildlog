@@ -8,9 +8,9 @@ import Glyph from './Glyph';
 import { ClassIcon, classCss, parseCss } from './icons';
 
 let homePromise: Promise<HomeData | null> | null = null;
-/** Read once per page load and shared by both parts of the home page. */
+/** Read once per page load and shared by both parts of the home page. undefined while loading, null if it failed. */
 function useHome() {
-  const [data, setData] = useState<HomeData | null>(null);
+  const [data, setData] = useState<HomeData | null | undefined>(undefined);
   useEffect(() => {
     homePromise ??= loadHome().catch(() => null);
     homePromise.then(setData);
@@ -33,6 +33,15 @@ function untilText(iso: string) {
 /** Above "Analyze a log": the guild, its progress, who's signed in, and the next raid. */
 export function HomeHero() {
   const d = useHome();
+  // One loader until everything's in, so the page doesn't fill in piece by piece
+  if (d === undefined) {
+    return (
+      <section className="panel home-loading" aria-busy="true">
+        <span className="spinner" aria-hidden="true" />
+        <span className="muted">Loading the guild&hellip;</span>
+      </section>
+    );
+  }
   if (!d || (!d.guild && !d.wcl && !d.nextRaid)) return null;
   const where = [d.wcl?.server && `${d.wcl.server}${d.wcl.region ? ` (${d.wcl.region})` : ''}`, d.wcl?.faction].filter(Boolean).join(' · ');
   return (

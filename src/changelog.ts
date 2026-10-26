@@ -9,6 +9,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.31.3',
+    date: '2026-10-26',
+    changes: ['The home page shows a loader until the guild\u2019s details are in, instead of filling in piece by piece.'],
+  },
+  {
     version: '0.31.2',
     date: '2026-10-26',
     changes: [
