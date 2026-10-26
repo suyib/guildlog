@@ -352,24 +352,32 @@ function RaidCardView({ raid, archiveDays, canDelete, officer, onDeleted, onChan
 
           <div>
             <div className="comp-label">Bosses</div>
-            <ul className="boss-list">
-              {c.bosses.map((b) => (
-                <li key={b.encounterId}>
-                  <span className={b.kill ? 'kill' : 'wipe'}>{b.kill ? 'Kill' : 'Not killed'}</span>
-                  <strong>{b.name}</strong>
-                  <span className="muted">{b.seconds !== null ? mmss(b.seconds) : ''}{b.wipes ? `${b.seconds !== null ? ' · ' : ''}${b.wipes} wipe${b.wipes > 1 ? 's' : ''}` : ''}</span>
-                  {b.fightId && <a href={siteLink(raid, b.fightId)} className="boss-open">Breakdown</a>}
-                </li>
-              ))}
+            <ul className="boss-pills">
+              {c.bosses.map((b) => {
+                const meta = `${b.seconds !== null ? mmss(b.seconds) : 'Not killed'}${b.wipes ? ` · ${b.wipes} wipe${b.wipes > 1 ? 's' : ''}` : ''}`;
+                const body = (
+                  <>
+                    <BossIcon id={b.encounterId} />
+                    <span className="boss-pill-text"><strong>{b.name}</strong><span className="muted small">{meta}</span></span>
+                  </>
+                );
+                return (
+                  <li key={b.encounterId}>
+                    {b.fightId
+                      ? <a href={siteLink(raid, b.fightId)} className={`boss-pill ${b.kill ? 'kill' : 'wipe'}`} title={`Open the ${b.name} breakdown`}>{body}</a>
+                      : <span className={`boss-pill ${b.kill ? 'kill' : 'wipe'}`}>{body}</span>}
+                  </li>
+                );
+              })}
             </ul>
           </div>
 
           {partial && (
             <p className="muted small">Still reading the boss kills: {c.summarized ?? 0} of {c.kills} done. Deaths, item level, roles and the summary below fill in as each one is read.</p>
           )}
-          {!partial && <div className="grid-2 feedback">
-            <div>
-              <div className="comp-label">What went well</div>
+          {!partial && <div className="raid-feedback">
+            <details className="accordion">
+              <summary>What went well <span className="muted">({c.feedback.good.length})</span></summary>
               {c.feedback.good.length === 0 ? <p className="muted small">Nothing to single out.</p> : (
                 <ul className="findings wins">
                   {c.feedback.good.map((f, i) => (
@@ -380,9 +388,9 @@ function RaidCardView({ raid, archiveDays, canDelete, officer, onDeleted, onChan
                   ))}
                 </ul>
               )}
-            </div>
-            <div>
-              <div className="comp-label">What to work on</div>
+            </details>
+            <details className="accordion">
+              <summary>What to work on <span className="muted">({c.feedback.work.length})</span></summary>
               {c.feedback.work.length === 0 ? <p className="muted small">Nothing stood out. Nice work.</p> : (
                 <ul className="findings">
                   {c.feedback.work.map((f, i) => (
@@ -390,7 +398,7 @@ function RaidCardView({ raid, archiveDays, canDelete, officer, onDeleted, onChan
                   ))}
                 </ul>
               )}
-            </div>
+            </details>
           </div>}
 
           <div className="raid-attendance">
@@ -637,4 +645,11 @@ function StoredData({ code, label, canRestart, onChanged }: { code: string; labe
       )}
     </div>
   );
+}
+
+/** A boss's picture from Warcraft Logs (by encounter); a plain circle if there isn't one. GAME CONTENT */
+function BossIcon({ id }: { id: number }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <span className="boss-icon" aria-hidden="true" />;
+  return <img className="boss-icon" src={`https://assets.rpglogs.com/img/warcraft/bosses/${Math.trunc(id)}-icon.jpg`} width={32} height={32} alt="" loading="lazy" onError={() => setFailed(true)} />;
 }

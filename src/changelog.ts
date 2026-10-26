@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.31.2',
+    date: '2026-10-26',
+    changes: [
+      'Past raids: the calendar and the raid are stacked, each the full width of the page. The calendar shows each raid\u2019s name next to its kill count.',
+      'Bosses on a raid are now pills with the boss\u2019s picture from Warcraft Logs, kill time and wipes; click one for its breakdown. Bosses that weren\u2019t killed have a red outline.',
+      'What went well and What to work on are stacked and closed by default; click either to open it.',
+    ],
+  },
+  {
     version: '0.31.1',
     date: '2026-10-26',
     changes: [
