@@ -134,8 +134,9 @@ h2, h3 { margin: 0; }
 .side-version { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
 .changelog-link { color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; font-size: 11px; }
 .changelog-link:hover { color: var(--primary-light); }
-.support-link { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: auto; padding: 8px 12px; border-radius: var(--radius-pill); border: 1px solid var(--line); color: var(--ink-2); font-size: 13px; font-weight: 600; }
-.support-link:hover { border-color: #ffdd00; color: var(--ink); text-decoration: none; }
+.support-link { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: auto; padding: 8px 12px; border-radius: var(--radius-pill); background: var(--primary-light); color: #0f0d0b; font-size: 13px; font-weight: 700; transition: background 0.12s; }
+.support-link:hover, .support-link:focus-visible { background: var(--primary-hover); color: #0f0d0b; text-decoration: none; }
+.support-link:focus-visible { outline: 2px solid var(--primary-light); outline-offset: 2px; }
 .side-user + .support-link, .support-link + .side-version { margin-top: 8px; }
 
 /* Terms and Privacy pages */
