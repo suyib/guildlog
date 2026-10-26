@@ -98,18 +98,29 @@ assert.ok(!raidFeedback([shortFight, longFight, diedFight] as any).work.some((p)
 assert.equal(activeOver([{ fight: shortFight, p: shortFight.players[0] }] as any), null);
 // DM pages: headline numbers side by side, then bold-titled points, within Discord's limits
 const fieldsOf = (page: Parameters<typeof personalPage>[0]) => Object.fromEntries(personalPage(page, digest, 'suy', null)!.embeds![0].fields!.map((f) => [f.name, f.value]));
-assert.equal(fieldsOf('overview')['Average parse'], '85');
-assert.ok(fieldsOf('overview')['Boss by boss'].includes('#1 of 1 in the raid'));
+assert.equal(fieldsOf('overview')['Average parse'], '85', 'old My overview buttons open the quick summary');
+assert.ok(fieldsOf('damage')['Boss by boss'].includes('1,500 DPS · parse 90'), 'boss by boss: DPS and parse');
+assert.ok(!fieldsOf('damage')['Boss by boss'].includes('damage'), 'no totals per boss');
 assert.ok(fieldsOf('gear')['What to work on'].includes('No enchant on: head'));
 assert.equal(fieldsOf('gear')['Enchants'], '0 of 1');
 assert.ok(fieldsOf('rotation')['Cooldowns (all kills)'].includes('**Bestial Wrath**: 2 of 4 · room for 2 more'));
-assert.ok(fieldsOf('damage')['Top abilities (share of your damage)'].includes('**Steady Shot**'));
+assert.ok(fieldsOf('damage')['Top abilities'].includes('**Steady Shot**'));
 assert.ok(fieldsOf('survival')['What went well'].includes('No deaths'));
-for (const page of ['summary', 'overview', 'damage', 'rotation', 'gear', 'survival'] as const) {
+for (const page of ['summary', 'damage', 'rotation', 'gear', 'survival'] as const) {
   const e = personalPage(page, digest, 'suy', null)!.embeds![0];
   assert.ok(e.fields!.length <= 25 && e.fields!.every((f) => f.value.length <= 1024 && f.value.length > 0), `${page} fits Discord`);
 }
 assert.equal(personalPage('overview', digest, 'Nobody', null), null);
+// A boss where they did nothing (Chess Event, or dead at the pull) doesn't count against them
+{
+  const chess = { id: 5, name: 'Chess Event', encounterID: 9, kill: true, startTime: 800000, endTime: 900000, seconds: 100, players: [{ ...player('Suy', 0, 0), total: 0 }] };
+  const withChess = { ...digest, fights: [...digest.fights, chess] } as unknown as RaidDigest;
+  const q = Object.fromEntries(personalPage('summary', withChess, 'Suy', null)!.embeds![0].fields!.map((f) => [f.name, f.value]));
+  assert.equal(q['Average parse'], '85', 'not dragged down by a 0');
+  assert.ok(!q['What to work on'].includes('Chess Event'), 'not the weakest boss');
+  const d = Object.fromEntries(personalPage('damage', withChess, 'Suy', null)!.embeds![0].fields!.map((f) => [f.name, f.value]));
+  assert.ok(!d['Boss by boss'].includes('Chess Event'));
+}
 
 // Quick summary: the at-a-glance page with what went well and what to work on
 const quick = personalPage('summary', digest, 'Suy', null)!;
@@ -244,7 +255,7 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
   const hb = personalPage('damage', hd, 'Healz', null)!.embeds![0];
   assert.ok(hb.title!.startsWith('Healing breakdown'));
   assert.ok(hb.fields!.some((f) => f.value.includes('**Circle of Healing**')));
-  assert.ok(personalPage('overview', hd, 'Healz', null)!.embeds![0].fields!.some((f) => f.value.includes('#1 of 2 healers')));
+  assert.ok(hb.fields!.some((f) => f.name === 'Boss by boss' && f.value.includes('HPS · parse 85')));
   // The raid summary counts healers by their healing parse
   assert.ok(raidFeedback(hd.fights).good.some((p) => p.title.includes('strong performance') && p.who?.includes('Healz')));
 }

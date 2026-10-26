@@ -6,11 +6,11 @@ import { recapLine } from '../insights.js';
 import type { RaidPoint } from '../types.js';
 import { type FightDigest, type PlayerDigest, type RaidDigest, healsMost, playerFights } from './digest.js';
 
+/** 'overview' was folded into the quick summary; buttons already posted with it open the summary. */
 export type Page = 'summary' | 'overview' | 'damage' | 'rotation' | 'gear' | 'survival';
 
 export const PAGES: { id: Page; label: string }[] = [
   { id: 'summary', label: 'Quick summary' },
-  { id: 'overview', label: 'My overview' },
   { id: 'rotation', label: 'Rotation & cooldowns' },
   { id: 'damage', label: 'Damage breakdown' },
   { id: 'gear', label: 'Gear & stats' },
@@ -28,7 +28,7 @@ const clip = (s: string, max = 1024) => (s.length > max ? `${s.slice(0, max - 1)
 /** Buttons under a raid message: each sends that page to whoever clicks it, by DM. `raid` is "host:code". */
 export function pageButtons(raid: string) {
   const b = PAGES.map((p) => button(p.label, `raid:${p.id}:${raid}`, p.id === 'summary' ? 1 : 2));
-  return [row(...b.slice(0, 3)), row(...b.slice(3))]; // Discord allows 5 buttons per row
+  return [row(...b.slice(0, 3)), row(...b.slice(3))]; // Discord allows 5 buttons per row (the raid summary adds two to the second)
 }
 
 /** Link that opens the whole log on the site, ready to pick a fight and player. */
@@ -153,12 +153,6 @@ function fit(embed: Embed): Embed {
 const peersOf = (fight: FightDigest, p: PlayerDigest) => fight.players.filter((x) => x.name !== p.name && x.className === p.className && x.specName === p.specName);
 
 /** Where you placed on damage in the raid ("#3 of 18"), among damage dealers and tanks. */
-function rank(fight: FightDigest, p: PlayerDigest) {
-  const pool = fight.players.filter((x) => (p.role === 'healer' ? true : x.role !== 'healer'));
-  const sorted = [...pool].sort((a, b) => b.dps - a.dps);
-  return { place: sorted.findIndex((x) => x.name === p.name) + 1, of: sorted.length };
-}
-
 function sumCooldowns(rows: Rows) {
   const cds = new Map<string, { uses: number; possible: number }>();
   for (const { p } of rows) for (const c of p.cooldowns) {
@@ -168,7 +162,11 @@ function sumCooldowns(rows: Rows) {
   return cds;
 }
 
-function headline(rows: Rows) {
+/** Bosses where they did something (Chess Event, or dying at the pull, would only drag the numbers down). */
+const counted = (rows: Rows) => rows.filter((r) => r.p.total > 0 || (r.p.healing?.total ?? 0) > 0);
+
+function headline(all: Rows) {
+  const rows = counted(all);
   const parsed = rows.filter((r) => r.p.parse !== null);
   const best = [...parsed].sort((a, b) => b.p.parse! - a.p.parse!)[0];
   const worst = [...parsed].sort((a, b) => a.p.parse! - b.p.parse!)[0];
@@ -182,10 +180,10 @@ function headline(rows: Rows) {
     worst,
     total,
     dps: total / seconds,
-    deaths: rows.reduce((t, r) => t + r.p.deaths.length, 0),
+    deaths: all.reduce((t, r) => t + r.p.deaths.length, 0),
     activeAvg,
     ilvl,
-    gearRow: [...rows].reverse().find((r) => r.p.gear?.length),
+    gearRow: [...all].reverse().find((r) => r.p.gear?.length),
   };
 }
 
@@ -194,8 +192,8 @@ const missingEnchants = (p?: PlayerDigest) => (p?.gear ?? []).filter((g) => g.en
 /** The Warcraft Logs site of the page being built (game-version rules depend on it). */
 let pageHost = '';
 
-/** guild: "against the guild" lines for the quick summary (from the guild's Past raids). */
-export function personalPage(page: Page, digest: RaidDigest, character: string, realm: string | null, guild?: string[]): MessageBody | null {
+/** bests: a line on tonight's personal bests for the quick summary (from the guild's Past raids). */
+export function personalPage(page: Page, digest: RaidDigest, character: string, realm: string | null, bests?: string | null): MessageBody | null {
   pageHost = digest.host;
   const rows = playerFights(digest, character, realm);
   if (rows.length === 0) return null;
@@ -214,8 +212,8 @@ export function personalPage(page: Page, digest: RaidDigest, character: string, 
   // Healers (healing well above their damage on most bosses) get their pages in terms of healing
   const healer = rows.filter((r) => healsMost(r.p)).length * 2 > rows.length;
   const build: Record<Page, () => Embed> = {
-    summary: () => ({ ...base, title: `Quick summary: ${head}`, description: intro, fields: [...(healer ? healerSummaryFields(rows) : summaryFields(rows)), ...(guild?.length ? chunked('Against the guild', guild) : [])] }),
-    overview: () => ({ ...base, title: `Your raid: ${head}`, description: intro, fields: healer ? healerOverviewFields(rows) : overviewFields(rows) }),
+    summary: () => ({ ...base, title: `Quick summary: ${head}`, description: intro, fields: [...(healer ? healerSummaryFields(rows) : summaryFields(rows)), ...(bests ? [{ name: 'Personal bests', value: clip(bests) }] : [])] }),
+    overview: () => build.summary(),
     damage: () => (healer
       ? { ...base, title: `Healing breakdown: ${head}`, description: intro, fields: healingFields(rows) }
       : { ...base, title: `Damage breakdown: ${head}`, description: intro, fields: damageFields(rows) }),
@@ -256,15 +254,15 @@ function quickSummary(rows: Rows): { good: Point[]; work: Point[] } {
   const specName = `${spaced(me.specName)} ${spaced(me.className)}`.trim();
 
   // Parses
-  if (h.best && h.best.p.parse! >= 75) good.push({ title: `Best boss: ${h.best.fight.name}`, detail: `Parse ${Math.round(h.best.p.parse!)}, better than most ${specName}s on that boss.` });
+  if (h.best && h.best.p.parse! >= 75) good.push({ title: `Best boss: ${h.best.fight.name}`, detail: `Parse ${Math.round(h.best.p.parse!)}.` });
   if (h.worst && h.parseAvg !== null && rows.length > 1 && h.parseAvg - h.worst.p.parse! >= 15) {
-    work.push({ title: `Weakest boss: ${h.worst.fight.name}`, detail: `Parse ${Math.round(h.worst.p.parse!)} against your average of ${Math.round(h.parseAvg)}. Open the full analysis for that fight to see what was different.` });
+    work.push({ title: `Weakest boss: ${h.worst.fight.name}`, detail: `Parse ${Math.round(h.worst.p.parse!)} against your average of ${Math.round(h.parseAvg)}; its full analysis shows what was different.` });
   }
 
   // Against others of the same spec in the raid
   let topCount = 0;
   const behind: string[] = [];
-  for (const { fight, p } of rows) {
+  for (const { fight, p } of counted(rows)) {
     const peers = peersOf(fight, p);
     if (!peers.length) continue;
     const bestPeer = Math.max(...peers.map((x) => x.dps));
@@ -272,21 +270,21 @@ function quickSummary(rows: Rows): { good: Point[]; work: Point[] } {
     else if (p.dps < bestPeer * 0.9) behind.push(fight.name);
   }
   if (topCount) good.push({ title: `Top ${specName} in the raid`, detail: `Highest damage of your spec on ${bosses(topCount)}.` });
-  if (behind.length) work.push({ title: `Behind the best ${specName}`, detail: `More than 10% behind on ${behind.slice(0, 3).join(', ')}. The rotation page shows where the gap is.` });
+  if (behind.length) work.push({ title: `Behind the best ${specName}`, detail: `More than 10% behind on ${behind.slice(0, 3).join(', ')}; see Rotation & cooldowns.` });
 
   // Deaths
   const deaths = rows.flatMap((r) => r.p.deaths.map((d) => `${r.fight.name} (${d.by})`));
-  if (!deaths.length) good.push({ title: 'No deaths', detail: `You survived all ${bosses(rows.length)}. Staying alive is the biggest damage gain there is.` });
+  if (!deaths.length) good.push({ title: 'No deaths', detail: `Survived all ${bosses(rows.length)}.` });
   else work.push({ title: `Died ${deaths.length}×`, detail: `${deaths.slice(0, 3).join(', ')}. The survival page has the details.` });
 
   // Activity
-  if (h.activeAvg !== null && h.activeAvg >= 95) good.push({ title: 'Always busy', detail: `Active ${h.activeAvg.toFixed(1)}% of the time (bosses you survived, weighted by length); very little time spent not casting.` });
+  if (h.activeAvg !== null && h.activeAvg >= 95) good.push({ title: 'Always busy', detail: `Active ${h.activeAvg.toFixed(1)}% of the time.` });
   else if (h.activeAvg !== null && h.activeAvg < 90) work.push({ title: 'Time spent not casting', detail: `Active ${h.activeAvg.toFixed(1)}% of the time on average; aim for 95% or more. Pre-positioning and instant casts while moving help.` });
 
   // Cooldowns
   const cds = sumCooldowns(rows);
   const under = [...cds].filter(([, c]) => c.uses < c.possible);
-  if (cds.size && !under.length) good.push({ title: 'Cooldowns on time', detail: 'Every tracked cooldown used as often as the fights allowed.' });
+  if (cds.size && !under.length) good.push({ title: 'Cooldowns on time', detail: 'Used as often as the fights allowed.' });
   if (under.length) work.push({ title: 'Use cooldowns more', detail: `${under.slice(0, 3).map(([n, c]) => `${n} ${c.uses}/${c.possible}`).join(', ')}. Use them at the pull and again as soon as they’re ready.` });
   const extra = insightPoints(rows, false);
   work.push(...extra.work);
@@ -351,38 +349,6 @@ function insightPoints(rows: Rows, healer: boolean): { good: Point[]; work: Poin
   return { good, work };
 }
 
-// ---------- My overview ----------
-
-function overviewFields(rows: Rows): Field[] {
-  const h = headline(rows);
-  const bossLines = rows.map(({ fight, p }) => {
-    const r = rank(fight, p);
-    const bits = [`${n0(p.dps)} DPS`, p.parse !== null ? `parse ${Math.round(p.parse)}` : '', r.place ? `#${r.place} of ${r.of} in the raid` : '', p.activePct !== null ? `active ${p.activePct}%` : '', p.deaths.length ? `died ${p.deaths.length}×` : ''];
-    return `• **${fight.name}** (${mmss(fight.seconds)}): ${bits.filter(Boolean).join(' · ')}`;
-  });
-  const specLines = rows.flatMap(({ fight, p }) => {
-    const peers = peersOf(fight, p);
-    if (!peers.length) return [];
-    const bestPeer = Math.max(...peers.map((x) => x.dps));
-    const place = [...peers.map((x) => x.dps), p.dps].sort((a, b) => b - a).indexOf(p.dps) + 1;
-    const gap = p.dps >= bestPeer ? 'the top of your spec' : `${Math.round((1 - p.dps / bestPeer) * 100)}% behind the best`;
-    return [`• **${fight.name}**: #${place} of ${peers.length + 1}, ${gap}`];
-  });
-  const ranks = rows.map(({ fight, p }) => rank(fight, p).place).filter((v) => v > 0);
-  return [
-    stat('Average parse', h.parseAvg !== null ? String(Math.round(h.parseAvg)) : '–'),
-    stat('Best boss', h.best ? `${h.best.fight.name} (${Math.round(h.best.p.parse!)})` : '–'),
-    stat('Average DPS', n0(h.dps)),
-    stat('Best raid placing', ranks.length ? `#${Math.min(...ranks)}` : '–'),
-    stat('Active time', h.activeAvg !== null ? `${h.activeAvg.toFixed(1)}%` : '–'),
-    stat('Deaths', String(h.deaths)),
-    stat('Item level', h.ilvl ? String(h.ilvl) : '–'),
-    stat('Damage on kills', compact(h.total)),
-    ...block('Boss by boss', bossLines.join('\n')),
-    ...block(`Against other ${spaced(rows[0].p.specName)} ${spaced(rows[0].p.className)}s in the raid`, specLines.join('\n')),
-  ];
-}
-
 // ---------- Damage breakdown ----------
 
 function abilityShares(players: PlayerDigest[]) {
@@ -400,35 +366,29 @@ function damageFields(rows: Rows): Field[] {
   const mine = abilityShares(rows.map((r) => r.p));
   const peers = rows.flatMap(({ fight, p }) => peersOf(fight, p));
   const theirs = abilityShares(peers);
-  const top = [...mine.totals].sort((a, b) => b[1] - a[1]).slice(0, 12);
-  const bestDps = [...rows].sort((a, b) => b.p.dps - a.p.dps)[0];
-  const share = (t: number, all: number) => `${((t / all) * 100).toFixed(1)}%`;
+  const top = [...mine.totals].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const bestDps = [...counted(rows)].sort((a, b) => b.p.dps - a.p.dps)[0];
+  const pct = (t: number, all: number) => `${((t / all) * 100).toFixed(1)}%`;
+  const spec = `${spaced(rows[0].p.specName)} ${spaced(rows[0].p.className)}`.trim();
 
-  const abilityLines = top.map(([name, t]) => `• **${name}**: ${share(t, mine.all)} · ${compact(t)}`);
-  const compareLines = peers.length
-    ? top.slice(0, 6).map(([name, t]) => `• **${name}**: ${share(t, mine.all)} for you, ${share(theirs.totals.get(name) ?? 0, theirs.all)} for them`)
-    : [];
-  const bossLines = rows.map(({ fight, p }) => {
-    const r = rank(fight, p);
-    return `• **${fight.name}**: ${n0(p.dps)} DPS · ${compact(p.total)} damage${r.place ? ` · #${r.place} of ${r.of}` : ''}`;
-  });
-
-  const points: Point[] = [];
-  for (const [name, t] of top.slice(0, 6)) {
-    const mineShare = t / mine.all;
-    const theirShare = (theirs.totals.get(name) ?? 0) / theirs.all;
-    if (peers.length && theirShare - mineShare >= 0.05) points.push({ title: name, detail: `${share(t, mine.all)} of your damage against ${`${(theirShare * 100).toFixed(1)}%`} for others of your spec; it may be worth casting more often.` });
+  // Only where your mix differs from others of your spec in the raid
+  const gaps: string[] = [];
+  if (peers.length) {
+    for (const [name, t] of top.slice(0, 6)) {
+      const theirShare = (theirs.totals.get(name) ?? 0) / theirs.all;
+      if (Math.abs(theirShare - t / mine.all) >= 0.05) gaps.push(`• **${name}**: ${pct(t, mine.all)} for you, ${(theirShare * 100).toFixed(1)}% for them`);
+    }
+    const missing = [...theirs.totals].filter(([n, t]) => t / theirs.all >= 0.08 && !mine.totals.has(n)).map(([n]) => n);
+    if (missing.length) gaps.push(`• Not in yours: ${missing.slice(0, 3).join(', ')}`);
   }
-  const missingBig = peers.length ? [...theirs.totals].filter(([n, t]) => t / theirs.all >= 0.08 && !mine.totals.has(n)).map(([n]) => n) : [];
-  if (missingBig.length) points.push({ title: 'Missing from your damage', detail: `${missingBig.slice(0, 3).join(', ')} make up a good share of others’ damage but none of yours.` });
+  const bossLines = counted(rows).map(({ fight, p }) => `• **${fight.name}**: ${n0(p.dps)} DPS${p.parse !== null ? ` · parse ${Math.round(p.parse)}` : ''}`);
 
   return [
     stat('Damage on kills', compact(h.total)),
     stat('Average DPS', n0(h.dps)),
     stat('Best DPS', bestDps ? `${n0(bestDps.p.dps)} (${bestDps.fight.name})` : '–'),
-    ...block('Top abilities (share of your damage)', abilityLines.join('\n') || 'Warcraft Logs didn’t break this down by ability; open the full analysis for the details.'),
-    ...block(`Compared with other ${spaced(rows[0].p.specName)} ${spaced(rows[0].p.className)}s in the raid`, compareLines.join('\n')),
-    ...block('Where the gap could be', bullets(points)),
+    ...block('Top abilities', top.map(([name, t]) => `• **${name}** ${pct(t, mine.all)} · ${compact(t)}`).join('\n') || 'Warcraft Logs didn’t break this down by ability; open the full analysis for the details.'),
+    ...block(peers.length ? `Against other ${spec}s` : '', peers.length ? gaps.join('\n') || `Your damage mix matches the other ${spec}s in the raid.` : ''),
     ...block('Boss by boss', bossLines.join('\n')),
   ];
 }
@@ -561,7 +521,7 @@ function survivalFields(rows: Rows): Field[] {
 
   const good: Point[] = [];
   const work: Point[] = [];
-  if (!deaths.length) good.push({ title: 'No deaths', detail: `You survived all ${bosses(rows.length)}.` });
+  if (!deaths.length) good.push({ title: 'No deaths', detail: `Survived all ${bosses(rows.length)}.` });
   else {
     const causes = new Map<string, number>();
     for (const r of rows) for (const d of r.p.deaths) causes.set(d.by, (causes.get(d.by) ?? 0) + 1);
@@ -644,10 +604,8 @@ function healerQuickSummary(rows: Rows): { good: Point[]; work: Point[] } {
   const good: Point[] = [];
   const work: Point[] = [];
   const h = healerHeadline(rows);
-  const me = rows[0].p;
-  const specName = `${spaced(me.specName)} ${spaced(me.className)}`.trim();
 
-  if (h.best && h.best.p.healing.parse! >= 75) good.push({ title: `Best boss: ${h.best.fight.name}`, detail: `Healing parse ${Math.round(h.best.p.healing.parse!)}, better than most ${specName}s on that boss.` });
+  if (h.best && h.best.p.healing.parse! >= 75) good.push({ title: `Best boss: ${h.best.fight.name}`, detail: `Healing parse ${Math.round(h.best.p.healing.parse!)}.` });
   if (h.worst && h.parseAvg !== null && rows.length > 1 && h.parseAvg - h.worst.p.healing.parse! >= 15) {
     work.push({ title: `Weakest boss: ${h.worst.fight.name}`, detail: `Healing parse ${Math.round(h.worst.p.healing.parse!)} against your average of ${Math.round(h.parseAvg)}.` });
   }
@@ -667,7 +625,7 @@ function healerQuickSummary(rows: Rows): { good: Point[]; work: Point[] } {
   if (wasteful) work.push({ title: `${wasteful.n} overheals ${Math.round(wasteful.pct)}%`, detail: `It's ${Math.round(wasteful.share * 100)}% of your healing but mostly hits full health bars. Use it later or on someone lower.` });
 
   const deaths = rows.flatMap((r) => r.p.deaths.map((d) => `${r.fight.name} (${d.by})`));
-  if (!deaths.length) good.push({ title: 'No deaths', detail: `You survived all ${bosses(rows.length)}.` });
+  if (!deaths.length) good.push({ title: 'No deaths', detail: `Survived all ${bosses(rows.length)}.` });
   else work.push({ title: `Died ${deaths.length}×`, detail: `${deaths.slice(0, 3).join(', ')}. A dead healer puts the raid at risk; the survival page has the details.` });
 
   if (h.activeAvg !== null && h.activeAvg >= 85) good.push({ title: 'Always casting', detail: `Active ${h.activeAvg.toFixed(1)}% of the time.` });
@@ -675,7 +633,7 @@ function healerQuickSummary(rows: Rows): { good: Point[]; work: Point[] } {
 
   const cds = sumCooldowns(rows);
   const under = [...cds].filter(([, c]) => c.uses < c.possible);
-  if (cds.size && !under.length) good.push({ title: 'Cooldowns on time', detail: 'Every tracked cooldown used as often as the fights allowed.' });
+  if (cds.size && !under.length) good.push({ title: 'Cooldowns on time', detail: 'Used as often as the fights allowed.' });
   if (under.length) work.push({ title: 'Use cooldowns more', detail: `${under.slice(0, 3).map(([n, c]) => `${n} ${c.uses}/${c.possible}`).join(', ')}.` });
   const extra = insightPoints(rows, true);
   work.push(...extra.work);
@@ -690,38 +648,6 @@ function healerQuickSummary(rows: Rows): { good: Point[]; work: Point[] } {
   return { good: good.slice(0, 6), work: work.slice(0, 6) };
 }
 
-function healerOverviewFields(rows: Rows): Field[] {
-  const h = healerHeadline(rows);
-  const ilvl = [...rows].reverse().find((r) => r.p.itemLevel)?.p.itemLevel ?? null;
-  const bossLines = h.hr.map(({ fight, p }) => {
-    const r = healerRank(fight, p);
-    const bits = [`${n0(p.healing.hps)} HPS`, p.healing.parse !== null ? `parse ${Math.round(p.healing.parse)}` : '', r.place ? `#${r.place} of ${r.of} healers` : '', p.healing.overhealPct !== null ? `${Math.round(p.healing.overhealPct)}% overheal` : '', p.deaths.length ? `died ${p.deaths.length}×` : ''];
-    return `• **${fight.name}** (${mmss(fight.seconds)}): ${bits.filter(Boolean).join(' · ')}`;
-  });
-  const specLines = h.hr.flatMap(({ fight, p }) => {
-    const peers = peersOf(fight, p).filter((x) => x.healing);
-    if (!peers.length) return [];
-    const bestPeer = Math.max(...peers.map((x) => x.healing!.hps));
-    const place = [...peers.map((x) => x.healing!.hps), p.healing.hps].sort((a, b) => b - a).indexOf(p.healing.hps) + 1;
-    const gap = p.healing.hps >= bestPeer ? 'the top of your spec' : `${Math.round((1 - p.healing.hps / bestPeer) * 100)}% behind the best`;
-    return [`• **${fight.name}**: #${place} of ${peers.length + 1}, ${gap}`];
-  });
-  const places = h.hr.map(({ fight, p }) => healerRank(fight, p).place).filter((v) => v > 0);
-  return [
-    stat('Healing parse', h.parseAvg !== null ? String(Math.round(h.parseAvg)) : '–'),
-    stat('Best boss', h.best ? `${h.best.fight.name} (${Math.round(h.best.p.healing.parse!)})` : '–'),
-    stat('Average HPS', n0(h.hps)),
-    stat('Best place', places.length ? `#${Math.min(...places)} healer` : '–'),
-    stat('Overhealing', h.overhealPct !== null ? `${Math.round(h.overhealPct)}%` : '–'),
-    stat('Active time', h.activeAvg !== null ? `${h.activeAvg.toFixed(1)}%` : '–'),
-    stat('Deaths', String(h.deaths)),
-    stat('Item level', ilvl ? String(ilvl) : '–'),
-    stat('Healing on kills', compact(h.total)),
-    ...block('Boss by boss', bossLines.join('\n')),
-    ...block(`Against other ${spaced(rows[0].p.specName)} ${spaced(rows[0].p.className)}s in the raid`, specLines.join('\n')),
-  ];
-}
-
 function healingFields(rows: Rows): Field[] {
   const h = healerHeadline(rows);
   const spells = new Map<string, { total: number; over: number }>();
@@ -730,10 +656,10 @@ function healingFields(rows: Rows): Field[] {
     const overAmount = a.overhealPct !== null && a.overhealPct < 100 ? (a.total * a.overhealPct) / (100 - a.overhealPct) : 0;
     spells.set(a.name, { total: x.total + a.total, over: x.over + overAmount });
   }
-  const top = [...spells].sort((a, b) => b[1].total - a[1].total).slice(0, 12);
-  const share = (t: number) => `${((t / (h.total || 1)) * 100).toFixed(1)}%`;
-  const spellLines = top.map(([n, x]) => `• **${n}**: ${share(x.total)} · ${compact(x.total)} · ${Math.round((x.over / (x.total + x.over || 1)) * 100)}% overheal`);
-  // Against others of your spec: what share each spell is of their healing
+  const top = [...spells].sort((a, b) => b[1].total - a[1].total).slice(0, 8);
+  const pct = (t: number, all: number) => `${((t / (all || 1)) * 100).toFixed(1)}%`;
+  const spec = `${spaced(rows[0].p.specName)} ${spaced(rows[0].p.className)}`.trim();
+  // Only where your spells differ from others of your spec in the raid
   const peers = h.hr.flatMap(({ fight, p }) => peersOf(fight, p).filter((x) => x.healing));
   const theirs = new Map<string, number>();
   let theirTotal = 0;
@@ -741,17 +667,16 @@ function healingFields(rows: Rows): Field[] {
     theirTotal += x.healing!.total;
     for (const a of x.healing!.abilities) theirs.set(a.name, (theirs.get(a.name) ?? 0) + a.total);
   }
-  const compareLines = peers.length ? top.slice(0, 6).map(([n, x]) => `• **${n}**: ${share(x.total)} for you, ${(((theirs.get(n) ?? 0) / (theirTotal || 1)) * 100).toFixed(1)}% for them`) : [];
-  const bossLines = h.hr.map(({ fight, p }) => {
-    const r = healerRank(fight, p);
-    return `• **${fight.name}**: ${n0(p.healing.hps)} HPS · ${compact(p.healing.total)} healing${r.place ? ` · #${r.place} of ${r.of}` : ''}`;
-  });
+  const gaps = peers.length
+    ? top.slice(0, 6).filter(([n, x]) => Math.abs((theirs.get(n) ?? 0) / (theirTotal || 1) - x.total / (h.total || 1)) >= 0.05).map(([n, x]) => `• **${n}**: ${pct(x.total, h.total)} for you, ${pct(theirs.get(n) ?? 0, theirTotal)} for them`)
+    : [];
+  const bossLines = h.hr.map(({ fight, p }) => `• **${fight.name}**: ${n0(p.healing.hps)} HPS${p.healing.parse !== null ? ` · parse ${Math.round(p.healing.parse)}` : ''}`);
   return [
     stat('Healing on kills', compact(h.total)),
     stat('Average HPS', n0(h.hps)),
     stat('Overhealing', h.overhealPct !== null ? `${Math.round(h.overhealPct)}%` : '–'),
-    ...block('Top spells (share of your healing)', spellLines.join('\n') || 'Warcraft Logs didn\u2019t break this down by spell; open the full analysis for the details.'),
-    ...block(`Compared with other ${spaced(rows[0].p.specName)} ${spaced(rows[0].p.className)}s in the raid`, compareLines.join('\n')),
+    ...block('Top spells', top.map(([n, x]) => `• **${n}** ${pct(x.total, h.total)} · ${compact(x.total)} · ${Math.round((x.over / (x.total + x.over || 1)) * 100)}% overheal`).join('\n') || 'Warcraft Logs didn\u2019t break this down by spell; open the full analysis for the details.'),
+    ...block(peers.length ? `Against other ${spec}s` : '', peers.length ? gaps.join('\n') || `Your spells match the other ${spec}s in the raid.` : ''),
     ...block('Boss by boss', bossLines.join('\n')),
   ];
 }

@@ -409,7 +409,7 @@ async function raidButton(i: Interaction, id: string): Promise<Outcome> {
     const sent: string[] = [];
     let dmFailed = false;
     for (const c of claims) {
-      const body = personalPage(page, digest, c.character, c.realm, page === 'summary' ? await guildLines(digest, c.character, c.realm) : undefined);
+      const body = personalPage(page, digest, c.character, c.realm, page === 'summary' || page === 'overview' ? await personalBests(digest, c.character, c.realm) : undefined);
       if (!body) continue;
       if (await sendDm(user.id, body)) sent.push(c.character);
       else {
@@ -439,18 +439,37 @@ async function check(i: Interaction): Promise<Outcome> {
   });
 }
 
-/** "Against the guild" lines for the quick summary: where they placed among the guild's kills of each boss in their spec. */
-async function guildLines(digest: RaidDigest, character: string, realm: string | null): Promise<string[]> {
-  const lines: string[] = [];
+/**
+ * One line for the quick summary: bosses where tonight beat their own best (and the guild's best for
+ * their spec), from the guild's Past raids. Null with no earlier kills to compare with.
+ */
+async function personalBests(digest: RaidDigest, character: string, realm: string | null): Promise<string | null> {
+  const mine: string[] = [];
+  const guild: string[] = [];
+  const close: { boss: string; pct: number }[] = [];
+  let compared = 0;
   for (const { fight, p } of playerFights(digest, character, realm)) {
     const healer = healsMost(p);
+    const now = healer ? p.healing?.hps ?? 0 : p.dps;
+    if (!now) continue;
     const g = await guildContext({ encounterId: fight.encounterID, encounter: fight.name, className: p.className, specName: p.specName, name: p.name, healer }).catch(() => null);
-    if (!g || g.players < 2 || !g.place || !g.best) continue;
-    const mine = healer ? p.healing?.hps ?? 0 : p.dps;
-    const n = (v: number) => Math.round(v).toLocaleString('en-US');
-    lines.push(`• **${fight.name}**: ${n(mine)} ${g.unit} · #${g.place} of ${g.players} ${g.spec}s in the guild (best ${n(g.best.perSecond)}${g.median ? `, typical ${n(g.median)}` : ''})`);
+    const before = (g?.mine ?? []).filter((k) => k.code !== digest.code).map((k) => k.perSecond);
+    if (!g || !before.length) continue;
+    compared++;
+    const best = Math.max(...before);
+    if (now >= best) mine.push(fight.name);
+    else close.push({ boss: fight.name, pct: Math.round((now / best) * 100) });
+    const otherBest = g.best && g.best.code !== digest.code ? g.best.perSecond : 0;
+    if (g.players >= 2 && now >= otherBest) guild.push(fight.name);
   }
-  return lines;
+  if (!compared) return null;
+  const list = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}` : xs[0]);
+  const parts: string[] = [];
+  parts.push(mine.length ? `New personal best on ${list(mine)} (${mine.length} of ${compared} bosses you\u2019ve killed before).` : `No personal bests tonight across ${compared} bosses you\u2019ve killed before.`);
+  if (guild.length) parts.push(`Best in the guild for your spec on ${list(guild)}.`);
+  const nearest = close.sort((a, b) => b.pct - a.pct)[0];
+  if (nearest && nearest.pct >= 90) parts.push(`Closest to a best: ${nearest.boss} (${nearest.pct}% of it).`);
+  return parts.join(' ');
 }
 
 /** "55 → 61 → 72" over the weeks with raids. */
@@ -615,7 +634,7 @@ export function helpMessage(): MessageBody {
           value: [
             line('/raids', 'pick one of the last 5 raids (or paste any Warcraft Logs link) to get your summaries by DM.'),
             line('/check', 'your character at a glance: class, spec, item level, stats and your last raid.'),
-            'After each raid, the buttons under the summary in the raid channel send you: **Quick summary**, **My overview**, **Rotation & cooldowns**, **Damage breakdown**, **Gear & stats** and **Survival**.',
+            'After each raid, the buttons under the summary in the raid channel send you: **Quick summary**, **Rotation & cooldowns**, **Damage breakdown**, **Gear & stats** and **Survival**.',
           ].join('\n'),
         },
         {

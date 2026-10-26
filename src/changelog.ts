@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.27.0',
+    date: '2026-10-26',
+    changes: [
+      'Discord: My overview is gone (the quick summary covers it). The quick summary is shorter and ends with your personal bests from the night instead of a boss-by-boss guild list.',
+      'Damage and healing breakdowns are condensed: top abilities, only where you differ from others of your spec, and DPS (or HPS) with parse per boss.',
+      'Bosses where you did nothing (like Chess Event) no longer count towards your averages or weakest boss.',
+    ],
+  },
+  {
     version: '0.26.3',
     date: '2026-10-26',
     changes: ['Mana over the fight is removed: this game version\u2019s logs don\u2019t record the mana pool in a form Warcraft Logs can read. Fights are read with less data as a result.'],
