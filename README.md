@@ -41,6 +41,8 @@ People sign in with their Discord account; only members of the guild's server (`
 
 Sessions last 7 days (30 with the password).
 
+**Guild page.** The home page shows the guild's progress in each raid (from Past raids), its roster and attendance, and its Warcraft Logs ranks. For the Warcraft Logs part, set `WCL_GUILD_ID` (the number in the guild's Warcraft Logs address, e.g. `773392`), or `GUILD_NAME`, `GUILD_REALM` and `GUILD_REGION`. It's read at most once an hour; without it the rest of the page still shows.
+
 **Who can see what.** Guild members (signed in with Discord, in the guild's server) can use everything. Anyone else is refused at sign-in with a page explaining why. Shared analysis links (`/a/<id>`) open for anyone with the link, read-only: guests see the analysis and its comparisons but can't change it or reach anything else. Signed-in members can change a shared analysis's comparison, which saves a new one. Membership is checked again every 10 minutes, so someone who leaves the server loses access.
 
 **Ranks.** Admin (only `SITE_ADMIN_IDS`), Guild master (the Discord server owner by default), Officer (Administrator, Manage Server or `DISCORD_ADMIN_ROLE_ID` on Discord by default) and Raider (everyone else). A rank set on the Admin page wins over Discord, and the bot's officer-only commands use the same ranks. Each rank can edit people below it and give them ranks below its own; admins can edit everyone. Run `supabase/schema.sql` again after updating (it adds the rank columns).
@@ -90,6 +92,8 @@ The bot runs on the same Vercel project (no extra server) as a single function, 
 **Raid posts.** `/raidstart` and `/raidend` post in the thread (or channel) they're typed in, so each raid can have its own thread. The bot needs **Send Messages in Threads** there (and, for a private thread, to be added to it). Used from a DM to the bot, they post in `DISCORD_RAID_CHANNEL_ID`.
 
 **Bug reports.** A **Report a bug** button (under each raid summary and in `/help`) opens a short form. Reports are kept in `bug_reports` and listed on the Admin page, where officers can mark them fixed (and tell the reporter by DM), reopen them, or (guild masters and admins) delete them. They're also posted to `DISCORD_BUG_CHANNEL_ID` or sent to `DISCORD_OWNER_ID` by DM, if either is set. Needs `supabase/migrate-0.28.sql` run once.
+
+**Guild details.** The home page shows the Discord server's name and picture. Guild masters and admins can replace either (and add an About line) under **Guild details** on the Admin page; clearing a field goes back to Discord's. Kept in `site_settings`. Needs `supabase/migrate-0.31.sql` run once.
 
 **Activity log (optional).** Set `DISCORD_LOG_CHANNEL_ID` to a private channel and the bot posts one line per command or button press: who, what (command and which options were used, never what was typed), where, when, and whether it worked or the error if not. Failed reminders and command registration are logged too. Mentions in the log don't ping anyone. To check it's set up, open `https://guildlog.uk/api/discord?task=logtest&key=YOUR_CRON_SECRET`: it posts a test line, or says what's wrong.
 

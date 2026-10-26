@@ -1,7 +1,7 @@
-// The home page around "Analyze a log": the guild at a glance, the next raid, the latest raids
-// and what went well, your characters and the guild's recent analyses.
+// The home page around "Analyze a log", as a guild page like Warcraft Logs': who the guild is,
+// progress and ranks, best parses, the roster by role, the raid schedule and recent reports.
 import { useEffect, useState } from 'react';
-import type { HomeData, SavedRaid } from '../../server/types';
+import type { GuildRankings, HomeData, RankSet, SavedRaid, WclRank, ZoneProgress } from '../../server/types';
 import { loadHome } from '../api';
 import { mmss, n0 } from '../format';
 import Glyph from './Glyph';
@@ -30,19 +30,27 @@ function untilText(iso: string) {
   return `in ${Math.max(1, Math.round(ms / 60_000))} minutes`;
 }
 
-/** Above "Analyze a log": the guild, who's signed in, and the next raid. */
+/** Above "Analyze a log": the guild, its progress, who's signed in, and the next raid. */
 export function HomeHero() {
   const d = useHome();
-  if (!d || (!d.guild && !d.nextRaid)) return null;
+  if (!d || (!d.guild && !d.wcl && !d.nextRaid)) return null;
+  const where = [d.wcl?.server && `${d.wcl.server}${d.wcl.region ? ` (${d.wcl.region})` : ''}`, d.wcl?.faction].filter(Boolean).join(' · ');
   return (
     <section className="panel home-hero">
       <div className="home-guild">
         {d.guild?.icon ? <img src={d.guild.icon} width={56} height={56} alt="" /> : <span className="kpi-icon big"><Glyph name="users" size={24} /></span>}
         <div>
-          <h1>{d.guild?.name ?? 'Guild Logs'}</h1>
-          {d.guild?.members ? (
-            <p className="muted small">{n0(d.guild.members)} members on Discord{d.guild.online ? ` · ${n0(d.guild.online)} online` : ''}</p>
-          ) : null}
+          <h1>{d.guild?.name || d.wcl?.name || 'Guild Logs'}</h1>
+          <p className="muted small">
+            {[where, d.guild?.members ? `${n0(d.guild.members)} members on Discord${d.guild.online ? `, ${n0(d.guild.online)} online` : ''}` : ''].filter(Boolean).join(' · ')}
+          </p>
+          {d.guild?.about && <p className="home-about">{d.guild.about}</p>}
+          {d.zones.length > 0 && (
+            <p className="home-progress">
+              {d.zones.map((z) => <span key={z.id} className={`zone-chip${z.killed === z.total ? ' full' : ''}`}>{z.name} <strong>{z.killed}/{z.total}</strong></span>)}
+              {d.wcl && <a href={d.wcl.url} target="_blank" rel="noreferrer" className="small">On Warcraft Logs</a>}
+            </p>
+          )}
           {d.myCharacters.length > 0 && (
             <p className="home-mine">
               <a href="/#/me">Your characters:</a> {d.myCharacters.map((c) => <span key={c.name} className={`admin-char ${c.status}`}>{c.name}</span>)}
@@ -65,7 +73,8 @@ export function HomeHero() {
   );
 }
 
-/** Below "Analyze a log": the guild's numbers, latest raids, highlights and recent analyses. */
+/** Below "Analyze a log", laid out like a Warcraft Logs guild page: the main column has progress,
+ * best parses and the roster by role; the side column has ranks, the schedule and recent reports. */
 export function HomeExtras() {
   const d = useHome();
   if (!d) return null;
@@ -82,93 +91,87 @@ export function HomeExtras() {
       )}
 
       <div className="grid-2-1">
-        <section className="panel">
-          <div className="panel-head">
-            <h2 className="panel-title">Latest raids</h2>
-            <a href="/#/raids" className="small">All past raids</a>
-          </div>
-          {d.latestRaids.length === 0 ? (
-            <p className="muted">No raids yet. They appear here after <strong>/raidend</strong> in Discord, or when an officer adds one on Past raids.</p>
-          ) : (
-            <ul className="home-raids">
-              {d.latestRaids.map((r) => {
-                const c = r.card;
-                if (!c) {
+        <div className="home-col">
+          {d.zones.length > 0 && <Progress zones={d.zones} wclUrl={d.wcl?.url ?? null} />}
+          {d.rankings && d.rankings.players.length > 0 && <Rankings r={d.rankings} />}
+          {d.roster.length > 0 && <Composition roster={d.roster} />}
+          {d.recentAnalyses.length > 0 && <RecentAnalyses list={d.recentAnalyses} />}
+        </div>
+
+        <aside className="home-col">
+          {d.zones[0]?.ranks && <RankCard zone={d.zones[0]} url={d.wcl?.url ?? null} />}
+          {d.schedule.length > 0 && <Schedule raids={d.schedule} />}
+
+          <section className="panel">
+            <div className="panel-head">
+              <h2 className="panel-title">Recent reports</h2>
+              <a href="/#/raids" className="small">All past raids</a>
+            </div>
+            {d.latestRaids.length === 0 ? (
+              <p className="muted small">No raids yet. They appear here after <strong>/raidend</strong> in Discord, or when an officer adds one on Past raids.</p>
+            ) : (
+              <ul className="home-raids">
+                {d.latestRaids.map((r) => {
+                  const c = r.card;
+                  const full = !!c && c.kills > 0 && c.bosses.every((b) => b.kill);
                   return (
                     <li key={r.code}>
-                      <span className="raid-chip-count">…</span>
+                      <span className={`raid-chip-count ${!c ? '' : full ? 'full' : c.kills ? 'partial' : 'none'}`}>{c ? `${c.kills}/${c.bosses.length}` : '…'}</span>
                       <span className="home-raid-main">
                         <a href={logLink(r)}><strong>{r.title ?? r.code}</strong></a>
-                        <span className="muted small">{shortDate(r.startTime!)} · being read from Warcraft Logs</span>
+                        <span className="muted small">
+                          {shortDate(r.startTime!)}{c ? ` · ${c.raidSeconds ? hm(c.raidSeconds) : '–'} · ${c.raiders.length} raiders` : ' · being read'}
+                        </span>
                       </span>
                     </li>
                   );
-                }
-                const full = c.kills > 0 && c.bosses.every((b) => b.kill);
-                return (
-                  <li key={r.code}>
-                    <span className={`raid-chip-count ${full ? 'full' : c.kills ? 'partial' : 'none'}`}>{c.kills}/{c.bosses.length}</span>
-                    <span className="home-raid-main">
-                      <a href={logLink(r)}><strong>{r.title ?? r.code}</strong></a>
-                      <span className="muted small">
-                        {shortDate(r.startTime!)} · {c.raidSeconds ? hm(c.raidSeconds) : '–'} · {c.raiders.length} raiders · {(c.summarized ?? c.kills) < c.kills ? `still reading (${c.summarized ?? 0} of ${c.kills} kills)` : `${c.deaths} death${c.deaths === 1 ? '' : 's'}`}
-                      </span>
-                      <span className="home-bosses">
-                        {c.bosses.map((b) => (
-                          <a key={b.encounterId} href={b.fightId ? logLink(r, b.fightId) : undefined} className={b.kill ? 'kill' : 'wipe'} title={b.kill ? `Killed in ${mmss(b.seconds ?? 0)}` : 'Not killed'}>
-                            {b.name}{b.kill && b.seconds ? ` ${mmss(b.seconds)}` : ''}
-                          </a>
-                        ))}
-                      </span>
-                    </span>
+                })}
+              </ul>
+            )}
+          </section>
+
+          {d.highlights.length > 0 && (
+            <section className="panel">
+              <h2 className="panel-title">Last raid&rsquo;s highlights</h2>
+              <ul className="findings wins">
+                {d.highlights.map((f, i) => (
+                  <li key={i}>
+                    <span className="win-mark"><Glyph name="check" size={14} label="Went well" /></span>
+                    <div><strong>{f.title}</strong><p>{f.detail}</p>{f.who && f.who.length > 0 && <p className="muted small">{f.who.slice(0, 8).join(', ')}{f.who.length > 8 ? ` and ${f.who.length - 8} more` : ''}</p>}</div>
                   </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-
-        <section className="panel">
-          <h2 className="panel-title">Last raid&rsquo;s highlights</h2>
-          {d.highlights.length === 0 ? (
-            <p className="muted small">Highlights from the latest raid show here.</p>
-          ) : (
-            <ul className="findings wins">
-              {d.highlights.map((f, i) => (
-                <li key={i}>
-                  <span className="win-mark"><Glyph name="check" size={14} label="Went well" /></span>
-                  <div><strong>{f.title}</strong><p>{f.detail}</p>{f.who && f.who.length > 0 && <p className="muted small">{f.who.slice(0, 8).join(', ')}{f.who.length > 8 ? ` and ${f.who.length - 8} more` : ''}</p>}</div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
-
-      {d.recentAnalyses.length > 0 && (
-        <section className="panel">
-          <div className="panel-head">
-            <h2 className="panel-title">Recently analyzed</h2>
-            <a href="/#/history" className="small">All analyses</a>
-          </div>
-          <div className="scroll">
-            <table className="grid">
-              <thead><tr><th>Player</th><th>Boss</th><th className="r">Parse</th><th>When</th></tr></thead>
-              <tbody>
-                {d.recentAnalyses.map((a) => (
-                  <tr key={a.id} className="clickable" onClick={() => (window.location.href = `/a/${a.id}`)}>
-                    <td><a href={`/a/${a.id}`} className={`with-icon ${classCss(a.class_name)}`}><ClassIcon className={a.class_name} size={16} />{a.player_name}</a></td>
-                    <td>{a.encounter_name}</td>
-                    <td className={`r strong ${parseCss(a.parse_percent)}`}>{a.parse_percent === null ? '–' : Math.round(a.parse_percent)}</td>
-                    <td className="muted">{shortDate(a.created_at)}</td>
-                  </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
+              </ul>
+            </section>
+          )}
+        </aside>
+      </div>
     </>
+  );
+}
+
+function RecentAnalyses({ list }: { list: HomeData['recentAnalyses'] }) {
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2 className="panel-title">Recently analyzed</h2>
+        <a href="/#/history" className="small">All analyses</a>
+      </div>
+      <div className="scroll">
+        <table className="grid">
+          <thead><tr><th>Player</th><th>Boss</th><th className="r">Parse</th><th>When</th></tr></thead>
+          <tbody>
+            {list.map((a) => (
+              <tr key={a.id} className="clickable" onClick={() => (window.location.href = `/a/${a.id}`)}>
+                <td><a href={`/a/${a.id}`} className={`with-icon ${classCss(a.class_name)}`}><ClassIcon className={a.class_name} size={16} />{a.player_name}</a></td>
+                <td>{a.encounter_name}</td>
+                <td className={`r strong ${parseCss(a.parse_percent)}`}>{a.parse_percent === null ? '–' : Math.round(a.parse_percent)}</td>
+                <td className="muted">{shortDate(a.created_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -179,5 +182,192 @@ function Kpi({ glyph, label, value, sub }: { glyph: 'calendar' | 'check' | 'time
       <div className="kpi-value">{value}</div>
       <div className="kpi-sub">{sub}</div>
     </div>
+  );
+}
+
+const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+/** Warcraft Logs' rank colors, in the site's parse colors. */
+const RANK_CSS: Record<string, string> = { common: 'parse-gray', uncommon: 'parse-green', rare: 'parse-blue', epic: 'parse-purple', legendary: 'parse-orange', astounding: 'parse-pink', artifact: 'parse-pink' };
+
+/** Progress in each raid: every boss with its first kill, kills and fastest kill, and the guild's
+ * ranks for older raids (the newest raid's are on the rank card beside it). */
+function Progress({ zones, wclUrl }: { zones: ZoneProgress[]; wclUrl: string | null }) {
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2 className="panel-title">Progress</h2>
+        {wclUrl && <a href={wclUrl} target="_blank" rel="noreferrer" className="small">Rankings on Warcraft Logs</a>}
+      </div>
+      <div className="zones">
+        {zones.map((z, i) => (
+          <div key={z.id} className="zone">
+            <div className="zone-head">
+              <strong>{z.name}</strong>
+              <span className={`zone-count${z.killed === z.total ? ' full' : ''}`}>{z.killed}/{z.total}</span>
+            </div>
+            {i > 0 && z.ranks && (z.ranks.progress || z.ranks.speed) && (
+              <div className="zone-ranks">
+                {z.ranks.progress && <Ranks label="Progress" set={z.ranks.progress} url={wclUrl} />}
+                {z.ranks.speed && <Ranks label="Speed" set={z.ranks.speed} url={wclUrl} />}
+              </div>
+            )}
+            <table className="grid">
+              <thead><tr><th>Boss</th><th>First kill</th><th className="r">Kills</th><th className="r">Fastest</th></tr></thead>
+              <tbody>
+                {z.bosses.map((b) => (
+                  <tr key={b.encounterId}>
+                    <td className={b.kills ? '' : 'muted'}>{b.name}</td>
+                    <td className="muted">{b.firstKill ? day(b.firstKill) : 'Not yet'}</td>
+                    <td className="r">{b.kills || '–'}</td>
+                    <td className="r">
+                      {b.best ? <a href={`/?log=${encodeURIComponent(`https://${b.best.host}/reports/${b.best.code}?fight=${b.best.fightId}`)}`}>{mmss(b.best.seconds)}</a> : '–'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Ranks({ label, set, url }: { label: string; set: RankSet; url: string | null }) {
+  const one = (name: string, r: WclRank | null) => (r ? <span key={name}>{name} <strong className={RANK_CSS[r.color ?? ''] ?? ''}>#{n0(r.number)}</strong></span> : null);
+  const body = <>{label}: {one('World', set.world)}{one('Region', set.region)}{one('Realm', set.server)}</>;
+  return url ? <a href={url} target="_blank" rel="noreferrer" className="rank-line">{body}</a> : <span className="rank-line">{body}</span>;
+}
+
+const ROLES = [['tank', 'Tanks'], ['healer', 'Healers'], ['dps', 'Damage']] as const;
+
+/** Who's been raiding in the last 8 weeks, by role, with item level and raids attended. */
+function Composition({ roster }: { roster: HomeData['roster'] }) {
+  const of = roster[0]?.of ?? 0;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2 className="panel-title">Composition ({roster.length})</h2>
+        <span className="muted small">Item level · raids attended in the last 8 weeks ({of})</span>
+      </div>
+      <div className="composition">
+        {ROLES.map(([role, label]) => {
+          const list = roster.filter((p) => (p.role ?? 'dps') === role);
+          return (
+            <div key={role}>
+              <div className="comp-label">{label} ({list.length})</div>
+              <ul className="roster">
+                {list.map((p) => (
+                  <li key={p.name}>
+                    <ClassIcon className={p.className} size={18} />
+                    <span className={`roster-name ${classCss(p.className)}`}>{p.name}</span>
+                    <span className="muted small r">{p.itemLevel ? Math.round(p.itemLevel) : ''}</span>
+                    <span className="muted small r" title={`${p.raids} of ${p.of} raids`}>{p.raids}/{p.of}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/** Everyone's best parse on each boss of the newest raid, by role, like Warcraft Logs' Rankings tab. */
+function Rankings({ r }: { r: GuildRankings }) {
+  const [role, setRole] = useState<'dps' | 'healer' | 'tank'>('dps');
+  const rows = r.players.filter((p) => p.role === role);
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2 className="panel-title">Best parses: {r.zone}</h2>
+        <div className="seg" role="group" aria-label="Role">
+          {(['dps', 'healer', 'tank'] as const).map((x) => (
+            <button key={x} type="button" className={x === role ? 'on' : ''} onClick={() => setRole(x)}>{x === 'dps' ? 'Damage' : x === 'healer' ? 'Healers' : 'Tanks'}</button>
+          ))}
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <p className="muted small">No parses for this role in the last 8 weeks.</p>
+      ) : (
+        <div className="scroll">
+          <table className="grid rank-grid">
+            <thead>
+              <tr><th>Name</th><th className="r">Avg</th>{r.bosses.map((b) => <th key={b.id} className="r" title={b.name}>{b.name.replace(/^The /, '').split(/[ ,]/)[0]}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => (
+                <tr key={p.name}>
+                  <td><span className={`with-icon ${classCss(p.className)}`}><ClassIcon className={p.className} size={16} />{p.name}</span></td>
+                  <td className={`r strong ${parseCss(p.avg)}`}>{p.avg === null ? '–' : Math.round(p.avg)}</td>
+                  {p.best.map((v, i) => <td key={i} className={`r ${parseCss(v)}`}>{v === null ? '–' : Math.round(v)}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="muted small">Best parse on each boss in the last 8 weeks, from Past raids (healers by healing).</p>
+    </section>
+  );
+}
+
+/** The newest raid's ranks, world rank big, with Progress and Speed tabs (links to Warcraft Logs). */
+function RankCard({ zone, url }: { zone: ZoneProgress; url: string | null }) {
+  const [kind, setKind] = useState<'progress' | 'speed'>(zone.ranks?.progress ? 'progress' : 'speed');
+  const set = zone.ranks?.[kind];
+  const num = (r: WclRank | null | undefined) => (r ? <strong className={RANK_CSS[r.color ?? ''] ?? ''}>{n0(r.number)}</strong> : <strong className="muted">–</strong>);
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2 className="panel-title">{zone.name} <span className="muted">{zone.killed}/{zone.total}</span></h2>
+        <div className="seg" role="group" aria-label="Rank">
+          <button type="button" className={kind === 'progress' ? 'on' : ''} onClick={() => setKind('progress')}>Progress</button>
+          <button type="button" className={kind === 'speed' ? 'on' : ''} onClick={() => setKind('speed')}>Speed</button>
+        </div>
+      </div>
+      <a href={url ?? undefined} target="_blank" rel="noreferrer" className="rank-card">
+        <span className="rank-world"><span className="muted small">World</span>{num(set?.world)}</span>
+        <span className="rank-sub"><span className="muted small">Region</span>{num(set?.region)}</span>
+        <span className="rank-sub"><span className="muted small">Realm</span>{num(set?.server)}</span>
+      </a>
+    </section>
+  );
+}
+
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+
+/** The usual raid nights, worked out from when raids started in the last 8 weeks (in your time). */
+function Schedule({ raids }: { raids: HomeData['schedule'] }) {
+  const byDay = new Map<number, { mins: number[]; secs: number[] }>();
+  for (const r of raids) {
+    const t = new Date(r.start);
+    const x = byDay.get(t.getDay()) ?? { mins: [], secs: [] };
+    x.mins.push(t.getHours() * 60 + t.getMinutes());
+    x.secs.push(r.seconds);
+    byDay.set(t.getDay(), x);
+  }
+  // A night counts once it's been raided at least twice (or there are only a few raids so far)
+  const nights = [...byDay].filter(([, x]) => x.mins.length >= 2 || raids.length < 4).sort((a, b) => a[0] - b[0]);
+  if (!nights.length) return null;
+  const clock = (m: number) => {
+    const q = Math.round(m / 15) * 15;
+    return new Date(2000, 0, 1, Math.floor(q / 60), q % 60).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+  return (
+    <section className="panel">
+      <h2 className="panel-title">Schedule</h2>
+      <table className="grid">
+        <thead><tr><th>Day</th><th>First pull</th><th className="r">Length</th></tr></thead>
+        <tbody>
+          {nights.map(([day, x]) => (
+            <tr key={day}><td>{DAYS[day]}</td><td>{clock(median(x.mins))}</td><td className="r">{hm(median(x.secs))}</td></tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="muted small">Usual times in your time zone, from the last 8 weeks.</p>
+    </section>
   );
 }

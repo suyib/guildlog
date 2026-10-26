@@ -9,6 +9,29 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.31.0',
+    date: '2026-10-26',
+    changes: [
+      'Guild details on the Admin page (guild masters and admins): the guild\u2019s name and picture come from the Discord server, and can be replaced with your own; clear them to go back to Discord\u2019s. There\u2019s also an About text shown under the guild\u2019s name on the home page.',
+    ],
+  },
+  {
+    version: '0.30.0',
+    date: '2026-10-26',
+    changes: [
+      'The home page is laid out like a Warcraft Logs guild page, with a side column for the newest raid\u2019s ranks (Progress and Speed, world rank up front, linking to Warcraft Logs), the usual raid schedule worked out from the last 8 weeks, recent reports and the last raid\u2019s highlights.',
+      'New Best parses table on the home page: everyone\u2019s best parse on each boss of the newest raid over the last 8 weeks, with Damage, Healers and Tanks tabs.',
+      'The roster is now Composition: tanks, healers and damage in their own columns, with item level and raids attended.',
+    ],
+  },
+  {
+    version: '0.29.0',
+    date: '2026-10-26',
+    changes: [
+      'The home page is now a guild page: realm and faction, progress in each raid with every boss\u2019s first kill, number of kills and fastest kill, the guild\u2019s Warcraft Logs ranks (world, region, realm) linking to Warcraft Logs, and the roster with attendance over the last 8 weeks.',
+    ],
+  },
+  {
     version: '0.28.1',
     date: '2026-10-26',
     changes: ['Discord: a friendlier reply after reporting a bug, saying to DM suy directly if it\u2019s urgent.'],

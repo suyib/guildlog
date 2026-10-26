@@ -1,7 +1,7 @@
 // Admin (officers and above): everyone who has signed in or used the bot, with their rank, and
 // editing for anyone below you: rank, display name, officer note, site access and characters.
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import type { AdminEdit, AdminOverview, AdminPerson, AdminSignIn, BugReport, Rank } from '../../server/types';
+import type { AdminEdit, AdminOverview, AdminPerson, AdminSignIn, BugReport, GuildSettings, Rank } from '../../server/types';
 import { RANK_LABEL, loadAdmin, saveAdminEdit } from '../api';
 import Glyph from './Glyph';
 
@@ -65,6 +65,8 @@ export default function AdminPage() {
         <Kpi glyph="users" label="Raiders" value={String(count('raider'))} sub={`${data.people.filter((p) => p.blocked).length} with access turned off`} />
         <Kpi glyph="alert" label="Problems" value={String(problems)} sub={`failed sign-ins, last ${data.signInLogDays} days`} />
       </div>
+
+      {(data.me.rank === 'admin' || data.me.rank === 'guild_master') && data.guild && <GuildDetails guild={data.guild} onSaved={refresh} />}
 
       <BugReports bugs={data.bugs ?? []} canDelete={data.me.rank === 'admin' || data.me.rank === 'guild_master'} onSaved={refresh} />
 
@@ -264,6 +266,94 @@ function Kpi({ glyph, label, value, sub }: { glyph: 'users' | 'shield' | 'alert'
 }
 
 /** Bug reports from the Report a bug button in Discord: open ones first, each one a card to act on. */
+/** Shrink a picture to a 128px square (cropped to the middle) as a small data: image. */
+function squareIcon(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const side = Math.min(img.width, img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 128;
+      canvas.getContext('2d')!.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 128, 128);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/webp', 0.9));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('That file isn\u2019t a picture this browser can read.'));
+    };
+    img.src = url;
+  });
+}
+
+/** The guild's name, picture and about text (guild masters and admins). Empty name or picture: Discord's. */
+function GuildDetails({ guild, onSaved }: { guild: AdminOverview['guild']; onSaved: () => void }) {
+  const [form, setForm] = useState<GuildSettings>(guild.settings);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const icon = form.icon ?? guild.discord?.icon ?? null;
+  const changed = JSON.stringify(form) !== JSON.stringify(guild.settings);
+
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const icon = await squareIcon(file);
+      setForm((f) => ({ ...f, icon }));
+      setMsg(null);
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    }
+  };
+  const save = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await saveAdminEdit({ action: 'guild', ...form });
+      setMsg({ ok: true, text: 'Saved. The home page shows these now.' });
+      onSaved();
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="panel">
+      <h2 className="panel-title">Guild details</h2>
+      <p className="muted small">The name and picture come from the Discord server. Set them here to use something else; clear them to go back to Discord&rsquo;s.</p>
+      <div className="guild-form">
+        <div className="guild-icon">
+          {icon ? <img src={icon} width={72} height={72} alt="Guild picture" /> : <span className="kpi-icon big"><Glyph name="users" size={24} /></span>}
+          <label className="button ghost">
+            Upload picture
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" onChange={(e) => pick(e.target.files?.[0])} />
+          </label>
+          {form.icon && <button type="button" className="ghost" onClick={() => setForm((f) => ({ ...f, icon: null }))}>Use Discord&rsquo;s</button>}
+          <span className="muted small">{form.icon ? 'Custom picture' : 'From Discord'}</span>
+        </div>
+        <div className="guild-fields">
+          <label>
+            Name
+            <input value={form.name ?? ''} maxLength={60} placeholder={guild.discord?.name ?? 'Guild name'} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value || null }))} />
+            <span className="muted small">{form.name ? 'Custom name' : `From Discord${guild.discord ? `: ${guild.discord.name}` : ''}`}</span>
+          </label>
+          <label>
+            About
+            <textarea value={form.about ?? ''} maxLength={600} rows={3} placeholder="A line or two about the guild, shown under its name on the home page" onChange={(e) => setForm((f) => ({ ...f, about: e.target.value || null }))} />
+          </label>
+          <div className="row wrap-center">
+            <button type="button" disabled={busy || !changed} onClick={save}>{busy ? 'Saving\u2026' : 'Save'}</button>
+            {changed && <button type="button" className="ghost" disabled={busy} onClick={() => setForm(guild.settings)}>Undo changes</button>}
+            {msg && <span className={msg.ok ? 'muted small' : 'error small'}>{msg.text}</span>}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function BugReports({ bugs, canDelete, onSaved }: { bugs: BugReport[]; canDelete: boolean; onSaved: () => void }) {
   const [show, setShow] = useState<'open' | 'resolved' | 'all'>('open');
   const open = bugs.filter((b) => b.status === 'open').length;

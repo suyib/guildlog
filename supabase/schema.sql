@@ -226,3 +226,15 @@ create table if not exists public.bug_reports (
 );
 create index if not exists bug_reports_created on public.bug_reports (created_at desc);
 alter table public.bug_reports enable row level security;
+
+-- ---------- Site settings ----------
+
+-- Settings changed on the Admin page, one row per key. 'guild': name, picture and about text
+-- (each overrides Discord's when set).
+create table if not exists public.site_settings (
+  key text primary key,
+  value jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+alter table public.site_settings enable row level security;

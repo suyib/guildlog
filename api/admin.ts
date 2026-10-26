@@ -24,7 +24,7 @@ export async function POST(req: Request): Promise<Response> {
   const { session, rank } = check;
   try {
     const edit = (await req.json()) as AdminEdit;
-    if (!edit?.action || !edit.id) return json({ error: 'Nothing to change.' }, 400);
+    if (!edit?.action || (edit.action !== 'guild' && !edit.id)) return json({ error: 'Nothing to change.' }, 400);
     const done = await applyEdit(edit, { id: session.uid ?? null, name: session.name ?? 'Someone', rank });
     await auditTask(`${session.uid ? `<@${session.uid}>` : 'Someone'} (${RANK_LABEL[rank]}) ${done} on the Admin page`);
     return json({ ok: true, done });

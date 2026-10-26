@@ -409,6 +409,8 @@ export interface AdminOverview {
   signInLogDays: number;
   /** Bug reports, open ones first (missing until the bug_reports table exists). */
   bugs: BugReport[];
+  /** The guild details as saved, and what Discord says (used when a detail isn't set). */
+  guild: { settings: GuildSettings; discord: { name: string; icon: string | null } | null };
 }
 
 /** A bug report sent with the Report a bug button in Discord. */
@@ -440,12 +442,22 @@ export type AdminEdit =
   | { action: 'claim'; id: string; claimId: string; status: 'approved' | 'rejected' | 'removed' }
   /** Bug reports (id: the report's id). tell: DM the reporter that it's been fixed, with the note. */
   | { action: 'bug'; id: string; status?: 'open' | 'resolved'; note?: string | null; tell?: boolean }
-  | { action: 'bugDelete'; id: string };
+  | { action: 'bugDelete'; id: string }
+  /** The guild's details (guild masters and admins). Empty name or picture: use Discord's. */
+  | { action: 'guild'; name: string | null; icon: string | null; about: string | null };
+
+/** Guild details set on the Admin page; each overrides Discord's when set. icon: a small data: image. */
+export interface GuildSettings {
+  name: string | null;
+  icon: string | null;
+  about: string | null;
+}
 
 // ---------- Home page and profiles ----------
 
 export interface HomeData {
-  guild: { name: string; icon: string | null; members: number | null; online: number | null } | null;
+  /** Name and picture from the Admin page when set, otherwise from Discord. */
+  guild: { name: string; icon: string | null; about: string | null; members: number | null; online: number | null } | null;
   /** The next raid someone set a /remind for. */
   nextRaid: { message: string; place: string | null; gatherAt: string } | null;
   stats: { raids8w: number; fullClears8w: number; avgRaidSeconds: number | null; activeRaiders4w: number };
@@ -455,6 +467,42 @@ export interface HomeData {
   recentAnalyses: HistoryRow[];
   /** The signed-in person's claimed characters. */
   myCharacters: { name: string; status: string }[];
+  /** The guild on Warcraft Logs (when GUILD_NAME, GUILD_REALM and GUILD_REGION, or WCL_GUILD_ID, are set). */
+  wcl: { id: number; url: string; name: string; server: string | null; region: string | null; faction: string | null } | null;
+  /** Progress in each raid, from Past raids, with Warcraft Logs ranks when available. Newest raid first. */
+  zones: ZoneProgress[];
+  /** When raids started and how long they ran, last 8 weeks (the page works out the usual days and times). */
+  schedule: { start: string; seconds: number }[];
+  /** Everyone in a raid in the last 8 weeks, most raids first. */
+  roster: { name: string; className: string; specName: string; role: 'tank' | 'healer' | 'dps' | null; raids: number; of: number; itemLevel: number | null }[];
+  /** Everyone's best parse on each boss of the newest raid, last 8 weeks (healers by healing). */
+  rankings: GuildRankings | null;
+}
+
+export interface GuildRankings {
+  zone: string;
+  bosses: { id: number; name: string }[];
+  players: { name: string; className: string; role: 'tank' | 'healer' | 'dps'; best: (number | null)[]; avg: number | null }[];
+}
+
+/** World, region and realm rank on Warcraft Logs. */
+export interface RankSet { world: WclRank | null; region: WclRank | null; server: WclRank | null }
+export interface WclRank { number: number; color: string | null }
+
+export interface ZoneProgress {
+  id: number;
+  name: string;
+  killed: number;
+  total: number;
+  bosses: {
+    name: string;
+    encounterId: number;
+    /** First kill and the fastest one (with where to open it), or null if not killed yet. */
+    firstKill: string | null;
+    kills: number;
+    best: { seconds: number; host: string; code: string; fightId: number } | null;
+  }[];
+  ranks: { progress: RankSet | null; speed: RankSet | null } | null;
 }
 
 export interface ProfileCharacter {

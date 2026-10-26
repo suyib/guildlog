@@ -1,14 +1,15 @@
-// The home page (guild at a glance) and each person's profile (their claimed characters).
-// Built from what's already stored: Past raids cards, the bot's raid summaries, claims and
-// saved analyses. Nothing here needs Warcraft Logs, except a character's level (optional).
+// The home page (the guild page) and each person's profile (their claimed characters).
+// Built from what's already stored: Past raids cards, the bot's raid summaries, claims and saved
+// analyses. Warcraft Logs is only asked for the guild's ranks (hourly) and a character's level.
 import { listRaids } from './archive.js';
 import { characterLevel } from './blizzard.js';
 import { dbEnabled, listHistory, rest } from './db.js';
-import { discord, env } from './discord/api.js';
 import { type FightDigest, type PlayerDigest, healsMost } from './discord/digest.js';
 import { claimsFor, recentRaids } from './discord/store.js';
 import { reportRegion, storedDigests } from './pack.js';
 import { trendFor } from './benchmarks.js';
+import { rankings, roster, wclGuild, zoneProgress } from './guildPage.js';
+import { discordGuild, guildSettings } from './guildSettings.js';
 import type { Session } from './auth.js';
 import type { HomeData, ProfileCharacter, ProfileData, SavedRaid } from './types.js';
 import { membership } from './officers.js';
@@ -18,17 +19,11 @@ const WEEK = 7 * 86_400_000;
 const avg = (xs: number[]) => (xs.length ? xs.reduce((t, v) => t + v, 0) / xs.length : null);
 
 /** The guild's Discord server: name, icon and member counts (via the bot). */
+/** The guild for the home page: details set on the Admin page win over Discord's. */
 async function guildInfo(): Promise<HomeData['guild']> {
-  const id = env.guildId();
-  if (!id) return null;
-  const g = await discord<{ id: string; name: string; icon: string | null; approximate_member_count?: number; approximate_presence_count?: number }>(`/guilds/${id}?with_counts=true`).catch(() => null);
-  if (!g) return null;
-  return {
-    name: g.name,
-    icon: g.icon ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=128` : null,
-    members: g.approximate_member_count ?? null,
-    online: g.approximate_presence_count ?? null,
-  };
+  const [g, s] = await Promise.all([discordGuild(), guildSettings()]);
+  if (!g && !s.name) return null;
+  return { name: s.name ?? g?.name ?? '', icon: s.icon ?? g?.icon ?? null, about: s.about, members: g?.members ?? null, online: g?.online ?? null };
 }
 
 /** The next raid someone set a reminder for with /remind. */
@@ -54,6 +49,12 @@ export async function homeData(session: Session | null): Promise<HomeData> {
   const raiders = new Set(last4.flatMap((r) => r.card!.raiders.map((p) => p.name)));
   // Highlights from the latest raid that's been read in full
   const latest = dated.find((r) => (r.card!.summarized ?? r.card!.kills) >= r.card!.kills) ?? null;
+  // Progress in each raid, with the guild's Warcraft Logs ranks when they're available
+  const zones = await zoneProgress(list.raids).catch(() => []);
+  const { guild: wcl, ranks } = await wclGuild(zones.map((z) => z.id)).catch(() => ({ guild: null, ranks: new Map() }));
+  for (const z of zones) z.ranks = ranks.get(z.id) ?? null;
+  const people = roster(list.raids);
+  const ranked = await rankings(zones[0], people).catch(() => null);
   return {
     guild,
     nextRaid: next,
@@ -64,10 +65,15 @@ export async function homeData(session: Session | null): Promise<HomeData> {
       activeRaiders4w: raiders.size,
     },
     // Including raids still being read, so a new raid shows up straight away
-    latestRaids: list.raids.filter((r) => r.startTime).slice(0, 4),
+    latestRaids: list.raids.filter((r) => r.startTime).slice(0, 8),
     highlights: latest?.card?.feedback.good.slice(0, 3) ?? [],
     recentAnalyses: recent,
     myCharacters: claims.map((c) => ({ name: c.character, status: c.status })),
+    wcl,
+    zones,
+    roster: people,
+    rankings: ranked,
+    schedule: last8.filter((r) => r.card!.raidSeconds > 0).map((r) => ({ start: r.startTime!, seconds: r.card!.raidSeconds })),
   };
 }
 
