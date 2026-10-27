@@ -797,9 +797,12 @@ a.boss-pill:hover { text-decoration: none; border-color: var(--primary-light); b
 .accordion > summary:has(.zone-count)::after { margin-left: 12px; }
 .zone-table td:nth-child(2) { white-space: nowrap; }
 .boss-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
-.boss-list li { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 10px; background: var(--raised); font-size: 13px; }
-.boss-list .kill, .boss-list .wipe { font: 700 11px var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; }
-.boss-open { font-size: 13px; font-weight: 600; }
+.boss-list li { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 6px 12px 6px 6px; border-radius: 12px; background: var(--raised); font-size: 13px; }
+.boss-list .boss-name { justify-self: start; color: var(--ink); font-weight: 700; text-align: left; }
+.boss-list .boss-name:hover:not(:disabled) { color: var(--primary-light); text-decoration: none; }
+.boss-list li.wipe .boss-icon { filter: grayscale(1); opacity: 0.7; }
+.boss-list li.wipe strong { color: var(--ink-3); }
+.zone-image { flex: none; width: 56px; height: 56px; border-radius: 14px; object-fit: cover; }
 .accordion { border-radius: 12px; background: var(--raised); }
 .accordion > summary { display: flex; align-items: center; gap: 6px; padding: 10px 14px; cursor: pointer; list-style: none; font-weight: 700; font-size: 14px; }
 .accordion > summary::-webkit-details-marker { display: none; }
@@ -852,11 +855,7 @@ table.attendance td { vertical-align: middle; white-space: nowrap; }
   .cal-grid { display: none; }
   .cal-list { display: grid; }
   .cal-list .raid-chip { flex: 1; }
-  .boss-list li { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: 'tag name open' 'tag meta open'; row-gap: 2px; }
-  .boss-list li > .kill, .boss-list li > .wipe { grid-area: tag; }
-  .boss-list li > strong { grid-area: name; }
-  .boss-list li > .muted { grid-area: meta; font-size: 12px; }
-  .boss-list li > :last-child { grid-area: open; }
+  .boss-list li { gap: 10px; }
   .att-nights-col, .att-bar-col { display: none; }
 }
 
