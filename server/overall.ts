@@ -48,6 +48,7 @@ export async function overallRaid(host: string, code: string): Promise<RaidOverv
     host,
     code,
     title: meta.title,
+    zone: meta.zone ?? null,
     startTime: meta.startTime,
     card,
     players: players.sort((a, b) => (b.avgParse ?? -1) - (a.avgParse ?? -1) || b.perSecond - a.perSecond),

@@ -9,6 +9,19 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.36.6',
+    date: '2026-10-27',
+    changes: [
+      'Whole night: each boss shows its picture instead of \u201cKill\u201d, and clicking the boss\u2019s name opens its breakdown (the separate Breakdown link is gone). Bosses that weren\u2019t killed are grayed out.',
+      'The raid\u2019s picture from Warcraft Logs sits next to its name on the Whole night view.',
+    ],
+  },
+  {
+    version: '0.36.5',
+    date: '2026-10-27',
+    changes: ['Home page Progress: each raid\u2019s table runs edge to edge inside its section and no longer spills out on phones.'],
+  },
+  {
     version: '0.36.4',
     date: '2026-10-27',
     changes: [

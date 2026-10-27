@@ -4,7 +4,7 @@
 import type { RaidOverview } from '../../server/types';
 import { compact, mmss, n0 } from '../format';
 import Glyph from './Glyph';
-import { ClassIcon, SeverityDot, classCss, parseCss } from './icons';
+import { BossIcon, ClassIcon, SeverityDot, ZoneImage, classCss, parseCss } from './icons';
 
 const hm = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : `${Math.round(s / 60)}m`);
 const spaced = (s: string) => s.replace(/([a-z])([A-Z])/g, '$1 $2');
@@ -28,7 +28,7 @@ export default function NightView({ data, onBoss, onPlayer, onRefresh, refreshin
     <div className="result">
       <header className="fight-head">
         <div className="fight-id">
-          <span className="kpi-icon big"><Glyph name="calendar" size={22} /></span>
+          <ZoneImage id={data.zone?.id} fallback={<span className="kpi-icon big"><Glyph name="calendar" size={22} /></span>} />
           <div>
             <div className="eyebrow">
               {new Date(data.startTime).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · {c.kills} of {c.bosses.length} bosses killed · {c.raiders.length} raiders
@@ -58,11 +58,10 @@ export default function NightView({ data, onBoss, onPlayer, onRefresh, refreshin
           <h2 className="panel-title">Bosses</h2>
           <ul className="boss-list">
             {c.bosses.map((b) => (
-              <li key={b.encounterId}>
-                <span className={b.kill ? 'kill' : 'wipe'}>{b.kill ? 'Kill' : 'Not killed'}</span>
-                <strong>{b.name}</strong>
-                <span className="muted">{b.seconds !== null ? mmss(b.seconds) : ''}{b.wipes ? `${b.seconds !== null ? ' · ' : ''}${b.wipes} wipe${b.wipes > 1 ? 's' : ''}` : ''}</span>
-                {b.fightId ? <button type="button" className="link-button boss-open" onClick={() => onBoss(b.fightId!)}>Breakdown</button> : <span />}
+              <li key={b.encounterId} className={b.kill ? '' : 'wipe'}>
+                <BossIcon id={b.encounterId} />
+                {b.fightId ? <button type="button" className="link-button boss-name" onClick={() => onBoss(b.fightId!)}>{b.name}</button> : <strong>{b.name}</strong>}
+                <span className="muted">{b.kill ? (b.seconds !== null ? mmss(b.seconds) : '') : 'Not killed'}{b.wipes ? ` · ${b.wipes} wipe${b.wipes > 1 ? 's' : ''}` : ''}</span>
               </li>
             ))}
           </ul>

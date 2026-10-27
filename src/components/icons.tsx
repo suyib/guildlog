@@ -74,6 +74,13 @@ export function compareLabel(key: string | undefined): string {
   return key;
 }
 
+/** A raid's picture from Warcraft Logs (by zone); the fallback when there isn't one. GAME CONTENT */
+export function ZoneImage({ id, fallback }: { id: number | null | undefined; fallback: React.ReactNode }) {
+  const [failed, setFailed] = useState(false);
+  if (!id || failed) return <>{fallback}</>;
+  return <img className="zone-image" src={`https://assets.rpglogs.com/img/warcraft/zones/zone-${Math.trunc(id)}.png`} width={56} height={56} alt="" loading="lazy" onError={() => setFailed(true)} />;
+}
+
 /**
  * A boss's picture from Warcraft Logs (by encounter); a plain circle if there isn't one. Classic logs
  * can use a prefixed ID (51604 for 1604) that has no picture of its own, so that falls back to the

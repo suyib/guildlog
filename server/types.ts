@@ -560,6 +560,8 @@ export interface RaidOverview {
   host: string;
   code: string;
   title: string;
+  /** The raid's zone on Warcraft Logs (for its picture). */
+  zone?: { id: number; name: string } | null;
   startTime: number;
   card: RaidCard;
   players: {
