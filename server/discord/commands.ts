@@ -12,7 +12,7 @@ import { guildContext, trendFor } from '../benchmarks.js';
 import {
   BRAND, bugButton, EPHEMERAL, type Embed, type MessageBody, button, discord, editReply, env, linkButton, memberRoles, postToChannel, row, sendDm,
 } from './api.js';
-import { type RaidDigest, healsMost, playerFights, raidDigest } from './digest.js';
+import { type FightDigest, type RaidDigest, healsMost, playerFights, raidDigest } from './digest.js';
 import { RAID_CHECKLIST, ROLE_CHOICES, type Role, consumablesMessage, lookupMessage } from './info.js';
 import { PAGES, type Page, pageButtons, personalPage, raidSummary, siteLink } from './pages.js';
 import {
@@ -472,21 +472,26 @@ async function performanceCommand(i: Interaction): Promise<Outcome> {
       let rows = parsed && !parsed.fight ? await performanceRows({ code: parsed.code }) : [];
       let label = RANGE_SCOPE[range].label;
       let oneNight = RANGE_SCOPE[range].oneNight;
+      // Their fight summaries too (active time, cooldowns, potions…), for what could go even better
+      let fights: FightDigest[] = [];
       if (parsed) {
         oneNight = true;
         const fightId = Number(parsed.fight);
         if (!rows.length || fightId > 0) {
           const digest = await raidDigest(parsed.host, parsed.code);
-          const fights = fightId > 0 ? digest.fights.filter((f) => f.id === fightId) : digest.fights;
+          fights = fightId > 0 ? digest.fights.filter((f) => f.id === fightId) : digest.fights;
           rows = rowsFromDigests(parsed.code, digest.meta.startTime, fights);
           label = fightId > 0 && fights[0] ? `${fights[0].name} (${digest.meta.title})` : digest.meta.title;
         } else {
           label = (await rest(`guild_raids?report_code=eq.${encodeURIComponent(parsed.code)}&select=title`).catch(() => null))?.[0]?.title ?? parsed.code;
+          fights = await storedDigests(parsed.code).catch(() => []);
         }
       } else {
         rows = await performanceRows(range);
+        const codes = [...new Set(rows.filter((r) => r.name.toLowerCase() === character.toLowerCase()).map((r) => r.report_code))].slice(0, 8);
+        fights = (await Promise.all(codes.map((c) => storedDigests(c).catch(() => [])))).flat();
       }
-      body = characterMessage({ label, oneNight, minKills: 1 }, rows, character, env.site());
+      body = characterMessage({ label, oneNight, minKills: 1 }, rows, character, env.site(), fights);
     } else if (parsed) {
       // A pasted raid (or one fight of it): read from the stored fights, or Warcraft Logs
       const digest = await raidDigest(parsed.host, parsed.code);

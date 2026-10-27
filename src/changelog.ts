@@ -9,6 +9,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.36.2',
+    date: '2026-10-27',
+    changes: ['`/performance character:` has a Room to improve section that finds gains even when someone is doing well: their weakest boss, downtime, unused cooldowns, missed potions, damage over time falling off, avoidable damage, overhealing and item level. Nothing is suggested at a 99+ parse.'],
+  },
+  {
     version: '0.36.1',
     date: '2026-10-27',
     changes: ['`/performance character:` one person\u2019s breakdown, boss by boss, in the same layout as the raid overview: what went well, what could use a hand (with tips), how they compare with the rest of the raid, and how to keep track. Pick a raid first and the list shows who was in it.'],

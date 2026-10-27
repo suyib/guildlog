@@ -221,7 +221,7 @@ export function performanceMessage(scope: PerfScope, data: PerfData, site: strin
 const CAVEAT = { text: 'Just an overview: the numbers can\u2019t see extra mechanics, assignments, kiting, interrupts, buffs or other utility someone was doing, so talk to them before drawing conclusions.' };
 
 /** One character's breakdown, in the same shape as the raid overview: boss by boss. */
-export function characterMessage(scope: PerfScope, rows: Row[], character: string, site: string): MessageBody {
+export function characterMessage(scope: PerfScope, rows: Row[], character: string, site: string, fights: FightDigest[] = []): MessageBody {
   const key = character.trim().toLowerCase();
   const mine = rows.filter((r) => r.name.toLowerCase() === key);
   if (!mine.length) {
@@ -250,11 +250,11 @@ export function characterMessage(scope: PerfScope, rows: Row[], character: strin
     } else if (v === null || v === undefined || Number(v) >= HIGH) good.push(text);
   }
 
-  const { why, help } = concerns(p, raid.itemLevel);
-  const watch: string[] = [];
-  for (const w of why.filter((w) => /item level|vary/.test(w))) watch.push(w.charAt(0).toUpperCase() + w.slice(1) + '.');
+  const { help } = concerns(p, raid.itemLevel);
   for (const h of help.filter((h) => /gear|compare/.test(h))) tips.add(h);
-  if (p.parse !== null && peerAvg !== null && peers.length) watch.push(`The raid\u2019s other ${healer ? 'healers' : 'damage dealers'} averaged a parse of ${Math.round(peerAvg)}; ${p.name}: ${p.parse}.`);
+  // Room to improve: small gains even when things are going well (none left to point out at 99+)
+  const watch = p.parse !== null && p.parse >= 99 ? ['Parsing 99+: there\u2019s nothing meaningful left to squeeze. Keep doing what they\u2019re doing.'] : roomToImprove(p, mine, fights, raid.itemLevel);
+  if (p.parse !== null && peerAvg !== null && peers.length && p.parse <= peerAvg - 10) watch.push(`Behind the raid\u2019s other ${healer ? 'healers' : 'damage dealers'}: they averaged a parse of ${Math.round(peerAvg)}, ${p.name} ${p.parse}.`);
   if (p.role === 'tank') watch.push('Tanks are judged on deaths and item level here: parses say little about tanking.');
   if (scope.oneNight) watch.push('This is one night. Picking `range:4 weeks` with their name gives a fairer picture.');
 
@@ -270,7 +270,7 @@ export function characterMessage(scope: PerfScope, rows: Row[], character: strin
       ],
     },
   ];
-  if (watch.length) embeds.push({ title: 'Things to watch for', color: BRAND, description: clip(watch.map((w) => `\u2022 ${w}`).join('\n'), 4000) });
+  if (watch.length) embeds.push({ title: 'Room to improve', color: BRAND, description: clip(watch.map((w) => `\u2022 ${w}`).join('\n'), 4000) });
   embeds.push({
     title: 'Keeping track',
     color: BRAND,
@@ -284,4 +284,47 @@ export function characterMessage(scope: PerfScope, rows: Row[], character: strin
     footer: CAVEAT,
   });
   return { embeds };
+}
+
+const listed = (xs: string[]) => (xs.length > 2 ? `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}` : xs.join(' and '));
+
+/**
+ * Small, concrete gains for one character, from their fight summaries when the raid's been read
+ * (active time, cooldowns, potions, DoTs, avoidable damage, overhealing) and from their parses.
+ */
+function roomToImprove(p: PerfPlayer, mine: Row[], fights: FightDigest[], raidIlvl: number | null): string[] {
+  const out: string[] = [];
+  const key = p.name.toLowerCase();
+  const theirs = fights.filter((f) => f.kill).flatMap((f) => f.players.filter((x) => x.name.toLowerCase() === key).map((x) => ({ boss: f.name, seconds: f.seconds, x })));
+  const healer = p.role === 'healer';
+
+  // Their weakest boss next to their best
+  const parsed = mine.map((r) => ({ boss: r.encounter_name, v: healer ? r.hps_parse : r.parse })).filter((r): r is { boss: string; v: number } => r.v !== null && r.v !== undefined && p.role !== 'tank');
+  if (parsed.length > 1) {
+    const lo = parsed.reduce((a, b) => (Number(b.v) < Number(a.v) ? b : a));
+    const hi = parsed.reduce((a, b) => (Number(b.v) > Number(a.v) ? b : a));
+    if (Number(hi.v) - Number(lo.v) >= 5) out.push(`**${lo.boss}** was their lowest (${Math.round(Number(lo.v))} against ${Math.round(Number(hi.v))} on ${hi.boss}). Comparing the two on the site shows what was different.`);
+  }
+  // Downtime
+  const idle = theirs.filter((t) => !healer && t.x.activePct !== null && t.x.activePct < 92).map((t) => `${t.boss} ${Math.round(t.x.activePct!)}%`);
+  if (idle.length) out.push(`Active time ${listed(idle)} (aim for 92%+). Fewer gaps (casting while moving, pre-positioning) is usually the easiest gain.`);
+  // Cooldowns not used as often as the fight allowed
+  const cds = theirs.flatMap((t) => t.x.cooldowns.filter((c) => c.possible > c.uses).map((c) => `${c.name} ${c.uses} of ${c.possible} on ${t.boss}`));
+  if (cds.length) out.push(`Cooldowns left unused: ${listed(cds.slice(0, 4))}${cds.length > 4 ? ' and more' : ''}.`);
+  // Potions on longer fights (GAME CONTENT: one combat potion per fight, plus one before the pull)
+  const noPot = theirs.filter((t) => t.x.potions && !t.x.potions.used.length && !t.x.potions.prePot && t.seconds >= 90).map((t) => t.boss);
+  if (noPot.length) out.push(`No potion on ${listed(noPot)}. One before the pull and one during the fight is free ${healer ? 'healing' : 'damage'}.`);
+  // DoTs that matter, falling off
+  const dots = theirs.flatMap((t) => (t.x.dots ?? []).filter((d) => d.sharePct >= 5 && d.uptimePct < 90).map((d) => `${d.name} ${d.uptimePct}% on ${t.boss}`));
+  if (dots.length) out.push(`Damage over time not kept up: ${listed(dots.slice(0, 3))}. Aim for 90%+.`);
+  // Avoidable damage
+  const avoid = [...new Set(theirs.flatMap((t) => t.x.avoidableTop.map((a) => a.name)))];
+  if (avoid.length) out.push(`Took avoidable damage from ${listed(avoid.slice(0, 3))}. Less of it frees the healers up.`);
+  // Overhealing
+  const over = theirs.filter((t) => healer && (t.x.healing?.overhealPct ?? 0) >= 35).map((t) => `${t.boss} ${Math.round(t.x.healing!.overhealPct!)}%`);
+  if (over.length) out.push(`High overhealing on ${listed(over)}. Smaller or later heals, or a different assignment, can turn it into effective healing.`);
+  // Gear
+  if (raidIlvl && p.itemLevel && p.itemLevel < raidIlvl) out.push(`Item level ${p.itemLevel}, a little under the raid\u2019s ${raidIlvl}. Each upgrade adds up.`);
+  if (!out.length) out.push(theirs.length ? 'Nothing obvious: no downtime, unused cooldowns, missed potions or avoidable damage. Small gains now come from fight-specific tricks and gear.' : 'Open their fights on the site for the details (active time, cooldowns, potions): this raid\u2019s fight summaries aren\u2019t stored yet.');
+  return out;
 }
