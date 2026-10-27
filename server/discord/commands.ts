@@ -4,7 +4,7 @@
 import { saveBug } from '../bugs.js';
 import { characterLevel } from '../blizzard.js';
 import { registerRaid } from '../archive.js';
-import { level, siteAdminIds, storedPerson } from '../ranks.js';
+import { type Ability, can, siteAdminIds, storedPerson } from '../ranks.js';
 import { rest } from '../db.js';
 import { getReportMeta, parseReportUrl } from '../wcl.js';
 import { reportRegion, storedDigests } from '../pack.js';
@@ -59,7 +59,7 @@ export const COMMANDS = [
   },
   {
     name: 'check', description: 'Your character: class, spec, item level, stats and last raid (sent by DM)', ...contexts,
-    options: [{ type: STRING, name: 'character', description: 'Which of your claimed characters (default: all)' }],
+    options: [{ type: STRING, name: 'character', description: 'Which of your claimed characters (default: all). Officers: any character', max_length: 24 }],
   },
   {
     name: 'claim', description: 'Claim your character so the bot can send you your summaries', ...contexts,
@@ -143,16 +143,18 @@ const userOf = (i: Interaction) => (i.member?.user ?? i.user)!;
 const nameOf = (u: DUser) => u.global_name || u.username;
 const opt = (opts: Opt[] | undefined, name: string) => opts?.find((o) => o.name === name)?.value;
 
-async function isOfficer(i: Interaction): Promise<boolean> {
+/** Whether this person may do something (see ABILITIES in ranks.ts). */
+async function allowed(i: Interaction, ability: Ability): Promise<boolean> {
   // Ranks from the site come first: SITE_ADMIN_IDS, then a rank set on the Admin page
   const uid = userOf(i).id;
   if (siteAdminIds().includes(uid)) return true;
   const stored = await storedPerson(uid).catch(() => null);
-  if (stored?.rank) return level(stored.rank) >= level('officer');
+  if (stored?.rank) return can(stored.rank, ability);
+  // Then Discord: Administrator, Manage Server or the officer role count as an officer
   const role = env.adminRole();
   if (i.member) {
     const perms = BigInt(i.member.permissions ?? '0');
-    if ((perms & 8n) === 8n || (perms & 32n) === 32n) return true; // Administrator or Manage Server
+    if ((perms & 8n) === 8n || (perms & 32n) === 32n) return true;
     return !!role && i.member.roles.includes(role);
   }
   // Used in a DM: look the person up in the server
@@ -160,7 +162,12 @@ async function isOfficer(i: Interaction): Promise<boolean> {
   return !!role && !!roles?.includes(role);
 }
 
-const notOfficer = () => reply({ content: 'Only officers can use this.' });
+const NOT_ALLOWED: Record<Ability, string> = {
+  officer: 'Only officers and raid leaders can use this.',
+  raid: 'Only officers, raid leaders and raid assists can use this.',
+  lookup: 'Only officers, raid leaders and loot council can use this.',
+};
+const notAllowed = (a: Ability) => reply({ content: NOT_ALLOWED[a] });
 
 export async function handle(i: Interaction): Promise<Outcome> {
   if (i.type === 2) {
@@ -193,7 +200,7 @@ export async function handle(i: Interaction): Promise<Outcome> {
 // ---------- /remind ----------
 
 async function remind(i: Interaction): Promise<Outcome> {
-  if (!(await isOfficer(i))) return notOfficer();
+  if (!(await allowed(i, 'raid'))) return notAllowed('raid');
   const o = i.data?.options;
   const message = String(opt(o, 'message'));
   const when = parseWhen(String(opt(o, 'time')), opt(o, 'day') as string | undefined, env.timezone());
@@ -276,7 +283,7 @@ export function reminderMessage(p: { message: string; place: string | null; cons
 // ---------- /raidstart and /raidend ----------
 
 async function raidStart(i: Interaction): Promise<Outcome> {
-  if (!(await isOfficer(i))) return notOfficer();
+  if (!(await allowed(i, 'raid'))) return notAllowed('raid');
   const o = i.data?.options;
   let parsed: ReturnType<typeof parseReportUrl>;
   try {
@@ -441,7 +448,7 @@ async function raidButton(i: Interaction, id: string): Promise<Outcome> {
 
 /** Officers: high and low performers with advice, always by DM (it names people). */
 async function performanceCommand(i: Interaction): Promise<Outcome> {
-  if (!(await isOfficer(i))) return notOfficer();
+  if (!(await allowed(i, 'lookup'))) return notAllowed('lookup');
   const value = opt(i.data?.options, 'range');
   const range: PerfRange = value === 'raid' || value === '8w' ? value : '4w';
   const picked = (opt(i.data?.options, 'raid') as string | undefined)?.trim();
@@ -493,12 +500,20 @@ async function pastRaidChoices(i: Interaction): Promise<Outcome> {
 // ---------- /check ----------
 
 async function check(i: Interaction): Promise<Outcome> {
-  const wanted = (opt(i.data?.options, 'character') as string | undefined)?.toLowerCase();
+  const typed = (opt(i.data?.options, 'character') as string | undefined)?.trim();
+  const wanted = typed?.toLowerCase();
   const user = userOf(i);
   return deferred(i, async () => {
     const claims = (await approvedClaimsFor(user.id)).filter((c) => !wanted || c.character.toLowerCase() === wanted);
-    if (!claims.length) return { content: wanted ? `You haven’t claimed ${wanted} (or it’s waiting for an officer).` : 'Claim your character first with `/claim`.' };
     const embeds: Embed[] = [];
+    if (!claims.length) {
+      // Officers (and raid leaders with the officer rank or role) can look up anyone, by DM only
+      if (!typed || !(await allowed(i, 'lookup'))) return { content: wanted ? `You haven’t claimed ${typed} (or it’s waiting for an officer).` : 'Claim your character first with `/claim`.' };
+      const owner = await claimOnCharacter(typed, null).catch(() => null);
+      const card = await characterCard({ character: owner?.character ?? typed, realm: owner?.realm ?? null });
+      card.footer = { text: owner ? `Claimed by ${owner.discord_name}${owner.status === 'pending' ? ' (waiting for approval)' : ''}` : 'Not claimed by anyone yet' };
+      embeds.push(card);
+    }
     for (const c of claims.slice(0, 5)) embeds.push(await characterCard(c));
     const ok = await sendDm(user.id, { embeds });
     return ok ? { content: 'Sent to your DMs.' } : { content: 'Your DMs are closed, so here it is (only you can see this):', embeds };
@@ -547,7 +562,7 @@ async function trendLine(name: string): Promise<string | null> {
   return `Parse by week: ${weeks.map((w) => w.parse).join(' → ')} (${last >= first ? 'up' : 'down'} ${Math.abs(last - first)} over ${weeks.length} raid weeks)`;
 }
 
-async function characterCard(c: Claim): Promise<Embed> {
+async function characterCard(c: Pick<Claim, 'character' | 'realm'>): Promise<Embed> {
   // Latest raid this character appears in
   for (const r of await recentRaids(10)) {
     const fights = await storedDigests(r.report_code).catch(() => []);
@@ -648,7 +663,7 @@ async function unclaim(i: Interaction): Promise<Outcome> {
 }
 
 async function claimDecision(i: Interaction, id: string): Promise<Outcome> {
-  if (!(await isOfficer(i))) return reply({ content: 'Only officers can approve or reject claims.' });
+  if (!(await allowed(i, 'officer'))) return reply({ content: 'Only officers and raid leaders can approve or reject claims.' });
   const [, decision, claimId] = id.split(':');
   const c = await getClaim(claimId);
   if (!c) return { response: { type: 7, data: { content: 'This claim no longer exists.', components: [] } } };
@@ -711,12 +726,13 @@ export function helpMessage(): MessageBody {
           ].join('\n'),
         },
         {
-          name: 'Officers',
+          name: 'Officers and raid leaders',
           value: [
-            line('/raidstart', 'post the live log for tonight\u2019s raid.'),
+            line('/raidstart', 'post the live log for tonight\u2019s raid (raid assists too).'),
             line('/raidend', 'end the raid you started and post its summary, with what went well and what to work on.'),
-            line('/remind', 'schedule a raid reminder (optional place, consumables checklist, role ping and Discord event).'),
-            line('/performance', 'who\u2019s doing well and who could use a hand, with tips and what to track (by DM).'),
+            line('/remind', 'schedule a raid reminder (optional place, consumables checklist, role ping and Discord event; raid assists too).'),
+            line('/check <character>', 'look up any character (not just your own), sent to you by DM (loot council too).'),
+            line('/performance', 'who\u2019s doing well and who could use a hand, with tips and what to track (by DM; loot council too).'),
           ].join('\n'),
         },
         { name: 'More detail', value: `The full analysis for any fight, with charts and comparisons, is at ${env.site()}.` },

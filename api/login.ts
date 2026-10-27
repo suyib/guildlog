@@ -8,7 +8,7 @@ import { clearSessionCookie, json, passwordMatches, readCookie, readSession, ses
 import { env } from '../server/discord/api.js';
 import { auditTask } from '../server/discord/audit.js';
 import { discordLoginEnabled, isSiteAdmin, membership } from '../server/officers.js';
-import { RANK_LABEL, type Rank, discordRank, effectiveRank, level, storedPerson } from '../server/ranks.js';
+import { RANK_LABEL, type Rank, can, discordRank, effectiveRank, storedPerson } from '../server/ranks.js';
 import { recordSignIn } from '../server/users.js';
 
 const STATE_COOKIE = 'gl_oauth';
@@ -36,7 +36,7 @@ export async function GET(req: Request): Promise<Response> {
       name: stored?.display_name || s?.name || null,
       avatar: s?.uid && s.avatar ? `https://cdn.discordapp.com/avatars/${s.uid}/${s.avatar}.png?size=64` : null,
       rank,
-      officer: !!rank && level(rank) >= level('officer'),
+      officer: can(rank, 'officer'),
       admin: isSiteAdmin(s),
       discordLogin: discordLoginEnabled(),
     }, 200, { 'Cache-Control': 'no-store' });
@@ -106,7 +106,7 @@ export async function GET(req: Request): Promise<Response> {
       return page('Access turned off', 'An officer has turned off your access to Guild Logs. Ask them if you think that\u2019s a mistake.', true);
     }
     const rank = effectiveRank(user.id, stored?.rank, discordRank(m));
-    const officer = level(rank) >= level('officer');
+    const officer = can(rank, 'officer');
     const name = m.nick || user.global_name || user.username;
     await recordSignIn({ kind: 'discord', result: 'ok', ...who, detail: rank === 'raider' ? null : RANK_LABEL[rank], name, avatar: user.avatar ?? null, officer, discordRank: discordRank(m) });
     await auditTask(`<@${user.id}> (${user.username}) signed in to the site (${RANK_LABEL[rank]})`);

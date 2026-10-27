@@ -200,7 +200,10 @@ alter table public.site_users enable row level security;
 alter table public.site_signins enable row level security;
 
 -- Ranks and profile edits from the Admin page (v0.21.0)
-alter table public.site_users add column if not exists rank text check (rank in ('guild_master', 'officer', 'raider'));
+alter table public.site_users add column if not exists rank text;
+alter table public.site_users drop constraint if exists site_users_rank_check;
+alter table public.site_users add constraint site_users_rank_check
+  check (rank in ('guild_master', 'officer', 'raid_leader', 'raid_assist', 'loot_council', 'raider'));
 alter table public.site_users add column if not exists discord_rank text;
 alter table public.site_users add column if not exists display_name text;
 alter table public.site_users add column if not exists note text;

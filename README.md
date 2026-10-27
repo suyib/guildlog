@@ -99,6 +99,8 @@ The bot runs on the same Vercel project (no extra server) as a single function, 
 
 **Support link.** Set `SUPPORT_URL` in Vercel (for example your Buy Me a Coffee page, `https://` only) and redeploy to show a "Buy me a coffee" link in the sidebar. It's read when the site is built, so it isn't a secret; leave it unset to hide the link.
 
+**Ranks.** Admin (SITE_ADMIN_IDS), Guild master, Officer, Raid leader, Raid assist, Loot council and Raider, set on the Admin page (a set rank wins over Discord). Raid leaders can do everything officers can; raid assists run raids (`/raidstart`, `/raidend`, `/remind`); loot council can `/check` anyone and use `/performance`. Each rank can edit and promote people below it. The new ranks need `supabase/migrate-0.36.sql` run once.
+
 **Guild details.** The home page shows the Discord server's name and picture. Guild masters and admins can replace either (and add an About line) under **Guild details** on the Admin page; clearing a field goes back to Discord's. Kept in `site_settings`. Needs `supabase/migrate-0.31.sql` run once.
 
 **Activity log (optional).** Set `DISCORD_LOG_CHANNEL_ID` to a private channel and the bot posts one line per command or button press: who, what (command and which options were used, never what was typed), where, when, and whether it worked or the error if not. Failed reminders and command registration are logged too. Mentions in the log don't ping anyone. To check it's set up, open `https://guildlog.uk/api/discord?task=logtest&key=YOUR_CRON_SECRET`: it posts a test line, or says what's wrong.

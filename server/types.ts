@@ -341,7 +341,7 @@ export interface RaidFeedback { good: RaidPoint[]; work: RaidPoint[] }
 
 // ---------- Admin ----------
 
-export type Rank = 'raider' | 'officer' | 'guild_master' | 'admin';
+export type Rank = 'raider' | 'loot_council' | 'raid_assist' | 'raid_leader' | 'officer' | 'guild_master' | 'admin';
 
 /** A stored site user row. */
 export interface AdminUser {

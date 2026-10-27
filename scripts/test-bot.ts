@@ -12,7 +12,7 @@ import { gql } from '../server/wcl';
 import { buildCard } from '../server/archive';
 import { forThisGuild, readSession, sessionCookie, sign as signValue } from '../server/auth';
 import { isSiteAdmin } from '../server/officers';
-import { assignable, canEdit, discordRank, effectiveRank } from '../server/ranks';
+import { assignable, can, canEdit, discordRank, effectiveRank } from '../server/ranks';
 import { applyEdit } from '../server/users';
 
 // Signed requests: Discord's PING gets a PONG, a bad signature is refused
@@ -391,9 +391,15 @@ delete process.env.SITE_ADMIN_IDS;
 // Ranks: each rank edits and promotes only below itself; admins come from SITE_ADMIN_IDS
 assert.ok(canEdit('guild_master', 'officer') && canEdit('officer', 'raider') && canEdit('admin', 'admin'));
 assert.ok(!canEdit('officer', 'officer') && !canEdit('officer', 'guild_master') && !canEdit('guild_master', 'guild_master'));
-assert.deepEqual(assignable('admin'), ['raider', 'officer', 'guild_master']);
-assert.deepEqual(assignable('guild_master'), ['raider', 'officer']);
-assert.deepEqual(assignable('officer'), ['raider']);
+assert.deepEqual(assignable('admin'), ['raider', 'loot_council', 'raid_assist', 'raid_leader', 'officer', 'guild_master']);
+assert.deepEqual(assignable('guild_master'), ['raider', 'loot_council', 'raid_assist', 'raid_leader', 'officer']);
+assert.deepEqual(assignable('officer'), ['raider', 'loot_council', 'raid_assist', 'raid_leader']);
+assert.deepEqual(assignable('raid_leader'), ['raider', 'loot_council', 'raid_assist']);
+// What each rank may do: raid leaders as officers, raid assists run raids, loot council looks people up
+assert.ok(can('raid_leader', 'officer') && can('raid_leader', 'raid') && can('raid_leader', 'lookup'));
+assert.ok(can('raid_assist', 'raid') && !can('raid_assist', 'lookup') && !can('raid_assist', 'officer'));
+assert.ok(can('loot_council', 'lookup') && !can('loot_council', 'raid') && !can('loot_council', 'officer'));
+assert.ok(!can('raider', 'lookup') && !can(null, 'raid'));
 process.env.SITE_ADMIN_IDS = '1';
 assert.equal(effectiveRank('1', 'raider', 'raider'), 'admin');
 assert.equal(effectiveRank('2', 'officer', 'raider'), 'officer', 'a rank set on the Admin page wins over Discord');
@@ -486,7 +492,7 @@ delete process.env.SITE_ADMIN_IDS;
   const msg = performanceMessage({ label: 'the last 4 weeks', oneNight: false, minKills: 2 }, data, 'https://guildlog.uk');
   const text = JSON.stringify(msg);
   assert.match(msg.embeds![0].fields![0].value, /Star/, 'high performer listed');
-  assert.match(msg.embeds![0].fields![1].value, /Slow[\s\S]*parse 16[\s\S]*deaths per kill[\s\S]*item level/, 'low performer with reasons');
+  assert.match(msg.embeds![0].fields![1].value, /Slow[\s\S]*average parse 16 \(highest 20\)[\s\S]*died 2 times in 2 kills[\s\S]*item level/, 'low performer with reasons');
   assert.doesNotMatch(msg.embeds![0].fields![1].value, /Tank/, 'tank not listed for a low parse');
   assert.match(text, /Just an overview/, 'has the caveat');
   for (const e of msg.embeds!) for (const f of e.fields ?? []) assert.ok(f.value.length <= 1024, 'field within Discord limits');
@@ -509,6 +515,59 @@ delete process.env.SITE_ADMIN_IDS;
   assert.match(all[1].name, /Gruul \+ Mag · Wed, Apr 22, 2026/);
   assert.deepEqual((await ask('gruul')).response.data.choices.map((c: any) => c.value), ['fresh.warcraftlogs.com:OLD9'], 'searchable');
   assert.equal((await ask('https://fresh.warcraftlogs.com/reports/ABC?fight=3')).response.data.choices[0].name, 'Use this Warcraft Logs link');
+  globalThis.fetch = realFetch;
+  for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) delete process.env[k];
+}
+
+// /check <character>: anyone's character for officers (by DM), only your own for everyone else
+{
+  process.env.SUPABASE_URL = 'https://db.example';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
+  process.env.DISCORD_BOT_TOKEN = 'bot';
+  process.env.SITE_ADMIN_IDS = '42';
+  const realFetch = globalThis.fetch;
+  const dms: any[] = [];
+  globalThis.fetch = (async (url: string, init: RequestInit = {}) => {
+    const u = new URL(String(url));
+    if (u.hostname === 'discord.com') {
+      if (u.pathname.endsWith('/users/@me/channels')) return new Response('{"id":"dm1"}', { status: 200 });
+      if (u.pathname.includes('/channels/dm1/messages')) dms.push(JSON.parse(String(init.body)));
+      return new Response('{}', { status: 200 });
+    }
+    if (u.pathname.endsWith('/bot_claims') && !u.searchParams.get('discord_id')?.includes('5') && u.searchParams.has('discord_id')) return new Response('[]', { status: 200 });
+    if (u.pathname.endsWith('/bot_claims')) return new Response(JSON.stringify([{ character: 'Luke', realm: 'Spineshatter', discord_name: 'luke', status: 'approved', discord_id: '5' }]), { status: 200 });
+    return new Response('[]', { status: 200 });
+  }) as typeof fetch;
+  const ask = (id: string) => handle({ type: 2, token: 't', guild_id: 'g', channel_id: 'c', member: { user: { id, username: 'x' }, roles: [], permissions: '0' }, data: { name: 'check', options: [{ name: 'character', type: 3, value: 'luke' }] } } as any);
+  const raider: any = await ask('2');
+  await raider.after();
+  assert.equal(dms.length, 0, 'raiders can’t look up other people');
+  const officer: any = await ask('42');
+  await officer.after();
+  assert.equal(dms.length, 1, 'officers get it by DM');
+  assert.equal(dms[0].embeds[0].title, 'Luke');
+  assert.match(dms[0].embeds[0].footer.text, /Claimed by luke/);
+  globalThis.fetch = realFetch;
+  for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'DISCORD_BOT_TOKEN', 'SITE_ADMIN_IDS']) delete process.env[k];
+}
+
+// The new ranks in Discord: loot council looks people up, raid assists run the raid
+{
+  process.env.SUPABASE_URL = 'https://db.example';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
+  const realFetch = globalThis.fetch;
+  const ranks: Record<string, string> = { '51': 'loot_council', '52': 'raid_assist' };
+  globalThis.fetch = (async (url: string) => {
+    const u = new URL(String(url));
+    const id = u.searchParams.get('discord_id')?.replace('eq.', '');
+    if (u.pathname.endsWith('/site_users') && id) return new Response(JSON.stringify(ranks[id] ? [{ discord_id: id, rank: ranks[id], blocked: false }] : []), { status: 200 });
+    return new Response('[]', { status: 200 });
+  }) as typeof fetch;
+  const run = (id: string, name: string, options: any[] = []) => handle({ type: 2, token: 't', guild_id: 'g', channel_id: 'c', member: { user: { id, username: 'x' }, roles: [], permissions: '0' }, data: { name, options } } as any) as any;
+  assert.equal((await run('51', 'performance')).response.type, 5, 'loot council can use /performance');
+  assert.match((await run('51', 'remind', [{ name: 'message', type: 3, value: 'x' }, { name: 'time', type: 3, value: '19:45' }])).response.data.content, /Only officers, raid leaders and raid assists/);
+  assert.match((await run('52', 'performance')).response.data.content, /Only officers, raid leaders and loot council/);
+  assert.doesNotMatch(JSON.stringify((await run('52', 'remind', [{ name: 'message', type: 3, value: 'x' }, { name: 'time', type: 3, value: '19:45' }])).response), /Only officers/, 'raid assists can use /remind');
   globalThis.fetch = realFetch;
   for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) delete process.env[k];
 }

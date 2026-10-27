@@ -3,7 +3,7 @@
 // (DISCORD_ADMIN_ROLE_ID) — the same rule the bot's officer-only commands use.
 import { type Session, forThisGuild, json, readSession } from './auth.js';
 import { discord, env } from './discord/api.js';
-import { RANK_LABEL, type Rank, discordRank, effectiveRank, isBlocked, level, siteAdminIds, storedPerson } from './ranks.js';
+import { RANK_LABEL, type Rank, can, discordRank, effectiveRank, isBlocked, level, siteAdminIds, storedPerson } from './ranks.js';
 
 const ADMINISTRATOR = 8n;
 const MANAGE_GUILD = 32n;
@@ -50,11 +50,13 @@ export async function requireRank(req: Request, min: Rank = 'officer'): Promise<
   const session = await readSession(req.headers.get('cookie'), secret);
   if (!session || !forThisGuild(session)) return { denied: json({ error: 'Not signed in' }, 401) };
   if (session.kind === 'discord' && session.uid && (await isBlocked(session.uid))) return { denied: json({ error: 'Your access to Guild Logs has been turned off by an officer.' }, 403) };
+  // Officer tools: officers and raid leaders (and above); higher ranks by order
+  const who = min === 'officer' ? 'officers and raid leaders' : `${RANK_LABEL[min].toLowerCase()}s and above`;
   if (session.kind === 'password' && discordLoginEnabled()) {
-    return { denied: json({ error: `Only ${RANK_LABEL[min].toLowerCase()}s and above can do this. Sign in with Discord to continue.` }, 403) };
+    return { denied: json({ error: `Only ${who} can do this. Sign in with Discord to continue.` }, 403) };
   }
   const { rank } = await liveRank(session);
-  if (level(rank) < level(min)) return { denied: json({ error: `Only ${RANK_LABEL[min].toLowerCase()}s and above can do this.` }, 403) };
+  if (min === 'officer' ? !can(rank, 'officer') : level(rank) < level(min)) return { denied: json({ error: `Only ${who} can do this.` }, 403) };
   return { session, rank };
 }
 

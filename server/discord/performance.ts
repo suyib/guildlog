@@ -38,6 +38,9 @@ export interface PerfPlayer {
   parse: number | null;
   /** Spread between best and worst parse. */
   spread: number | null;
+  /** Highest parse. */
+  best: number | null;
+  deaths: number;
   deathsPerKill: number;
   itemLevel: number | null;
 }
@@ -115,6 +118,8 @@ export function summarize(rows: Row[], minKills = 2) {
       kills: list.length,
       parse: round(avg(parses)),
       spread: parses.length > 1 ? Math.round(Math.max(...parses) - Math.min(...parses)) : null,
+      best: parses.length ? Math.round(Math.max(...parses)) : null,
+      deaths: list.reduce((t, r) => t + (r.deaths ?? 0), 0),
       deathsPerKill: list.reduce((t, r) => t + (r.deaths ?? 0), 0) / list.length,
       itemLevel: ilvls.length ? Math.round(ilvls[ilvls.length - 1] * 10) / 10 : null,
     });
@@ -128,13 +133,13 @@ function concerns(p: PerfPlayer, raidIlvl: number | null): { why: string[]; help
   const why: string[] = [];
   const help: string[] = [];
   if (p.parse !== null && p.parse < LOW) {
-    why.push(`average ${p.role === 'healer' ? 'healing ' : ''}parse ${p.parse}`);
+    why.push(`${p.kills > 1 ? 'average ' : ''}${p.role === 'healer' ? 'healing ' : ''}parse ${p.parse}${p.kills > 1 && p.best !== null ? ` (highest ${p.best})` : ''}`);
     help.push(p.role === 'healer'
       ? 'look at overhealing and spell choice in their Damage breakdown (healing view); check whether they had a tank or raid assignment'
       : 'look at Active time and Rotation & cooldowns on their fights: gaps with nothing cast and unused cooldowns are the usual cause');
   }
   if (p.deathsPerKill >= DEATHS_LOW) {
-    why.push(`${p.deathsPerKill.toFixed(1)} deaths per kill`);
+    why.push(died(p));
     help.push('go through the death recaps on Survival together: what hit them in the last 10 seconds, and whether a defensive or healthstone was used');
   }
   const gap = raidIlvl && p.itemLevel ? raidIlvl - p.itemLevel : 0;
@@ -149,6 +154,9 @@ function concerns(p: PerfPlayer, raidIlvl: number | null): { why: string[]; help
   }
   return { why, help };
 }
+
+/** "died 2 times in 3 kills" */
+const died = (p: PerfPlayer) => `died ${p.deaths === 1 ? 'once' : `${p.deaths} times`} in ${p.kills} kill${p.kills === 1 ? '' : 's'}`;
 
 const clip = (s: string, max = 1024) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
@@ -165,7 +173,10 @@ export function performanceMessage(scope: PerfScope, data: PerfData, site: strin
     .filter((x) => x.why.length)
     .sort((a, b) => b.why.length - a.why.length || (a.p.parse ?? 100) - (b.p.parse ?? 100))
     .slice(0, SHOW);
-  const line = (p: PerfPlayer) => `**${p.name}** (${p.spec}) · ${p.parse !== null ? `parse ${p.parse}` : 'tank'} · ${p.kills} kill${p.kills === 1 ? '' : 's'}${p.deathsPerKill ? ` · ${p.deathsPerKill.toFixed(1)} deaths/kill` : ''}`;
+  // Doing well: their parses and any deaths. Could use a hand: the reasons say it all.
+  const parseText = (p: PerfPlayer) => (p.kills > 1 ? `average parse ${p.parse} (highest ${p.best})` : `parse ${p.parse}`);
+  const line = (p: PerfPlayer) => `**${p.name}** (${p.spec}) \u00b7 ${parseText(p)}${p.deaths ? ` \u00b7 ${died(p)}` : ''}`;
+  const lowLine = (p: PerfPlayer) => `**${p.name}** (${p.spec})${p.parse !== null && p.parse >= LOW ? ` \u00b7 ${parseText(p)}` : ''}`;
 
   const watch: string[] = [];
   if (bossDeaths[0] && bossDeaths[0][1] >= 3) watch.push(`Most deaths on **${bossDeaths[0][0]}** (${bossDeaths[0][1]}${bossDeaths[1] ? `; then ${bossDeaths[1][0]}, ${bossDeaths[1][1]}` : ''}). Worth a quick talk about that fight’s mechanics.`);
@@ -182,8 +193,8 @@ export function performanceMessage(scope: PerfScope, data: PerfData, site: strin
       color: BRAND,
       description: `${raids} raid${raids === 1 ? '' : 's'}, ${kills} boss kill${kills === 1 ? '' : 's'}, ${players.length} players${itemLevel ? `, average item level ${itemLevel}` : ''}. For officers only: please don’t share this in channels.`,
       fields: [
-        { name: `Doing well (parse ${HIGH}+, few deaths)`, value: clip(high.length ? high.map(line).join('\n') : 'Nobody averaged a parse of ' + HIGH + ' or more. The best: ' + [...ranked].sort((a, b) => b.parse! - a.parse!).slice(0, 3).map((p) => `${p.name} (${p.parse})`).join(', ') + '.') },
-        { name: 'Could use a hand', value: clip(low.length ? low.map((x) => `${line(x.p)}\n> ${x.why.join('; ')}\n> Try: ${x.help.join('; ')}.`).join('\n') : 'Nobody stands out: parses, deaths and item level all look fine.') },
+        { name: `Doing well (${scope.minKills > 1 || kills > 1 ? 'average ' : ''}parse ${HIGH}+, few deaths)`, value: clip(high.length ? high.map(line).join('\n') : 'Nobody averaged a parse of ' + HIGH + ' or more. The best: ' + [...ranked].sort((a, b) => b.parse! - a.parse!).slice(0, 3).map((p) => `${p.name} (${parseText(p)})`).join(', ') + '.') },
+        { name: 'Could use a hand', value: clip(low.length ? low.map((x) => `${lowLine(x.p)}\n> ${x.why.join('; ')}\n> Try: ${x.help.join('; ')}.`).join('\n') : 'Nobody stands out: parses, deaths and item level all look fine.') },
       ],
     },
   ];
@@ -193,7 +204,7 @@ export function performanceMessage(scope: PerfScope, data: PerfData, site: strin
     color: BRAND,
     description: clip([
       `• **Average parse over 4+ weeks**, not one night. Around 50 is typical; ${HIGH}+ is strong. Run \`/performance range:4 weeks\` every couple of raids and compare.`,
-      '• **Deaths per kill**: under 0.25 is good. Deaths cost more damage than almost anything else.',
+      '• **Deaths**: dying no more than once every four kills is good. Deaths cost more damage than almost anything else.',
       '• **Trend**: each player’s profile and `/check` show their parse over the last 8 weeks, so improvement is easy to see.',
       '• **Against the guild**: on the site, each fight compares them with the guild’s own kills in the same spec.',
       `• Set one clear goal per person (e.g. “no more than one death a raid” or “Active time over 90%”) and check it after two raids. Full details: ${site}`,

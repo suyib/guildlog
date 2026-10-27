@@ -9,6 +9,19 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.36.0',
+    date: '2026-10-27',
+    changes: [
+      'New ranks on the Admin page: Raid leader (everything officers can do), Raid assist (`/raidstart`, `/raidend` and `/remind`) and Loot council (`/check` on anyone and `/performance`).',
+      '`/performance` reads more plainly: \u201caverage parse 92 (highest 98)\u201d and \u201cdied 2 times in 3 kills\u201d, without the kill count after each name.',
+    ],
+  },
+  {
+    version: '0.35.3',
+    date: '2026-10-27',
+    changes: ['Officers can `/check` any character, not just their own, sent by DM with who claimed it. Everyone else still only sees their own characters.'],
+  },
+  {
     version: '0.35.2',
     date: '2026-10-27',
     changes: ['Analyze a log: pick any raid from Past raids (newest first) next to the link box, instead of copying its link from Warcraft Logs. Pasting a link still works.'],

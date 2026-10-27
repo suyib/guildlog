@@ -1,16 +1,34 @@
-// Ranks, highest first: Admin (site admins, SITE_ADMIN_IDS), Guild master, Officer, Raider.
+// Ranks, highest first:
 //   Admin         set only by SITE_ADMIN_IDS in Vercel; can edit everyone.
 //   Guild master  the Discord server owner, unless someone above sets another rank.
 //   Officer       Administrator / Manage Server / the officer role on Discord, or set on the Admin page.
+//   Raid leader   set on the Admin page; can do everything officers can.
+//   Raid assist   set on the Admin page; runs the raid (/raidstart, /raidend, /remind).
+//   Loot council  set on the Admin page; looks people up (/check anyone, /performance).
 //   Raider        everyone else.
 // A rank set on the Admin page wins over what Discord says. Each rank can edit people below it and
 // give them any rank below its own (admins can edit everyone, other admins included, except their rank).
+// What each rank may do is in ABILITIES, not the order (so a raid leader counts as an officer).
 import { dbEnabled, rest } from './db.js';
 
-export const RANKS = ['raider', 'officer', 'guild_master', 'admin'] as const;
+export const RANKS = ['raider', 'loot_council', 'raid_assist', 'raid_leader', 'officer', 'guild_master', 'admin'] as const;
 export type Rank = (typeof RANKS)[number];
-export const RANK_LABEL: Record<Rank, string> = { admin: 'Admin', guild_master: 'Guild master', officer: 'Officer', raider: 'Raider' };
+export const RANK_LABEL: Record<Rank, string> = {
+  admin: 'Admin', guild_master: 'Guild master', officer: 'Officer', raid_leader: 'Raid leader', raid_assist: 'Raid assist', loot_council: 'Loot council', raider: 'Raider',
+};
 export const level = (r: Rank) => RANKS.indexOf(r);
+
+/**
+ * officer: the site's officer tools (Admin page, adding and reading raids, approving claims).
+ * raid: running a raid in Discord (/raidstart, /raidend, /remind).
+ * lookup: /check on anyone and /performance.
+ */
+export type Ability = 'officer' | 'raid' | 'lookup';
+const ALL: Ability[] = ['officer', 'raid', 'lookup'];
+const ABILITIES: Record<Rank, Ability[]> = {
+  admin: ALL, guild_master: ALL, officer: ALL, raid_leader: ALL, raid_assist: ['raid'], loot_council: ['lookup'], raider: [],
+};
+export const can = (r: Rank | null | undefined, a: Ability) => !!r && (ABILITIES[r] ?? []).includes(a);
 
 export const siteAdminIds = () => (process.env.SITE_ADMIN_IDS ?? '').split(',').map((x) => x.trim()).filter(Boolean);
 

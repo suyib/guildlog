@@ -1,4 +1,4 @@
-// Admin (officers and above): everyone who has signed in or used the bot, with their rank, and
+// Admin (officers, raid leaders and above): everyone who has signed in or used the bot, with their rank, and
 // editing for anyone below you: rank, display name, officer note, site access and characters.
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { AdminEdit, AdminOverview, AdminPerson, AdminSignIn, BugReport, GuildSettings, Rank } from '../../server/types';
@@ -17,7 +17,7 @@ const RESULT: Record<AdminSignIn['result'], { label: string; cls: string }> = {
   wrong_password: { label: 'Wrong password', cls: 'badge-warn' },
   error: { label: 'Failed', cls: 'badge-bad' },
 };
-const RANK_ORDER: Rank[] = ['admin', 'guild_master', 'officer', 'raider'];
+const RANK_ORDER: Rank[] = ['admin', 'guild_master', 'officer', 'raid_leader', 'raid_assist', 'loot_council', 'raider'];
 
 export default function AdminPage() {
   const [data, setData] = useState<AdminOverview | null>(null);
@@ -61,8 +61,8 @@ export default function AdminPage() {
 
       <div className="kpis">
         <Kpi glyph="users" label="People" value={String(data.people.length)} sub={`${active} active this week`} />
-        <Kpi glyph="shield" label="Guild masters and officers" value={String(count('guild_master') + count('officer'))} sub={`${count('guild_master')} guild master${count('guild_master') === 1 ? '' : 's'}, ${count('officer')} officer${count('officer') === 1 ? '' : 's'}`} />
-        <Kpi glyph="users" label="Raiders" value={String(count('raider'))} sub={`${data.people.filter((p) => p.blocked).length} with access turned off`} />
+        <Kpi glyph="shield" label="Leadership" value={String(count('guild_master') + count('officer') + count('raid_leader'))} sub={`${count('guild_master')} GM, ${count('officer')} officer${count('officer') === 1 ? '' : 's'}, ${count('raid_leader')} raid lead${count('raid_leader') === 1 ? '' : 's'}`} />
+        <Kpi glyph="users" label="Raiders" value={String(count('raider') + count('raid_assist') + count('loot_council'))} sub={`${count('raid_assist')} raid assist, ${count('loot_council')} loot council, ${data.people.filter((p) => p.blocked).length} access off`} />
         <Kpi glyph="alert" label="Problems" value={String(problems)} sub={`failed sign-ins, last ${data.signInLogDays} days`} />
       </div>
 

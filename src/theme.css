@@ -706,6 +706,9 @@ label.button:focus-within { outline: 2px solid var(--primary-light); outline-off
 .badge.rank-admin { background: rgba(0, 124, 173, 0.28); color: var(--primary-light); }
 .badge.rank-guild_master { background: rgba(255, 209, 0, 0.14); color: var(--cooldown); }
 .badge.rank-officer { background: rgba(95, 211, 141, 0.14); color: var(--win); }
+.badge.rank-raid_leader { background: rgba(95, 211, 141, 0.14); color: var(--win); }
+.badge.rank-raid_assist { background: rgba(255, 128, 0, 0.14); color: #ff8000; }
+.badge.rank-loot_council { background: rgba(163, 53, 238, 0.16); color: #c792ff; }
 .badge.rank-raider { background: var(--raised); color: var(--ink-2); }
 .admin-filters { align-items: center; }
 .admin-filters select { width: auto; }
