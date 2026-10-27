@@ -483,7 +483,7 @@ delete process.env.SITE_ADMIN_IDS;
   const data = summarize(rows as any);
   assert.equal(data.skipped, 1, 'one-kill players are left out');
   assert.equal(data.players.find((p) => p.name === 'Tank')!.parse, null, 'tanks aren’t judged on parses');
-  const msg = performanceMessage('4w', data, 'https://guildlog.uk');
+  const msg = performanceMessage({ label: 'the last 4 weeks', oneNight: false, minKills: 2 }, data, 'https://guildlog.uk');
   const text = JSON.stringify(msg);
   assert.match(msg.embeds![0].fields![0].value, /Star/, 'high performer listed');
   assert.match(msg.embeds![0].fields![1].value, /Slow[\s\S]*parse 16[\s\S]*deaths per kill[\s\S]*item level/, 'low performer with reasons');
@@ -491,6 +491,26 @@ delete process.env.SITE_ADMIN_IDS;
   assert.match(text, /Just an overview/, 'has the caveat');
   for (const e of msg.embeds!) for (const f of e.fields ?? []) assert.ok(f.value.length <= 1024, 'field within Discord limits');
   assert.ok(text.length < 6000, 'message within Discord limits');
+  const { rowsFromDigests } = await import('../server/discord/performance.js');
+  const fromLink = rowsFromDigests('R2', 0, [{ id: 3, name: 'Gruul', encounterID: 649, kill: true, startTime: 1000, endTime: 61000, seconds: 60, players: [{ name: 'Star', className: 'Mage', specName: 'Fire', role: 'dps', parse: 90, deaths: [], itemLevel: 120, total: 1, healing: undefined }] }, { id: 4, name: 'Trash', encounterID: 0, kill: false, players: [] }] as any);
+  assert.equal(fromLink.length, 1, 'a pasted raid counts boss kills only');
+  assert.equal(summarize(fromLink, 1).players.length, 1, 'a single fight counts with one kill');
+  // Picking a past raid: every raid on Past raids, searchable, plus a pasted link
+  process.env.SUPABASE_URL = 'https://db.example';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify([
+    { report_code: 'NEW1', host: 'fresh.warcraftlogs.com', title: 'Kara 2', start_time: '2026-10-20T19:00:00Z' },
+    { report_code: 'OLD9', host: 'fresh.warcraftlogs.com', title: 'Gruul + Mag', start_time: '2026-04-22T18:47:00Z' },
+  ]), { status: 200 })) as typeof fetch;
+  const ask = (value: string) => handle({ type: 4, token: 't', data: { name: 'performance', options: [{ name: 'raid', type: 3, value, focused: true }] } } as any) as any;
+  const all = (await ask('')).response.data.choices;
+  assert.deepEqual(all.map((c: any) => c.value), ['fresh.warcraftlogs.com:NEW1', 'fresh.warcraftlogs.com:OLD9'], 'every past raid, newest first');
+  assert.match(all[1].name, /Gruul \+ Mag · Wed, Apr 22, 2026/);
+  assert.deepEqual((await ask('gruul')).response.data.choices.map((c: any) => c.value), ['fresh.warcraftlogs.com:OLD9'], 'searchable');
+  assert.equal((await ask('https://fresh.warcraftlogs.com/reports/ABC?fight=3')).response.data.choices[0].name, 'Use this Warcraft Logs link');
+  globalThis.fetch = realFetch;
+  for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) delete process.env[k];
 }
 
 console.log('All bot checks passed.');

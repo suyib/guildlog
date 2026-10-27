@@ -58,7 +58,7 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'ranking
           {result.id ? (
             <>
               <p>Send the link to your guild. It keeps working after Warcraft Logs archives the report.</p>
-              <ShareButton id={result.id} />
+              <ShareButton path={`/a/${result.id}`} />
             </>
           ) : (
             <p>This analysis wasn&rsquo;t saved, so there&rsquo;s no link yet. Check the Supabase settings in Vercel.</p>

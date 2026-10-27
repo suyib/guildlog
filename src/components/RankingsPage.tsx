@@ -6,13 +6,16 @@ import { loadBossRanks } from '../api';
 import { mmss, n0 } from '../format';
 import { RANK_CSS, ZonePicker, mainZone, useHome } from './Home';
 import { BossIcon } from './icons';
+import { go, hashParam } from '../url';
 
-/** Raid and boss from the link (#/rankings?zone=&boss=), when there is one. */
+/** Raid and boss from the address (#/rankings?zone=&boss=), when there is one. */
 function fromLink(): { zone: number | null; boss: number | null } {
-  const q = new URLSearchParams(window.location.hash.split('?')[1] ?? '');
-  const n = (k: string) => (Number(q.get(k)) > 0 ? Number(q.get(k)) : null);
+  const n = (k: string) => (Number(hashParam(k)) > 0 ? Number(hashParam(k)) : null);
   return { zone: n('zone'), boss: n('boss') };
 }
+
+/** Each choice gets its own address, so it can be shared and Back returns to the one before. */
+const show = (zone: number, boss: number | null) => go(`/#/rankings?zone=${zone}${boss ? `&boss=${boss}` : ''}`);
 
 export default function RankingsPage() {
   const d = useHome();
@@ -36,6 +39,11 @@ export default function RankingsPage() {
   const pickZone = (id: number) => {
     setZoneId(id);
     setBoss(null);
+    show(id, null);
+  };
+  const pickBoss = (id: number | null) => {
+    setBoss(id);
+    show(zone.id, id);
   };
 
   return (
@@ -45,7 +53,7 @@ export default function RankingsPage() {
           <h1>Rankings</h1>
           <div className="row wrap-center">
             <ZonePicker zones={d.zones} value={zone.id} onChange={pickZone} />
-            <select value={picked?.encounterId ?? ''} onChange={(e) => setBoss(e.target.value ? Number(e.target.value) : null)} aria-label="Whole raid or one boss">
+            <select value={picked?.encounterId ?? ''} onChange={(e) => pickBoss(e.target.value ? Number(e.target.value) : null)} aria-label="Whole raid or one boss">
               <option value="">Whole raid</option>
               {zone.bosses.map((b) => <option key={b.encounterId} value={b.encounterId}>{b.name}</option>)}
             </select>

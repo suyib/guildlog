@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { AnalysisResult, CompareChoice, FightBreakdown, RaidOverview, ReportSummary } from '../../server/types';
-import { type Progress, loadBreakdown, loadOverall, loadReport, runAnalysis } from '../api';
+import type { AnalysisResult, CompareChoice, FightBreakdown, RaidOverview, ReportSummary, SavedRaid } from '../../server/types';
+import { type Progress, loadBreakdown, loadOverall, loadRaids, loadReport, runAnalysis } from '../api';
 import { mmss } from '../format';
 import { useNav } from '../nav';
 import Glyph from './Glyph';
@@ -8,6 +8,7 @@ import Breakdown from './Breakdown';
 import { HomeExtras, HomeHero } from './Home';
 import NightView from './NightView';
 import ResultView from './ResultView';
+import { go } from '../url';
 
 /** "Whole night" in the boss list (fight IDs start at 1, so 0 is free). */
 const OVERALL = 0;
@@ -149,6 +150,14 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial?.id]);
 
+  // Raids on Past raids, newest first, to open without copying a link from Warcraft Logs
+  const [pastRaids, setPastRaids] = useState<SavedRaid[]>([]);
+  useEffect(() => {
+    loadRaids()
+      .then((r) => setPastRaids(r.raids.filter((x) => x.startTime).sort((a, b) => b.startTime!.localeCompare(a.startTime!))))
+      .catch(() => setPastRaids([]));
+  }, []);
+
   async function onLoad(e: React.FormEvent) {
     e.preventDefault();
     await loadMain(url);
@@ -163,7 +172,6 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
     const log = new URLSearchParams(window.location.search).get('log');
     if (!log) return;
     setUrl(log);
-    history.replaceState(null, '', '/');
     loadMain(log);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -183,8 +191,10 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
       setCompareWith('none');
       setOther(null);
       setOtherUrl('');
-      // No player in the link: show the whole raid's breakdown straight away
+      // No player in the link: show the whole raid's breakdown straight away; with one, their
+      // analysis (straight away if the fight is stored)
       if (!r.suggestedPlayer && r.fights.length) setAutoBreakdown(true);
+      else if (r.suggestedPlayer) setAutoRun(true);
     } catch (err) {
       setError((err as Error).message);
       setReport(null);
@@ -209,9 +219,32 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoBreakdown, report, fightId, busy]);
 
+  /**
+   * Put what's shown in the address (/?log=<report link with fight and player>), so it can be shared
+   * and Back returns to the view before. The same view again (just opened from its link) replaces it.
+   */
+  function showAddress(fid: number | '', pid: number | '') {
+    if (!report) return;
+    const params = new URLSearchParams();
+    if (fid !== '' && fid !== OVERALL) params.set('fight', String(fid));
+    if (pid !== '') params.set('source', String(pid));
+    const query = params.toString();
+    const link = `https://${report.host}/reports/${report.code}${query ? `?${query}` : ''}`;
+    const view = (l: string | null) => {
+      try {
+        const u = new URL(l ?? '');
+        return `${u.pathname}|${u.searchParams.get('fight') ?? ''}|${u.searchParams.get('source') ?? ''}`;
+      } catch {
+        return null;
+      }
+    };
+    go(`/?log=${encodeURIComponent(link)}`, view(new URLSearchParams(window.location.search).get('log')) === view(link));
+  }
+
   /** "Whole night": every boss and everyone's numbers, like /raidend. */
   async function runNight(again = false) {
     if (!report) return;
+    if (!again) showAddress(OVERALL, '');
     setError(null);
     setResult(null);
     if (!again) {
@@ -247,6 +280,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
   async function runBreakdown() {
     const f = report?.fights.find((x) => x.id === fightId);
     if (!report || !f) return;
+    showAddress(f.id, '');
     setError(null);
     setResult(null);
     setBreakdown(null);
@@ -326,7 +360,9 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
       setResult(res);
       markStored(f.id);
       if (compare.kind === 'log') markStored(compare.fight.id, 'other');
-      if (res.id) history.replaceState(null, '', `/a/${res.id}`);
+      // A saved analysis has its own short link; otherwise the report link with the fight and player
+      if (res.id) go(`/a/${res.id}`);
+      else showAddress(f.id, me.id);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -345,7 +381,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
         {!report && <p className="help">
           {initial
             ? 'Change the fight, player or who to compare with and click Analyze to make a new comparison. The shared one stays as it is.'
-            : 'Paste a Warcraft Logs report link. Links that already include a fight and player (&fight=11&source=28) fill in the choices for you.'}
+            : 'Paste a Warcraft Logs report link, or pick a raid from Past raids. Links that already include a fight and player (&fight=11&source=28) fill in the choices for you.'}
         </p>}
         <form onSubmit={onLoad} className="row">
           <label className="input-icon">
@@ -359,6 +395,26 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
             aria-label="Warcraft Logs report link"
             />
           </label>
+          {pastRaids.length > 0 && (
+            <select
+              className="past-raid-picker"
+              value=""
+              disabled={busy !== null}
+              aria-label="Or pick a past raid"
+              onChange={(e) => {
+                if (!e.target.value) return;
+                setUrl(e.target.value);
+                loadMain(e.target.value);
+              }}
+            >
+              <option value="">Or pick a past raid</option>
+              {pastRaids.map((r) => (
+                <option key={r.code} value={`https://${r.host}/reports/${r.code}`}>
+                  {r.title ?? r.code} · {new Date(r.startTime!).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                </option>
+              ))}
+            </select>
+          )}
           <button type="submit" disabled={busy !== null}>{busy === 'report' ? 'Loading…' : 'Load Report'}</button>
         </form>
 

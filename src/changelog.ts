@@ -9,6 +9,25 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.35.2',
+    date: '2026-10-27',
+    changes: ['Analyze a log: pick any raid from Past raids (newest first) next to the link box, instead of copying its link from Warcraft Logs. Pasting a link still works.'],
+  },
+  {
+    version: '0.35.1',
+    date: '2026-10-27',
+    changes: ['`/performance raid:` lists every raid on Past raids, newest first; type to search by name or date. Pasting a Warcraft Logs link (with ?fight= for one fight) still works.'],
+  },
+  {
+    version: '0.35.0',
+    date: '2026-10-27',
+    changes: [
+      '`/performance` takes a Warcraft Logs link: the performance breakdown for that raid, or one fight if the link has ?fight=.',
+      'Every view has its own address: a loaded log, the whole night, a fight breakdown, a raid on Past raids and a raid or boss on Rankings. Share the address, and Back and Forward step through what you looked at.',
+      'Past raids: a Copy link button on each raid.',
+    ],
+  },
+  {
     version: '0.34.0',
     date: '2026-10-27',
     changes: [

@@ -765,6 +765,7 @@ button.ghost.icon-only { width: 34px; padding: 0; font-size: 18px; }
 .raid-chip-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .cal-grid .raid-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel-head select { width: auto; min-width: 160px; }
+.past-raid-picker { flex: 0 1 260px; width: auto; min-width: 0; }
 .raid-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--slot-other); }
 .raid-dot.full { background: var(--win); }
 .raid-dot.partial { background: var(--medium); }
@@ -891,6 +892,7 @@ table.attendance td { vertical-align: middle; white-space: nowrap; }
   .pickers button { width: 100%; }
   .row { flex-direction: column; }
   .row .input-icon { flex: none; }
+  .past-raid-picker { flex: none; }
   .row button { width: 100%; }
   .kpi-value { font-size: 22px; }
   .facts { grid-template-columns: 1fr; }

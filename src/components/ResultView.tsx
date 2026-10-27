@@ -81,7 +81,7 @@ function FightHeader({ result }: { result: AnalysisResult }) {
         <ViewToggle result={result} />
         <span className="pill"><Glyph name="users" size={16} />{compareLabel(result.compareKey)}</span>
         <a className="button ghost" href={reportLink} target="_blank" rel="noreferrer"><Glyph name="link" size={16} />Warcraft Logs</a>
-        {result.id && <ShareButton id={result.id} />}
+        {result.id && <ShareButton path={`/a/${result.id}`} />}
       </div>
     </header>
   );
@@ -99,9 +99,10 @@ function ViewToggle({ result }: { result: AnalysisResult }) {
   );
 }
 
-export function ShareButton({ id }: { id: string }) {
+/** Copies a link to this site (path: /a/<id>, /#/raids?raid=…). */
+export function ShareButton({ path, label = 'Copy share link' }: { path: string; label?: string }) {
   const [copied, setCopied] = useState(false);
-  const url = `${window.location.origin}/a/${id}`;
+  const url = `${window.location.origin}${path}`;
   return (
     <button
       type="button"
@@ -117,7 +118,7 @@ export function ShareButton({ id }: { id: string }) {
       }}
     >
       <Glyph name={copied ? 'check' : 'copy'} size={16} />
-      {copied ? 'Link copied' : 'Copy share link'}
+      {copied ? 'Link copied' : label}
     </button>
   );
 }

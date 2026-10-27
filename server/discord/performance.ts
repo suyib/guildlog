@@ -2,12 +2,19 @@
 // in Past raids (kill_stats), with what to watch for, how to help, and how to keep track. Tanks are
 // judged on deaths and item level only, as parses say little about tanking.
 import { dbEnabled, rest } from '../db.js';
+import { type FightDigest, healsMost } from '../fightDigest.js';
 import { BRAND, type Embed, type MessageBody } from './api.js';
 
 export type PerfRange = 'raid' | '4w' | '8w';
-export const RANGE_LABEL: Record<PerfRange, string> = { raid: 'the last raid', '4w': 'the last 4 weeks', '8w': 'the last 8 weeks' };
+/** What's being looked at: its name, whether it's a single night (or fight), and the kills a player needs. */
+export interface PerfScope { label: string; oneNight: boolean; minKills: number }
+export const RANGE_SCOPE: Record<PerfRange, PerfScope> = {
+  raid: { label: 'the last raid', oneNight: true, minKills: 2 },
+  '4w': { label: 'the last 4 weeks', oneNight: false, minKills: 2 },
+  '8w': { label: 'the last 8 weeks', oneNight: false, minKills: 2 },
+};
 
-interface Row {
+export interface Row {
   report_code: string;
   start_time: string;
   encounter_name: string;
@@ -39,7 +46,6 @@ export interface PerfPlayer {
 const HIGH = 75;
 const LOW = 35;
 const DEATHS_LOW = 0.5; // deaths per kill
-const MIN_KILLS = 2;
 const SHOW = 6;
 
 const q = encodeURIComponent;
@@ -47,8 +53,10 @@ const avg = (xs: number[]) => (xs.length ? xs.reduce((t, v) => t + v, 0) / xs.le
 const round = (v: number | null) => (v === null ? null : Math.round(v));
 
 /** Everyone's numbers over the range, from kill_stats. */
-export async function performance(range: PerfRange): Promise<{ players: PerfPlayer[]; kills: number; raids: number; bossDeaths: [string, number][]; itemLevel: number | null; skipped: number }> {
-  const empty = { players: [], kills: 0, raids: 0, bossDeaths: [] as [string, number][], itemLevel: null, skipped: 0 };
+export type PerfData = ReturnType<typeof summarize>;
+
+export async function performance(range: PerfRange): Promise<PerfData> {
+  const empty: PerfData = { players: [], kills: 0, raids: 0, bossDeaths: [], itemLevel: null, skipped: 0 };
   if (!dbEnabled()) return empty;
   const cols = 'report_code,start_time,encounter_name,name,class_name,spec_name,role,healer,parse,hps_parse,deaths,item_level';
   let rows: Row[];
@@ -60,10 +68,28 @@ export async function performance(range: PerfRange): Promise<{ players: PerfPlay
     const since = new Date(Date.now() - (range === '4w' ? 4 : 8) * 7 * 86_400_000).toISOString();
     rows = (await rest(`kill_stats?start_time=gte.${q(since)}&select=${cols}&order=start_time.asc&limit=10000`)) ?? [];
   }
-  return summarize(rows);
+  return summarize(rows, RANGE_SCOPE[range].minKills);
 }
 
-export function summarize(rows: Row[]) {
+/** The same rows from a report's fight summaries (a pasted link; one fight if it names one). */
+export function rowsFromDigests(code: string, startTime: number, fights: FightDigest[]): Row[] {
+  return fights.filter((f) => f.kill).flatMap((f) => f.players.map((p) => ({
+    report_code: code,
+    start_time: new Date(startTime + f.startTime).toISOString(),
+    encounter_name: f.name,
+    name: p.name,
+    class_name: p.className,
+    spec_name: p.specName,
+    role: p.role,
+    healer: healsMost(p),
+    parse: p.parse,
+    hps_parse: p.healing?.parse ?? null,
+    deaths: p.deaths.length,
+    item_level: p.itemLevel,
+  })));
+}
+
+export function summarize(rows: Row[], minKills = 2) {
   const byName = new Map<string, Row[]>();
   for (const r of rows) byName.set(r.name, [...(byName.get(r.name) ?? []), r]);
   const kills = new Set(rows.map((r) => `${r.report_code}:${r.encounter_name}:${r.start_time}`)).size;
@@ -74,7 +100,7 @@ export function summarize(rows: Row[]) {
   const players: PerfPlayer[] = [];
   let skipped = 0;
   for (const [name, list] of byName) {
-    if (list.length < MIN_KILLS) {
+    if (list.length < minKills) {
       skipped++;
       continue;
     }
@@ -127,10 +153,10 @@ function concerns(p: PerfPlayer, raidIlvl: number | null): { why: string[]; help
 const clip = (s: string, max = 1024) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
 /** The DM for an officer. */
-export function performanceMessage(range: PerfRange, data: Awaited<ReturnType<typeof performance>>, site: string): MessageBody {
+export function performanceMessage(scope: PerfScope, data: PerfData, site: string): MessageBody {
   const { players, kills, raids, bossDeaths, itemLevel, skipped } = data;
   if (!players.length) {
-    return { embeds: [{ title: 'Raid performance', color: BRAND, description: `Not enough kills read in ${RANGE_LABEL[range]} yet (each player needs at least ${MIN_KILLS}). Raids are read after \`/raidend\`, or from Past raids on the site.` }] };
+    return { embeds: [{ title: 'Raid performance', color: BRAND, description: `Not enough kills read in ${scope.label} yet${scope.minKills > 1 ? ` (each player needs at least ${scope.minKills})` : ''}. Raids are read after \`/raidend\`, or from Past raids on the site.` }] };
   }
   const ranked = players.filter((p) => p.parse !== null);
   const high = ranked.filter((p) => p.parse! >= HIGH && p.deathsPerKill < DEATHS_LOW).sort((a, b) => b.parse! - a.parse!).slice(0, SHOW);
@@ -139,7 +165,7 @@ export function performanceMessage(range: PerfRange, data: Awaited<ReturnType<ty
     .filter((x) => x.why.length)
     .sort((a, b) => b.why.length - a.why.length || (a.p.parse ?? 100) - (b.p.parse ?? 100))
     .slice(0, SHOW);
-  const line = (p: PerfPlayer) => `**${p.name}** (${p.spec}) · ${p.parse !== null ? `parse ${p.parse}` : 'tank'} · ${p.kills} kills${p.deathsPerKill ? ` · ${p.deathsPerKill.toFixed(1)} deaths/kill` : ''}`;
+  const line = (p: PerfPlayer) => `**${p.name}** (${p.spec}) · ${p.parse !== null ? `parse ${p.parse}` : 'tank'} · ${p.kills} kill${p.kills === 1 ? '' : 's'}${p.deathsPerKill ? ` · ${p.deathsPerKill.toFixed(1)} deaths/kill` : ''}`;
 
   const watch: string[] = [];
   if (bossDeaths[0] && bossDeaths[0][1] >= 3) watch.push(`Most deaths on **${bossDeaths[0][0]}** (${bossDeaths[0][1]}${bossDeaths[1] ? `; then ${bossDeaths[1][0]}, ${bossDeaths[1][1]}` : ''}). Worth a quick talk about that fight’s mechanics.`);
@@ -148,11 +174,11 @@ export function performanceMessage(range: PerfRange, data: Awaited<ReturnType<ty
   const healers = players.filter((p) => p.role === 'healer');
   if (healers.length && healers.every((h) => (h.parse ?? 100) < 50)) watch.push('All healers parsed low. That often just means the raid took little damage, not that they healed badly.');
   if (skipped) watch.push(`${skipped} player${skipped === 1 ? '' : 's'} with only one kill ${skipped === 1 ? 'was' : 'were'} left out: one fight isn’t enough to judge.`);
-  if (range === 'raid') watch.push('This is one night. A single raid can be off for many reasons; `/performance range:4 weeks` gives a fairer picture.');
+  if (scope.oneNight) watch.push('This is one night. A single raid can be off for many reasons; `/performance range:4 weeks` gives a fairer picture.');
 
   const embeds: Embed[] = [
     {
-      title: `Raid performance: ${RANGE_LABEL[range]}`,
+      title: `Raid performance: ${scope.label}`.slice(0, 256),
       color: BRAND,
       description: `${raids} raid${raids === 1 ? '' : 's'}, ${kills} boss kill${kills === 1 ? '' : 's'}, ${players.length} players${itemLevel ? `, average item level ${itemLevel}` : ''}. For officers only: please don’t share this in channels.`,
       fields: [

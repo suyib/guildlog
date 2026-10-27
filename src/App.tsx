@@ -11,13 +11,19 @@ import SavedPage from './components/SavedPage';
 import Sidebar from './components/Sidebar';
 import { NavProvider } from './nav';
 
-type Route = { page: 'analyze' } | { page: 'history' } | { page: 'raids' } | { page: 'rankings' } | { page: 'admin' } | { page: 'me' } | { page: 'changelog' } | { page: 'saved'; id: string };
+type Page = { page: 'analyze' } | { page: 'history' } | { page: 'raids' } | { page: 'rankings' } | { page: 'admin' } | { page: 'me' } | { page: 'changelog' } | { page: 'saved'; id: string };
+/** A page and the address it came from: a page opens afresh when Back or Forward changes it. */
+type Route = Page & { key: string };
 
 // Shareable analyses live at /a/<id>; the rest of the app uses hash routes (#/, #/raids and #/history).
 function parseRoute(): Route {
+  return { ...pageOf(), key: window.location.pathname + window.location.search + window.location.hash };
+}
+
+function pageOf(): Page {
   const h = window.location.hash.replace(/^#\/?/, '');
   if (h === 'history') return { page: 'history' };
-  if (h === 'raids') return { page: 'raids' };
+  if (h === 'raids' || h.startsWith('raids?')) return { page: 'raids' };
   if (h === 'rankings' || h.startsWith('rankings?')) return { page: 'rankings' };
   if (h === 'admin') return { page: 'admin' };
   if (h === 'me') return { page: 'me' };
@@ -49,14 +55,14 @@ export default function App() {
       <div className="app">
         <Sidebar page={route.page} />
         <main className="content">
-          {route.page === 'analyze' && <AnalyzePage />}
-          {route.page === 'raids' && <RaidsPage />}
-          {route.page === 'rankings' && <RankingsPage key={window.location.hash} />}
+          {route.page === 'analyze' && <AnalyzePage key={route.key} />}
+          {route.page === 'raids' && <RaidsPage key={route.key} />}
+          {route.page === 'rankings' && <RankingsPage key={route.key} />}
           {route.page === 'admin' && <AdminPage />}
           {route.page === 'me' && <ProfilePage />}
           {route.page === 'history' && <HistoryPage />}
           {route.page === 'changelog' && <ChangelogPage />}
-          {route.page === 'saved' && <SavedPage id={route.id} />}
+          {route.page === 'saved' && <SavedPage key={route.key} id={route.id} />}
         </main>
       </div>
     </NavProvider>

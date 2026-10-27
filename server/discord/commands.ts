@@ -19,7 +19,7 @@ import {
   type Claim, approvedClaimsFor, claimOnCharacter, claimsFor, createClaim, createRaid, createReminder, decideClaim, endRaid, getClaim, lastSeen,
   latestOpenRaid, latestRaidStartedBy, raidByCode, recentRaids, removeClaim,
 } from './store.js';
-import { type PerfRange, performance, performanceMessage } from './performance.js';
+import { type PerfRange, RANGE_SCOPE, performance, performanceMessage, rowsFromDigests, summarize } from './performance.js';
 import { parseWhen } from './time.js';
 
 // ---------- Command definitions (sent to Discord by GET /api/discord?task=register) ----------
@@ -83,9 +83,12 @@ export const COMMANDS = [
   },
   {
     name: 'performance', description: 'Officers: who\u2019s doing well and who could use a hand (sent by DM)', ...contexts,
-    options: [{ type: STRING, name: 'range', description: 'Which raids (default: last 4 weeks)', choices: [
-      { name: 'Last raid', value: 'raid' }, { name: 'Last 4 weeks', value: '4w' }, { name: 'Last 8 weeks', value: '8w' },
-    ] }],
+    options: [
+      { type: STRING, name: 'range', description: 'Which raids (default: last 4 weeks)', choices: [
+        { name: 'Last raid', value: 'raid' }, { name: 'Last 4 weeks', value: '4w' }, { name: 'Last 8 weeks', value: '8w' },
+      ] },
+      { type: STRING, name: 'raid', description: 'Or one raid: pick any past raid (type to search), or paste a Warcraft Logs link', autocomplete: true },
+    ],
   },
   { name: 'help', description: 'What the bot can do and how to use each command', ...contexts },
 ];
@@ -175,6 +178,7 @@ export async function handle(i: Interaction): Promise<Outcome> {
     }
   }
   if (i.type === 4 && i.data?.name === 'raids') return raidChoices(i);
+  if (i.type === 4 && i.data?.name === 'performance') return pastRaidChoices(i);
   if (i.type === 3) {
     const id = i.data?.custom_id ?? '';
     if (id.startsWith('raid:')) return raidButton(i, id);
@@ -340,7 +344,7 @@ async function startReading(code: string) {
 // ---------- /raids and the page buttons ----------
 
 /** Picked from the list (host:code) or pasted as a Warcraft Logs link. */
-function readRaidValue(value: string): { host: string; code: string } {
+function readRaidValue(value: string): { host: string; code: string; fight?: string } {
   const picked = value.match(/^([a-z0-9.-]+\.warcraftlogs\.com):([A-Za-z0-9]+)$/i);
   if (picked) return { host: picked[1], code: picked[2] };
   return parseReportUrl(value);
@@ -440,12 +444,50 @@ async function performanceCommand(i: Interaction): Promise<Outcome> {
   if (!(await isOfficer(i))) return notOfficer();
   const value = opt(i.data?.options, 'range');
   const range: PerfRange = value === 'raid' || value === '8w' ? value : '4w';
+  const picked = (opt(i.data?.options, 'raid') as string | undefined)?.trim();
+  let parsed: { host: string; code: string; fight?: string } | null = null;
+  if (picked) {
+    try {
+      parsed = readRaidValue(picked);
+    } catch (e) {
+      return reply({ content: (e as Error).message });
+    }
+  }
   const user = userOf(i);
   return deferred(i, async () => {
-    const body = performanceMessage(range, await performance(range), env.site());
+    let body: MessageBody;
+    if (parsed) {
+      // A pasted raid (or one fight of it): read from the stored fights, or Warcraft Logs
+      const digest = await raidDigest(parsed.host, parsed.code);
+      const fightId = Number(parsed.fight);
+      const fights = fightId > 0 ? digest.fights.filter((f) => f.id === fightId) : digest.fights;
+      if (fightId > 0 && !fights.length) return { content: 'That fight isn\u2019t a boss kill, or it hasn\u2019t been read yet. Try again in a minute, or paste the raid without ?fight=.' };
+      const label = fightId > 0 ? `${fights[0].name} (${digest.meta.title})` : digest.meta.title;
+      const scope = { label, oneNight: true, minKills: fightId > 0 ? 1 : 2 };
+      body = performanceMessage(scope, summarize(rowsFromDigests(parsed.code, digest.meta.startTime, fights), scope.minKills), env.site());
+      if (digest.pending) body.content = `${digest.pending} boss kill${digest.pending === 1 ? ' is' : 's are'} still being read, so ${digest.pending === 1 ? 'it\u2019s' : 'they\u2019re'} not included yet.`;
+    } else {
+      body = performanceMessage(RANGE_SCOPE[range], await performance(range), env.site());
+    }
     const ok = await sendDm(user.id, body);
     return ok ? { content: 'Sent to your DMs.' } : { content: 'Your DMs are closed, so here it is (only you can see this):', embeds: body.embeds };
   });
+}
+
+/** Choices for /performance raid: every raid on Past raids, newest first, searched by title or date. */
+async function pastRaidChoices(i: Interaction): Promise<Outcome> {
+  const typed = String(i.data?.options?.find((o) => o.focused)?.value ?? '').trim();
+  const choices: { name: string; value: string }[] = [];
+  if (/warcraftlogs\.com\/reports\//i.test(typed)) choices.push({ name: 'Use this Warcraft Logs link', value: typed.slice(0, 100) });
+  const list: { report_code: string; host: string; title: string | null; start_time: string }[] =
+    (await rest('guild_raids?select=report_code,host,title,start_time&start_time=not.is.null&order=start_time.desc&limit=200').catch(() => null)) ?? [];
+  for (const r of list) {
+    const date = new Date(r.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    const name = `${r.title ?? r.report_code} · ${date}`;
+    if (typed && !/^https?:/i.test(typed) && !name.toLowerCase().includes(typed.toLowerCase())) continue;
+    choices.push({ name: name.slice(0, 100), value: `${r.host}:${r.report_code}` });
+  }
+  return { response: { type: 8, data: { choices: choices.slice(0, 25) } } };
 }
 
 // ---------- /check ----------

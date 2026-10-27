@@ -7,6 +7,8 @@ import { type Me, addRaid, checkRaid, deleteRaid, loadMe, loadRaids, readRaidNow
 import { mmss } from '../format';
 import Glyph from './Glyph';
 import { ZoneRanks, useHome } from './Home';
+import { ShareButton } from './ResultView';
+import { go, hashParam } from '../url';
 import { BossIcon, ClassIcon, SeverityDot, classCss } from './icons';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -69,9 +71,11 @@ export default function RaidsPage() {
         return [] as SavedRaid[];
       });
 
+  // The raid in the address (#/raids?raid=<code>), or the latest
   useEffect(() => {
     refresh().then((list) => {
-      const latest = list.find((r) => r.startTime);
+      const linked = list.find((r) => r.code === hashParam('raid') && r.startTime);
+      const latest = linked ?? list.find((r) => r.startTime);
       const at = latest?.startTime ? new Date(latest.startTime) : new Date();
       setMonth(new Date(at.getFullYear(), at.getMonth(), 1));
       if (latest) setSelected(latest.code);
@@ -90,6 +94,16 @@ export default function RaidsPage() {
   const dated = useMemo(() => (raids ?? []).filter((r) => r.startTime), [raids]);
   const waiting = useMemo(() => (raids ?? []).filter((r) => !r.startTime), [raids]);
   const current = (raids ?? []).find((r) => r.code === selected) ?? null;
+  /** Pick a raid: its own address, so it can be shared and Back returns to the one before. */
+  const pick = (code: string) => {
+    setSelected(code);
+    go(`/#/raids?raid=${encodeURIComponent(code)}`);
+    const r = dated.find((x) => x.code === code);
+    if (r?.startTime) {
+      const d = new Date(r.startTime);
+      setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+    }
+  };
 
   return (
     <>
@@ -101,7 +115,7 @@ export default function RaidsPage() {
           </div>
         </div>
         {me?.officer ? (
-          <AddRaid onAdded={(r) => refresh().then(() => setSelected(r.code))} />
+          <AddRaid onAdded={(r) => refresh().then(() => pick(r.code))} />
         ) : me && (
           <p className="muted small">Officers can add older raids here{me.kind === 'password' && me.discordLogin ? '; sign in with Discord to see if that includes you' : ''}.</p>
         )}
@@ -125,17 +139,10 @@ export default function RaidsPage() {
         <>
           <Overview raids={dated} />
           <div className="grid-raids">
-            <Calendar raids={dated} month={month} onMonth={setMonth} selected={selected} onSelect={setSelected} />
+            <Calendar raids={dated} month={month} onMonth={setMonth} selected={selected} onSelect={pick} />
             {current ? <RaidCardView raid={current} archiveDays={archiveDays} canDelete={me?.rank === 'admin' || me?.rank === 'guild_master'} officer={!!me?.officer} onDeleted={() => { setSelected(null); refresh(); }} onChanged={refresh} /> : <section className="panel"><p className="muted">Pick a raid on the calendar.</p></section>}
           </div>
-          <Attendance raids={dated} range={range} onRange={setRange} onSelect={(code) => {
-            setSelected(code);
-            const r = dated.find((x) => x.code === code);
-            if (r?.startTime) {
-              const d = new Date(r.startTime);
-              setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
-            }
-          }} />
+          <Attendance raids={dated} range={range} onRange={setRange} onSelect={pick} />
           <Progress raids={dated} />
         </>
       )}
@@ -327,6 +334,7 @@ function RaidCardView({ raid, archiveDays, canDelete, officer, onDeleted, onChan
         <div className="raid-card-links">
           <a className="button ghost" href={siteLink(raid)}>Open on Guild Logs</a>
           <a className="button ghost" href={logLink(raid)} target="_blank" rel="noreferrer">Warcraft Logs</a>
+          <ShareButton path={`/#/raids?raid=${encodeURIComponent(raid.code)}`} label="Copy link" />
           {canDelete && !confirming && <button type="button" className="ghost danger" onClick={() => setConfirming(true)}>Delete raid</button>}
           {canDelete && confirming && (
             <>
