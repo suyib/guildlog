@@ -214,7 +214,7 @@ function Progress({ zones, wcl }: { zones: ZoneProgress[]; wcl: HomeData['wcl'] 
       </div>
       <div className="raid-feedback">
         {zones.map((z) => (
-          <details key={z.id} className="accordion" open={z.id === main}>
+          <details key={z.id} className="accordion zone-acc" open={z.id === main}>
             <summary>
               {z.name}
               <ZoneRanks ranks={z.ranks} wcl={wcl} />
