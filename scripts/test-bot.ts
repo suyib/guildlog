@@ -519,6 +519,33 @@ delete process.env.SITE_ADMIN_IDS;
   for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) delete process.env[k];
 }
 
+// /performance character: one person's breakdown, boss by boss, and who to pick from
+{
+  const { characterMessage } = await import('../server/discord/performance.js');
+  const row = (name: string, boss: string, parse: number | null, extra: any = {}) => ({ report_code: 'R1', start_time: '2026-10-01T20:00:00Z', encounter_name: boss, name, class_name: 'Priest', spec_name: 'Shadow', role: 'dps', healer: false, parse, hps_parse: null, deaths: 0, item_level: 114, ...extra });
+  const rows = [row('Aerdre', 'Maulgar', 88), row('Aerdre', 'Gruul', 30, { deaths: 1 }), row('Ilrox', 'Maulgar', 96), row('Ilrox', 'Gruul', 92)];
+  const m = characterMessage({ label: 'ID 10', oneNight: true, minKills: 1 }, rows as any, 'aerdre', 'https://guildlog.uk');
+  assert.match(m.embeds![0].description!, /average parse 59 \(highest 88\) · died once in 2 kills/);
+  assert.match(m.embeds![0].fields![0].value, /\*\*Maulgar\*\* · parse 88/);
+  assert.match(m.embeds![0].fields![1].value, /\*\*Gruul\*\* · parse 30 · died once[\s\S]*Try:/);
+  assert.match(m.embeds![1].description!, /other damage dealers averaged a parse of 94; Aerdre: 59/);
+  assert.match(JSON.stringify(m), /Just an overview/);
+  assert.match(characterMessage({ label: 'ID 10', oneNight: true, minKills: 1 }, rows as any, 'Nobody', '').embeds![0].description!, /isn\u2019t in any boss kill/);
+  process.env.SUPABASE_URL = 'https://db.example';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
+  const realFetch = globalThis.fetch;
+  let asked = '';
+  globalThis.fetch = (async (url: string) => {
+    asked = String(url);
+    return new Response(JSON.stringify(rows.map((r) => ({ ...r, report_code: 'OLD9' }))), { status: 200 });
+  }) as typeof fetch;
+  const pick = await handle({ type: 4, token: 't', data: { name: 'performance', options: [{ name: 'raid', type: 3, value: 'fresh.warcraftlogs.com:OLD9' }, { name: 'character', type: 3, value: 'ae', focused: true }] } } as any) as any;
+  assert.ok(asked.includes('report_code=eq.OLD9'), 'lists who was in the chosen raid');
+  assert.deepEqual(pick.response.data.choices, [{ name: 'Aerdre (Shadow Priest)', value: 'Aerdre' }]);
+  globalThis.fetch = realFetch;
+  for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) delete process.env[k];
+}
+
 // /check <character>: anyone's character for officers (by DM), only your own for everyone else
 {
   process.env.SUPABASE_URL = 'https://db.example';

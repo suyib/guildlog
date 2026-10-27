@@ -58,20 +58,24 @@ const round = (v: number | null) => (v === null ? null : Math.round(v));
 /** Everyone's numbers over the range, from kill_stats. */
 export type PerfData = ReturnType<typeof summarize>;
 
-export async function performance(range: PerfRange): Promise<PerfData> {
-  const empty: PerfData = { players: [], kills: 0, raids: 0, bossDeaths: [], itemLevel: null, skipped: 0 };
-  if (!dbEnabled()) return empty;
-  const cols = 'report_code,start_time,encounter_name,name,class_name,spec_name,role,healer,parse,hps_parse,deaths,item_level';
-  let rows: Row[];
+const COLS = 'report_code,start_time,encounter_name,name,class_name,spec_name,role,healer,parse,hps_parse,deaths,item_level';
+
+/** Everyone's kills over the range (or in one stored raid), from kill_stats. */
+export async function performanceRows(range: PerfRange | { code: string }): Promise<Row[]> {
+  if (!dbEnabled()) return [];
+  let code = typeof range === 'object' ? range.code : null;
   if (range === 'raid') {
     const last: { report_code: string }[] = (await rest('kill_stats?select=report_code&order=start_time.desc&limit=1')) ?? [];
-    if (!last.length) return empty;
-    rows = (await rest(`kill_stats?report_code=eq.${q(last[0].report_code)}&select=${cols}&limit=2000`)) ?? [];
-  } else {
-    const since = new Date(Date.now() - (range === '4w' ? 4 : 8) * 7 * 86_400_000).toISOString();
-    rows = (await rest(`kill_stats?start_time=gte.${q(since)}&select=${cols}&order=start_time.asc&limit=10000`)) ?? [];
+    code = last[0]?.report_code ?? null;
+    if (!code) return [];
   }
-  return summarize(rows, RANGE_SCOPE[range].minKills);
+  if (code) return (await rest(`kill_stats?report_code=eq.${q(code)}&select=${COLS}&order=start_time.asc&limit=2000`)) ?? [];
+  const since = new Date(Date.now() - (range === '4w' ? 4 : 8) * 7 * 86_400_000).toISOString();
+  return (await rest(`kill_stats?start_time=gte.${q(since)}&select=${COLS}&order=start_time.asc&limit=10000`)) ?? [];
+}
+
+export async function performance(range: PerfRange): Promise<PerfData> {
+  return summarize(await performanceRows(range), RANGE_SCOPE[range].minKills);
 }
 
 /** The same rows from a report's fight summaries (a pasted link; one fight if it names one). */
@@ -209,7 +213,75 @@ export function performanceMessage(scope: PerfScope, data: PerfData, site: strin
       '• **Against the guild**: on the site, each fight compares them with the guild’s own kills in the same spec.',
       `• Set one clear goal per person (e.g. “no more than one death a raid” or “Active time over 90%”) and check it after two raids. Full details: ${site}`,
     ].join('\n'), 4000),
-    footer: { text: 'Just an overview: the numbers can’t see extra mechanics, assignments, kiting, interrupts, buffs or other utility someone was doing, so talk to them before drawing conclusions.' },
+    footer: CAVEAT,
+  });
+  return { embeds };
+}
+
+const CAVEAT = { text: 'Just an overview: the numbers can\u2019t see extra mechanics, assignments, kiting, interrupts, buffs or other utility someone was doing, so talk to them before drawing conclusions.' };
+
+/** One character's breakdown, in the same shape as the raid overview: boss by boss. */
+export function characterMessage(scope: PerfScope, rows: Row[], character: string, site: string): MessageBody {
+  const key = character.trim().toLowerCase();
+  const mine = rows.filter((r) => r.name.toLowerCase() === key);
+  if (!mine.length) {
+    return { embeds: [{ title: `Performance: ${character}`.slice(0, 256), color: BRAND, description: `${character} isn\u2019t in any boss kill read for ${scope.label}. Check the spelling, or pick them from the list.` }] };
+  }
+  const raid = summarize(rows, 1);
+  const p = summarize(mine, 1).players[0];
+  const healer = p.role === 'healer';
+  const parseOf = (r: Row) => (p.role === 'tank' ? null : healer ? r.hps_parse : r.parse);
+  // Same role in the raid, to compare with
+  const peers = raid.players.filter((x) => x.role === p.role && x.parse !== null && x.name !== p.name);
+  const peerAvg = avg(peers.map((x) => x.parse!));
+
+  const good: string[] = [];
+  const work: string[] = [];
+  const tips = new Set<string>();
+  for (const r of mine) {
+    const v = parseOf(r);
+    const parts = [v !== null && v !== undefined ? `parse ${Math.round(Number(v))}` : null, r.deaths ? (r.deaths === 1 ? 'died once' : `died ${r.deaths} times`) : null].filter(Boolean);
+    const text = `**${r.encounter_name}**${parts.length ? ` \u00b7 ${parts.join(' \u00b7 ')}` : ''}`;
+    const low = v !== null && v !== undefined && Number(v) < LOW;
+    if (low || r.deaths) {
+      work.push(text);
+      if (low) tips.add(healer ? 'look at overhealing and spell choice in the healing view; check whether they had a tank or raid assignment' : 'look at Active time and Rotation & cooldowns: gaps with nothing cast and unused cooldowns are the usual cause');
+      if (r.deaths) tips.add('go through the death recaps on Survival: what hit them in the last 10 seconds, and whether a defensive or healthstone was used');
+    } else if (v === null || v === undefined || Number(v) >= HIGH) good.push(text);
+  }
+
+  const { why, help } = concerns(p, raid.itemLevel);
+  const watch: string[] = [];
+  for (const w of why.filter((w) => /item level|vary/.test(w))) watch.push(w.charAt(0).toUpperCase() + w.slice(1) + '.');
+  for (const h of help.filter((h) => /gear|compare/.test(h))) tips.add(h);
+  if (p.parse !== null && peerAvg !== null && peers.length) watch.push(`The raid\u2019s other ${healer ? 'healers' : 'damage dealers'} averaged a parse of ${Math.round(peerAvg)}; ${p.name}: ${p.parse}.`);
+  if (p.role === 'tank') watch.push('Tanks are judged on deaths and item level here: parses say little about tanking.');
+  if (scope.oneNight) watch.push('This is one night. Picking `range:4 weeks` with their name gives a fairer picture.');
+
+  const parseText = p.parse === null ? 'tank' : p.kills > 1 ? `average parse ${p.parse} (highest ${p.best})` : `parse ${p.parse}`;
+  const embeds: Embed[] = [
+    {
+      title: `Performance: ${p.name} \u00b7 ${scope.label}`.slice(0, 256),
+      color: BRAND,
+      description: `${p.spec} \u00b7 ${parseText} \u00b7 ${p.deaths ? died(p) : `no deaths in ${p.kills} kill${p.kills === 1 ? '' : 's'}`}${p.itemLevel ? ` \u00b7 item level ${p.itemLevel}${raid.itemLevel ? ` (raid ${raid.itemLevel})` : ''}` : ''}. For officers only: please don\u2019t share this in channels.`,
+      fields: [
+        { name: `Doing well (parse ${HIGH}+, no deaths)`, value: clip(good.length ? good.join('\n') : 'No boss stood out yet.') },
+        { name: 'Could use a hand', value: clip(work.length ? `${work.join('\n')}\n> Try: ${[...tips].join('; ')}.` : tips.size ? `> Try: ${[...tips].join('; ')}.` : 'Nothing stands out: parses and deaths look fine.') },
+      ],
+    },
+  ];
+  if (watch.length) embeds.push({ title: 'Things to watch for', color: BRAND, description: clip(watch.map((w) => `\u2022 ${w}`).join('\n'), 4000) });
+  embeds.push({
+    title: 'Keeping track',
+    color: BRAND,
+    description: clip([
+      `\u2022 **Average parse over 4+ weeks**, not one night. Around 50 is typical; ${HIGH}+ is strong. \`/performance range:4 weeks character:${p.name}\` shows the longer view.`,
+      '\u2022 **Deaths**: dying no more than once every four kills is good.',
+      `\u2022 **Trend**: \`/check ${p.name}\` and their profile show their parse over the last 8 weeks.`,
+      '\u2022 **Against the guild**: on the site, each of their fights compares them with the guild\u2019s own kills in the same spec.',
+      `\u2022 Agree one clear goal with them (e.g. \u201cno more than one death a raid\u201d or \u201cActive time over 90%\u201d) and check it after two raids. Full details: ${site}`,
+    ].join('\n'), 4000),
+    footer: CAVEAT,
   });
   return { embeds };
 }

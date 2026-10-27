@@ -19,7 +19,7 @@ import {
   type Claim, approvedClaimsFor, claimOnCharacter, claimsFor, createClaim, createRaid, createReminder, decideClaim, endRaid, getClaim, lastSeen,
   latestOpenRaid, latestRaidStartedBy, raidByCode, recentRaids, removeClaim,
 } from './store.js';
-import { type PerfRange, RANGE_SCOPE, performance, performanceMessage, rowsFromDigests, summarize } from './performance.js';
+import { type PerfRange, RANGE_SCOPE, characterMessage, performance, performanceMessage, performanceRows, rowsFromDigests, summarize } from './performance.js';
 import { parseWhen } from './time.js';
 
 // ---------- Command definitions (sent to Discord by GET /api/discord?task=register) ----------
@@ -88,6 +88,7 @@ export const COMMANDS = [
         { name: 'Last raid', value: 'raid' }, { name: 'Last 4 weeks', value: '4w' }, { name: 'Last 8 weeks', value: '8w' },
       ] },
       { type: STRING, name: 'raid', description: 'Or one raid: pick any past raid (type to search), or paste a Warcraft Logs link', autocomplete: true },
+      { type: STRING, name: 'character', description: 'One character\u2019s breakdown (pick the raid first to list who was there)', autocomplete: true, max_length: 24 },
     ],
   },
   { name: 'help', description: 'What the bot can do and how to use each command', ...contexts },
@@ -185,7 +186,9 @@ export async function handle(i: Interaction): Promise<Outcome> {
     }
   }
   if (i.type === 4 && i.data?.name === 'raids') return raidChoices(i);
-  if (i.type === 4 && i.data?.name === 'performance') return pastRaidChoices(i);
+  if (i.type === 4 && i.data?.name === 'performance') {
+    return i.data.options?.find((o) => o.focused)?.name === 'character' ? characterChoices(i) : pastRaidChoices(i);
+  }
   if (i.type === 3) {
     const id = i.data?.custom_id ?? '';
     if (id.startsWith('raid:')) return raidButton(i, id);
@@ -460,10 +463,31 @@ async function performanceCommand(i: Interaction): Promise<Outcome> {
       return reply({ content: (e as Error).message });
     }
   }
+  const character = (opt(i.data?.options, 'character') as string | undefined)?.trim();
   const user = userOf(i);
   return deferred(i, async () => {
     let body: MessageBody;
-    if (parsed) {
+    if (character) {
+      // One character: the raid's kills (stored, or read now), or the range's
+      let rows = parsed && !parsed.fight ? await performanceRows({ code: parsed.code }) : [];
+      let label = RANGE_SCOPE[range].label;
+      let oneNight = RANGE_SCOPE[range].oneNight;
+      if (parsed) {
+        oneNight = true;
+        const fightId = Number(parsed.fight);
+        if (!rows.length || fightId > 0) {
+          const digest = await raidDigest(parsed.host, parsed.code);
+          const fights = fightId > 0 ? digest.fights.filter((f) => f.id === fightId) : digest.fights;
+          rows = rowsFromDigests(parsed.code, digest.meta.startTime, fights);
+          label = fightId > 0 && fights[0] ? `${fights[0].name} (${digest.meta.title})` : digest.meta.title;
+        } else {
+          label = (await rest(`guild_raids?report_code=eq.${encodeURIComponent(parsed.code)}&select=title`).catch(() => null))?.[0]?.title ?? parsed.code;
+        }
+      } else {
+        rows = await performanceRows(range);
+      }
+      body = characterMessage({ label, oneNight, minKills: 1 }, rows, character, env.site());
+    } else if (parsed) {
       // A pasted raid (or one fight of it): read from the stored fights, or Warcraft Logs
       const digest = await raidDigest(parsed.host, parsed.code);
       const fightId = Number(parsed.fight);
@@ -479,6 +503,26 @@ async function performanceCommand(i: Interaction): Promise<Outcome> {
     const ok = await sendDm(user.id, body);
     return ok ? { content: 'Sent to your DMs.' } : { content: 'Your DMs are closed, so here it is (only you can see this):', embeds: body.embeds };
   });
+}
+
+/** Choices for /performance character: who was in the chosen raid (or the range), searched by name. */
+async function characterChoices(i: Interaction): Promise<Outcome> {
+  const o = i.data?.options;
+  const typed = String(o?.find((x) => x.focused)?.value ?? '').trim().toLowerCase();
+  const raid = (opt(o, 'raid') as string | undefined)?.trim();
+  const value = opt(o, 'range');
+  let code: string | null = null;
+  try {
+    code = raid ? readRaidValue(raid).code : null;
+  } catch {
+    // Not a raid yet (still typing a link): fall back to the range
+  }
+  const rows = await performanceRows(code ? { code } : value === 'raid' || value === '8w' ? value : '4w').catch(() => []);
+  const names = [...new Map(rows.map((r) => [r.name.toLowerCase(), r])).values()]
+    .filter((r) => !typed || r.name.toLowerCase().includes(typed))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 25);
+  return { response: { type: 8, data: { choices: names.map((r) => ({ name: `${r.name} (${`${r.spec_name} ${r.class_name}`.replace(/([a-z])([A-Z])/g, '$1 $2').trim()})`.slice(0, 100), value: r.name })) } } };
 }
 
 /** Choices for /performance raid: every raid on Past raids, newest first, searched by title or date. */
@@ -732,7 +776,7 @@ export function helpMessage(): MessageBody {
             line('/raidend', 'end the raid you started and post its summary, with what went well and what to work on.'),
             line('/remind', 'schedule a raid reminder (optional place, consumables checklist, role ping and Discord event; raid assists too).'),
             line('/check <character>', 'look up any character (not just your own), sent to you by DM (loot council too).'),
-            line('/performance', 'who\u2019s doing well and who could use a hand, with tips and what to track (by DM; loot council too).'),
+            line('/performance', 'who\u2019s doing well and who could use a hand, with tips and what to track; pick a raid and a character for one person\u2019s breakdown (by DM; loot council too).'),
           ].join('\n'),
         },
         { name: 'More detail', value: `The full analysis for any fight, with charts and comparisons, is at ${env.site()}.` },
