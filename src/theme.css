@@ -270,6 +270,8 @@ button.secondary:hover:not(:disabled) { background: rgba(0, 124, 173, 0.18); }
 .boss-icon.big { width: 48px; height: 48px; border-radius: 12px; }
 .boss-rank-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; margin-top: 4px; font: 600 13px var(--font-mono); color: var(--ink-2); }
 .boss-rank-line > a { font-family: var(--font-sans); }
+.raid-title-link { color: inherit; }
+.raid-title-link:hover { color: var(--primary-light); text-decoration: none; }
 .boss-link { color: inherit; font-weight: 600; }
 .boss-link:hover { color: var(--primary-light); }
 .zone-ranks { display: inline-flex; align-items: baseline; margin-left: 10px; font: 600 13px var(--font-mono); }

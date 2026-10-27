@@ -327,7 +327,7 @@ function RaidCardView({ raid, archiveDays, canDelete, officer, onDeleted, onChan
       <div className="raid-card-head">
         <div>
           <div className="eyebrow">{longDate(when)} · {when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}{raid.loggerName ? ` · logged by ${raid.loggerName}` : ''}</div>
-          <h2>{raid.title ?? raid.code}</h2>
+          <h2><a href={siteLink(raid)} className="raid-title-link" title="Open the whole night on Guild Logs">{raid.title ?? raid.code}</a></h2>
           {c && <RaidRanks encounterIds={c.bosses.map((b) => b.encounterId)} />}
           <p className={`muted small raid-status ${raid.status}`}>{statusText(raid, archiveDays)}</p>
         </div>

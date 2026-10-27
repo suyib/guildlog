@@ -9,6 +9,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.36.7',
+    date: '2026-10-27',
+    changes: ['Past raids: clicking a raid\u2019s name opens its whole night on Guild Logs.'],
+  },
+  {
     version: '0.36.6',
     date: '2026-10-27',
     changes: [
