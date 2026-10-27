@@ -424,4 +424,73 @@ assert.equal(discordRank({ owner: true, officer: true }), 'guild_master');
 }
 delete process.env.SITE_ADMIN_IDS;
 
+// The guild page: progress per raid from Past raids, the roster, and Warcraft Logs ranks
+{
+  const { roster, wclGuild, zoneProgress } = await import('../server/guildPage');
+  process.env.SUPABASE_URL = 'https://db.example';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
+  process.env.WCL_CLIENT_ID = 'id';
+  process.env.WCL_CLIENT_SECRET = 'secret';
+  process.env.WCL_GUILD_ID = '773392';
+  const realFetch = globalThis.fetch;
+  const asked: string[] = [];
+  globalThis.fetch = (async (url: string, init: RequestInit = {}) => {
+    const u = String(url);
+    if (u.includes('fight_packs')) return new Response(JSON.stringify([{ report_code: 'K1', zone: { id: 1007, name: 'Karazhan' } }, { report_code: 'K2', zone: { id: 1007, name: 'Karazhan' } }]), { status: 200 });
+    if (u.includes('/oauth/token')) return new Response('{"access_token":"t","expires_in":3600}', { status: 200 });
+    const query = JSON.parse(String(init.body)).query as string;
+    asked.push(query);
+    if (query.includes('zoneRanking')) return new Response(JSON.stringify({ data: { guildData: { guild: { z1007: { progress: { worldRank: { number: 1234, color: 'rare' }, regionRank: { number: 321, color: 'rare' }, serverRank: { number: 4, color: 'legendary' } }, speed: null } } } } }), { status: 200 });
+    return new Response(JSON.stringify({ data: { guildData: { guild: { id: 773392, name: 'lol', faction: { name: 'Horde' }, server: { name: 'Spineshatter', region: { slug: 'eu' } } } } } }), { status: 200 });
+  }) as typeof fetch;
+  const raid = (code: string, start: string, kills: [string, number | null][]) => ({
+    code, host: 'fresh.warcraftlogs.com', title: code, startTime: start, endTime: start, loggerName: null, source: 'discord', status: 'saved', saved: 1, total: 1,
+    card: { bosses: kills.map(([name, secs], i) => ({ name, encounterId: i + 1, fightId: i + 10, kill: secs !== null, seconds: secs, wipes: 0 })), raidSeconds: 1, wipes: 0, deaths: 0, avgItemLevel: null,
+      raiders: [{ name: 'Suy', className: 'Hunter', specName: 'BeastMastery', role: 'dps', bosses: 2 }, ...(code === 'K2' ? [{ name: 'Luke', className: 'Warrior', specName: 'Protection', role: 'tank', bosses: 2 }] : [])], kills: 2, summarized: 2, feedback: { good: [], work: [] } },
+  });
+  const recent = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const raids: any[] = [raid('K2', recent(3), [['Attumen', 100], ['Moroes', null]]), raid('K1', recent(10), [['Attumen', 120], ['Moroes', 150]])];
+  const zones = await zoneProgress(raids);
+  assert.equal(zones.length, 1);
+  assert.deepEqual([zones[0].name, zones[0].killed, zones[0].total], ['Karazhan', 2, 2]);
+  const att = zones[0].bosses[0];
+  assert.deepEqual([att.kills, att.best?.seconds, att.best?.code, att.firstKill], [2, 100, 'K2', raids[1].startTime], 'fastest kill and first kill');
+  assert.deepEqual(roster(raids).map((p) => [p.name, p.raids, p.of]), [['Suy', 2, 2], ['Luke', 1, 2]]);
+  const g = await wclGuild([1007]);
+  assert.equal(g.guild?.url, 'https://fresh.warcraftlogs.com/guild/id/773392');
+  assert.equal(g.guild?.region, 'EU');
+  assert.deepEqual(g.ranks.get(1007)?.progress?.server, { number: 4, color: 'legendary' });
+  const n = asked.length;
+  await wclGuild([1007]);
+  assert.equal(asked.length, n, 'Warcraft Logs asked at most once an hour');
+  globalThis.fetch = realFetch;
+  for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'WCL_CLIENT_ID', 'WCL_CLIENT_SECRET', 'WCL_GUILD_ID']) delete process.env[k];
+}
+
+
+// ---------- /performance ----------
+{
+  const { summarize, performanceMessage } = await import('../server/discord/performance.js');
+  const perfDenied: any = await handle({ type: 2, token: 't', guild_id: 'g', channel_id: 'c', member: { user: { id: '2', username: 'x' }, roles: [], permissions: '0' }, data: { name: 'performance', options: [] } });
+  assert.match(perfDenied.response.data.content, /Only officers/, '/performance is officers only');
+  const row = (name: string, boss: string, parse: number, extra: any = {}) => ({ report_code: 'R1', start_time: `2026-10-0${boss.length % 9}T20:00:00Z`, encounter_name: boss, name, class_name: 'Mage', spec_name: 'Fire', role: 'dps', healer: false, parse, hps_parse: null, deaths: 0, item_level: 120, ...extra });
+  const rows = [
+    row('Star', 'Gruul', 95), row('Star', 'Maulgar', 88),
+    row('Slow', 'Gruul', 12, { deaths: 1, item_level: 100 }), row('Slow', 'Maulgar', 20, { deaths: 1, item_level: 100 }),
+    row('Tank', 'Gruul', 0, { role: 'tank', class_name: 'Warrior', spec_name: 'Protection' }), row('Tank', 'Maulgar', 0, { role: 'tank', class_name: 'Warrior', spec_name: 'Protection' }),
+    row('Once', 'Gruul', 50),
+  ];
+  const data = summarize(rows as any);
+  assert.equal(data.skipped, 1, 'one-kill players are left out');
+  assert.equal(data.players.find((p) => p.name === 'Tank')!.parse, null, 'tanks aren’t judged on parses');
+  const msg = performanceMessage('4w', data, 'https://guildlog.uk');
+  const text = JSON.stringify(msg);
+  assert.match(msg.embeds![0].fields![0].value, /Star/, 'high performer listed');
+  assert.match(msg.embeds![0].fields![1].value, /Slow[\s\S]*parse 16[\s\S]*deaths per kill[\s\S]*item level/, 'low performer with reasons');
+  assert.doesNotMatch(msg.embeds![0].fields![1].value, /Tank/, 'tank not listed for a low parse');
+  assert.match(text, /Just an overview/, 'has the caveat');
+  for (const e of msg.embeds!) for (const f of e.fields ?? []) assert.ok(f.value.length <= 1024, 'field within Discord limits');
+  assert.ok(text.length < 6000, 'message within Discord limits');
+}
+
 console.log('All bot checks passed.');

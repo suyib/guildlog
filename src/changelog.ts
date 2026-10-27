@@ -9,6 +9,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.34.0',
+    date: '2026-10-27',
+    changes: [
+      'New `/performance` command for officers, sent by DM: who\u2019s doing well and who could use a hand over the last raid, 4 weeks or 8 weeks, with what to look at for each person, things to watch for, and how to keep track. Tanks are judged on deaths and item level, not parses.',
+    ],
+  },
+  {
     version: '0.33.6',
     date: '2026-10-26',
     changes: ['The Buy me a coffee button stands out in the sidebar, in the site\u2019s light blue.'],

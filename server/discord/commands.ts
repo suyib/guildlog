@@ -19,6 +19,7 @@ import {
   type Claim, approvedClaimsFor, claimOnCharacter, claimsFor, createClaim, createRaid, createReminder, decideClaim, endRaid, getClaim, lastSeen,
   latestOpenRaid, latestRaidStartedBy, raidByCode, recentRaids, removeClaim,
 } from './store.js';
+import { type PerfRange, performance, performanceMessage } from './performance.js';
 import { parseWhen } from './time.js';
 
 // ---------- Command definitions (sent to Discord by GET /api/discord?task=register) ----------
@@ -79,6 +80,12 @@ export const COMMANDS = [
       { type: SUB, name: 'lookup', description: 'Search Wowhead for an item, spell or anything else',
         options: [{ type: STRING, name: 'search', description: 'What to look up', required: true, max_length: 100 }] },
     ],
+  },
+  {
+    name: 'performance', description: 'Officers: who\u2019s doing well and who could use a hand (sent by DM)', ...contexts,
+    options: [{ type: STRING, name: 'range', description: 'Which raids (default: last 4 weeks)', choices: [
+      { name: 'Last raid', value: 'raid' }, { name: 'Last 4 weeks', value: '4w' }, { name: 'Last 8 weeks', value: '8w' },
+    ] }],
   },
   { name: 'help', description: 'What the bot can do and how to use each command', ...contexts },
 ];
@@ -163,6 +170,7 @@ export async function handle(i: Interaction): Promise<Outcome> {
       case 'claim': return claim(i);
       case 'unclaim': return unclaim(i);
       case 'info': return info(i);
+      case 'performance': return performanceCommand(i);
       case 'help': return reply(helpMessage());
     }
   }
@@ -425,6 +433,21 @@ async function raidButton(i: Interaction, id: string): Promise<Outcome> {
   });
 }
 
+// ---------- /performance ----------
+
+/** Officers: high and low performers with advice, always by DM (it names people). */
+async function performanceCommand(i: Interaction): Promise<Outcome> {
+  if (!(await isOfficer(i))) return notOfficer();
+  const value = opt(i.data?.options, 'range');
+  const range: PerfRange = value === 'raid' || value === '8w' ? value : '4w';
+  const user = userOf(i);
+  return deferred(i, async () => {
+    const body = performanceMessage(range, await performance(range), env.site());
+    const ok = await sendDm(user.id, body);
+    return ok ? { content: 'Sent to your DMs.' } : { content: 'Your DMs are closed, so here it is (only you can see this):', embeds: body.embeds };
+  });
+}
+
 // ---------- /check ----------
 
 async function check(i: Interaction): Promise<Outcome> {
@@ -651,6 +674,7 @@ export function helpMessage(): MessageBody {
             line('/raidstart', 'post the live log for tonight\u2019s raid.'),
             line('/raidend', 'end the raid you started and post its summary, with what went well and what to work on.'),
             line('/remind', 'schedule a raid reminder (optional place, consumables checklist, role ping and Discord event).'),
+            line('/performance', 'who\u2019s doing well and who could use a hand, with tips and what to track (by DM).'),
           ].join('\n'),
         },
         { name: 'More detail', value: `The full analysis for any fight, with charts and comparisons, is at ${env.site()}.` },
