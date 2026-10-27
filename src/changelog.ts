@@ -9,6 +9,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.36.3',
+    date: '2026-10-27',
+    changes: ['Rankings lists every uploaded raid in the chosen raid zone under the ranks (date, bosses killed, raid time, raiders, wipes, deaths, item level), each opening its breakdown. With a boss picked, it lists the raids that boss was fought in, with the kill time, each opening that fight.'],
+  },
+  {
     version: '0.36.2',
     date: '2026-10-27',
     changes: ['`/performance character:` has a Room to improve section that finds gains even when someone is doing well: their weakest boss, downtime, unused cooldowns, missed potions, damage over time falling off, avoidable damage, overhealing and item level. Nothing is suggested at a 99+ parse.'],

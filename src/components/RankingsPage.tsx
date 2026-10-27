@@ -1,8 +1,8 @@
 // Rankings: the guild's ranks in each raid (progress and speed, world, region and realm) and each
 // boss's guild rankings from Warcraft Logs, like Raider.IO's: by first kill or fastest kill.
 import { useEffect, useState } from 'react';
-import type { BossRanks, HomeData, WclRank, ZoneProgress } from '../../server/types';
-import { loadBossRanks } from '../api';
+import type { BossRanks, HomeData, SavedRaid, WclRank, ZoneProgress } from '../../server/types';
+import { loadBossRanks, loadRaids } from '../api';
 import { mmss, n0 } from '../format';
 import { RANK_CSS, ZonePicker, mainZone, useHome } from './Home';
 import { BossIcon } from './icons';
@@ -23,6 +23,11 @@ export default function RankingsPage() {
   const [zoneId, setZoneId] = useState<number | null>(link.zone);
   /** null: the whole raid. */
   const [boss, setBoss] = useState<number | null>(link.boss);
+  // Past raids, to list the ones in the chosen raid zone under the ranks
+  const [raids, setRaids] = useState<SavedRaid[] | null>(null);
+  useEffect(() => {
+    loadRaids().then((r) => setRaids(r.raids)).catch(() => setRaids([]));
+  }, []);
 
   if (d === undefined) return <section className="panel home-loading" aria-busy="true"><span className="spinner" aria-hidden="true" /><span className="muted">Loading rankings&hellip;</span></section>;
   if (!d || !d.zones.length) {
@@ -72,7 +77,77 @@ export default function RankingsPage() {
       ) : (
         <RankCard key={zone.id} zone={zone} url={d.wcl?.url ?? null} />
       )}
+
+      <ZoneRaids zone={zone} boss={picked ? { id: picked.encounterId, name: picked.name } : null} raids={raids} />
     </>
+  );
+}
+
+const longDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+const hm = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : `${Math.round(s / 60)}m`);
+const logLink = (r: SavedRaid, fightId?: number | null) => `/?log=${encodeURIComponent(`https://${r.host}/reports/${r.code}${fightId ? `?fight=${fightId}` : ''}`)}`;
+
+/**
+ * Every uploaded raid in this zone, newest first, each opening its breakdown. With a boss picked:
+ * the raids it was fought in, with the kill time, each opening that fight.
+ */
+function ZoneRaids({ zone, boss, raids }: { zone: ZoneProgress; boss: { id: number; name: string } | null; raids: SavedRaid[] | null }) {
+  const ids = new Set(zone.bosses.map((b) => b.encounterId));
+  const list = (raids ?? [])
+    .filter((r) => r.startTime && r.card?.bosses.some((b) => (boss ? b.encounterId === boss.id : ids.has(b.encounterId))))
+    .sort((a, b) => b.startTime!.localeCompare(a.startTime!));
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2 className="panel-title">{boss ? `${boss.name} in past raids` : `${zone.name} raids`}{raids ? ` (${list.length})` : ''}</h2>
+        <a href="/#/raids" className="small">Past raids</a>
+      </div>
+      {!raids ? (
+        <p className="muted small"><span className="spinner small" aria-hidden="true" /> Loading raids&hellip;</p>
+      ) : !list.length ? (
+        <p className="muted small">No uploaded raids {boss ? 'with this boss' : 'in this zone'} yet.</p>
+      ) : (
+        <ul className="home-raids">
+          {list.map((r) => {
+            const c = r.card!;
+            if (boss) {
+              const b = c.bosses.find((x) => x.encounterId === boss.id)!;
+              return (
+                <li key={r.code}>
+                  <span className={`raid-chip-count ${b.kill ? 'full' : 'none'}`}>{b.kill ? 'Kill' : 'Wipe'}</span>
+                  <span className="home-raid-main">
+                    <a href={logLink(r, b.fightId)}><strong>{r.title ?? r.code}</strong></a>
+                    <span className="muted small">
+                      {longDate(r.startTime!)}{b.kill && b.seconds ? ` \u00b7 killed in ${mmss(b.seconds)}` : ''}{b.wipes ? ` \u00b7 ${b.wipes} wipe${b.wipes === 1 ? '' : 's'}` : ''}
+                    </span>
+                  </span>
+                </li>
+              );
+            }
+            const full = c.kills > 0 && c.bosses.every((b) => b.kill);
+            return (
+              <li key={r.code}>
+                <span className={`raid-chip-count ${full ? 'full' : c.kills ? 'partial' : 'none'}`}>{c.kills}/{c.bosses.length}</span>
+                <span className="home-raid-main">
+                  <a href={logLink(r)}><strong>{r.title ?? r.code}</strong></a>
+                  <span className="muted small">
+                    {[
+                      longDate(r.startTime!),
+                      c.raidSeconds ? hm(c.raidSeconds) : null,
+                      `${c.raiders.length} raiders`,
+                      `${c.wipes} wipe${c.wipes === 1 ? '' : 's'}`,
+                      `${c.deaths} death${c.deaths === 1 ? '' : 's'} on kills`,
+                      c.avgItemLevel ? `item level ${c.avgItemLevel}` : null,
+                      r.loggerName ? `logged by ${r.loggerName}` : null,
+                    ].filter(Boolean).join(' \u00b7 ')}
+                  </span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
