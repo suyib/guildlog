@@ -21,6 +21,8 @@ const PATHS: Record<GlyphName, string> = {
   check: 'M5 12.5l4.5 4.5L19 7',
   alert: 'M12 3l9.5 17h-19zM12 10v4M12 17.5h.01',
   calendar: 'M4 6h16v14H4zM4 10h16M8 3v5M16 3v5M8 14h2M14 14h2M8 17h2',
+  menu: 'M4 7h16M4 12h16M4 17h16',
+  close: 'M6 6l12 12M18 6L6 18',
   coffee: 'M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM17 10h1.5a2.5 2.5 0 0 1 0 5H17M8 3v3M12 3v3',
 };
 

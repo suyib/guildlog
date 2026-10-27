@@ -9,6 +9,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.36.4',
+    date: '2026-10-27',
+    changes: [
+      'Phones: the menu folds into a menu button at the top, the page no longer scrolls sideways, the Rankings dropdowns sit side by side, and the Whole night boss list keeps each boss on one row with its Breakdown link.',
+    ],
+  },
+  {
     version: '0.36.3',
     date: '2026-10-27',
     changes: ['Rankings lists every uploaded raid in the chosen raid zone under the ranks (date, bosses killed, raid time, raiders, wipes, deaths, item level), each opening its breakdown. With a boss picked, it lists the raids that boss was fought in, with the kill time, each opening that fight.'],

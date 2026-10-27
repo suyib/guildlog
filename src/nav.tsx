@@ -15,7 +15,7 @@ export const SECTIONS: { id: SectionId; label: string; glyph: GlyphName }[] = [
 
 export type GlyphName =
   | 'compass' | 'clock' | 'grid' | 'cycle' | 'bars' | 'shield' | 'pulse' | 'users'
-  | 'bolt' | 'target' | 'timer' | 'link' | 'copy' | 'up' | 'down' | 'search' | 'check' | 'alert' | 'calendar' | 'coffee';
+  | 'bolt' | 'target' | 'timer' | 'link' | 'copy' | 'up' | 'down' | 'search' | 'check' | 'alert' | 'calendar' | 'coffee' | 'menu' | 'close';
 
 /** Damage done or Healing done: which numbers the analysis shows. */
 export type View = 'damage' | 'healing';

@@ -11,18 +11,32 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'ranking
   useEffect(() => {
     loadMe().then(setMe);
   }, []);
+  // Phones: the pages, account and links fold into a menu button
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const close = () => setOpen(false);
+    window.addEventListener('hashchange', close);
+    window.addEventListener('popstate', close);
+    return () => {
+      window.removeEventListener('hashchange', close);
+      window.removeEventListener('popstate', close);
+    };
+  }, []);
   const sections = sectionsFor(page === 'history' || page === 'changelog' || page === 'raids' || page === 'rankings' || page === 'admin' || page === 'me' ? null : result, view);
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${open ? ' menu-open' : ''}`}>
       <a href="/" className="brand">
         <img className="logo" src="/logo.png" width={36} height={36} alt="" />
         <span className="brand-name">Guild <span>Logs</span></span>
       </a>
+      <button type="button" className="ghost icon-only menu-toggle" aria-expanded={open} aria-controls="side-menu" aria-label={open ? 'Close menu' : 'Menu'} onClick={() => setOpen((o) => !o)}>
+        <Glyph name={open ? 'close' : 'menu'} size={20} />
+      </button>
 
       {/* Guests (a shared link, not signed in) only see the analysis they were sent */}
       {me?.signedIn && (
-        <nav className="side-nav" aria-label="Pages">
+        <nav className="side-nav side-menu" id="side-menu" aria-label="Pages" onClick={() => setOpen(false)}>
           <a href="/" className={page === 'analyze' || page === 'saved' ? 'on' : ''}><Glyph name="compass" />Analyze</a>
           <a href="/#/raids" className={page === 'raids' ? 'on' : ''}><Glyph name="calendar" />Past raids</a>
           <a href="/#/rankings" className={page === 'rankings' ? 'on' : ''}><Glyph name="bars" />Rankings</a>
@@ -75,7 +89,7 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'ranking
       )}
 
       {me?.signedIn && (
-        <div className={`side-user${page === 'me' ? ' on' : ''}`}>
+        <div className={`side-user side-menu${page === 'me' ? ' on' : ''}`}>
           {/* Discord sign-ins open their profile; the guild password has no profile */}
           {me.kind === 'discord' ? (
             <a href="/#/me" className="side-user-link" title="Your profile and characters" aria-label="Your profile and characters">
@@ -96,12 +110,12 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'ranking
       )}
 
       {__SUPPORT_URL__ && (
-        <a href={__SUPPORT_URL__} target="_blank" rel="noreferrer" className="support-link">
+        <a href={__SUPPORT_URL__} target="_blank" rel="noreferrer" className="support-link side-menu">
           <Glyph name="coffee" size={16} />Buy me a coffee
         </a>
       )}
 
-      <div className="side-version">
+      <div className="side-version side-menu">
         v{__APP_VERSION__} <a href="/#/changelog" className="changelog-link">Changelog</a>
         <a href="/terms" className="changelog-link">Terms</a>
         <a href="/privacy" className="changelog-link">Privacy</a>

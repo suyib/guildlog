@@ -740,6 +740,7 @@ label.check input { width: auto; height: auto; }
 /* ---------- Past raids ---------- */
 .grid-raids { display: grid; gap: var(--space); }
 button.ghost.icon-only { width: 34px; padding: 0; font-size: 18px; }
+.menu-toggle { display: none; }
 
 .cal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
@@ -844,8 +845,11 @@ table.attendance td { vertical-align: middle; white-space: nowrap; }
   .cal-grid { display: none; }
   .cal-list { display: grid; }
   .cal-list .raid-chip { flex: 1; }
-  .boss-list li { grid-template-columns: 70px minmax(0, 1fr) auto; }
-  .boss-list .boss-open { grid-column: 2 / -1; }
+  .boss-list li { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: 'tag name open' 'tag meta open'; row-gap: 2px; }
+  .boss-list li > .kill, .boss-list li > .wipe { grid-area: tag; }
+  .boss-list li > strong { grid-area: name; }
+  .boss-list li > .muted { grid-area: meta; font-size: 12px; }
+  .boss-list li > :last-child { grid-area: open; }
   .att-nights-col, .att-bar-col { display: none; }
 }
 
@@ -867,25 +871,27 @@ table.attendance td { vertical-align: middle; white-space: nowrap; }
   .stat-list > .stat-item .stat-tip { left: 0; right: auto; }
   .stat-list > .stat-item:nth-child(3n) .stat-tip { left: auto; right: 0; }
 }
-/* Phones and small tablets: the sidebar becomes a top bar with a scrolling row of links */
+/* Phones and small tablets: the sidebar becomes a top bar; pages, account and links fold into a menu */
 @media (max-width: 820px) {
   .app { grid-template-columns: minmax(0, 1fr); background: none; }
   .sidebar, .side-nav { min-width: 0; }
   .sidebar {
     position: sticky; top: 0; z-index: 10; height: auto; overflow: visible;
     flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 12px;
-    padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--line);
+    padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--line);
     background: rgba(28, 25, 22, 0.96); backdrop-filter: blur(8px);
   }
   .brand { font-size: 18px; padding: 0; margin-right: auto; }
   .brand .logo { width: 30px; height: 30px; }
-  .side-nav { flex-direction: row; gap: 4px; }
-  .side-nav[aria-label="This analysis"] { order: 3; width: 100%; overflow-x: auto; scrollbar-width: none; }
-  .side-nav a, .side-nav button { width: auto; height: 34px; white-space: nowrap; font-size: 13px; }
+  .menu-toggle { display: inline-flex; justify-content: center; }
+  .side-menu { display: none; }
+  .sidebar.menu-open .side-menu { display: flex; width: 100%; margin: 0; order: 2; }
+  .sidebar.menu-open .side-nav.side-menu { flex-direction: column; gap: 2px; padding-top: 4px; border-top: 1px solid var(--line); }
+  .sidebar.menu-open .side-user { padding: 8px 10px; background: var(--raised); }
+  .sidebar.menu-open .side-version { padding: 0 4px 4px; }
+  .side-nav[aria-label="This analysis"] { order: 3; width: 100%; flex-direction: row; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+  .side-nav[aria-label="This analysis"] button { width: auto; height: 34px; white-space: nowrap; font-size: 13px; }
   .side-label, .side-card { display: none; }
-  .side-version { order: 2; margin: 0; padding: 0; }
-  .side-user { order: 2; margin: 0; padding: 4px 8px; background: none; }
-  .side-user-name { display: none; }
   .content { padding: 16px 16px 40px; }
 }
 @media (max-width: 640px) {
@@ -894,6 +900,8 @@ table.attendance td { vertical-align: middle; white-space: nowrap; }
   .other-pickers { grid-template-columns: 1fr; }
   .pickers button { width: 100%; }
   .row { flex-direction: column; }
+  .row.wrap-center { flex-direction: row; }
+  .row.wrap-center > select { flex: 1 1 140px; min-width: 0; width: auto; }
   .row .input-icon { flex: none; }
   .past-raid-picker { flex: none; }
   .row button { width: 100%; }
