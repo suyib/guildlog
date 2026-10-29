@@ -59,7 +59,7 @@ async function patchRaid(code: string, fields: Partial<RaidRow>) {
 
 /** Add a raid to Past raids (or update who logged it). Existing raids keep what's already saved. */
 export async function registerRaid(r: { host: string; code: string; source: SavedRaid['source']; loggerName?: string | null; addedBy?: string | null }): Promise<SavedRaid> {
-  if (!dbEnabled()) throw new Error('Saving raids needs the database (Supabase) to be set up.');
+  if (!dbEnabled()) throw new Error('Saving raids needs the database to be set up.');
   if (!GAME.hosts.includes(r.host)) throw new Error(`Only ${GAME.name} logs can be saved.`);
   const existing: RaidRow | undefined = (await rest(`guild_raids?report_code=eq.${q(r.code)}`))?.[0];
   if (existing) {
@@ -249,7 +249,7 @@ export async function refreshCard(code: string, meta: ReportMeta, digests: Fight
  * from Warcraft Logs as if it were new. Returns the title, for the activity log.
  */
 export async function deleteRaid(code: string): Promise<string | null> {
-  if (!dbEnabled()) throw new Error('Past raids need the database (Supabase) to be set up.');
+  if (!dbEnabled()) throw new Error('Past raids need the database to be set up.');
   const row: { title: string | null } | undefined = (await rest(`guild_raids?report_code=eq.${q(code)}&select=title`))?.[0];
   if (!row) throw new Error('That raid isn\u2019t on Past raids.');
   const gone = { method: 'DELETE', headers: { Prefer: 'return=minimal' } };
@@ -271,7 +271,7 @@ export async function forgetFights(code: string) {
 
 /** What's stored for a raid and why something might be missing (officers, from the raid's card). */
 export async function checkRaid(code: string, host?: string): Promise<RaidCheck> {
-  if (!dbEnabled()) throw new Error('Past raids need the database (Supabase) to be set up.');
+  if (!dbEnabled()) throw new Error('Past raids need the database to be set up.');
   const raid: RaidRow | undefined = (await rest(`guild_raids?report_code=eq.${q(code)}`))?.[0];
   const metaRow: { stage: string; digest: ReportMeta } | undefined = (await rest(`fight_packs?report_code=eq.${q(code)}&fight_id=eq.0&select=stage,digest`))?.[0];
   const stages = new Map((await digestRows(code).catch(() => [])).map((r) => [r.fightId, r.current || r.stage === 'legacy' ? r.stage : 'outdated']));
@@ -298,7 +298,7 @@ export async function checkRaid(code: string, host?: string): Promise<RaidCheck>
   if (raid && !raid.start_time) advice.push('Not on the calendar yet: its report hasn\u2019t been read. Read now fixes that, and if it keeps happening, check the 5-minute job (?task=reminders) is still running.');
   if (killRows.some((k) => k.stage === 'tables' || k.stage === 'outdated')) advice.push('Some kills only have their summary tables so far. Read now tries the full read again.');
   if (killRows.some((k) => k.stage === 'full' && !k.tanksWithSwings)) advice.push('No boss melee swings were found on a fully read kill, so tank dodges and parries can\u2019t be shown for it.');
-  if (benchmarkRows === null) advice.push('The kill_stats table is missing: run supabase/migrate-0.23.sql in Supabase.');
+  if (benchmarkRows === null) advice.push('The kill_stats table is missing: run supabase/migrate-0.23.sql on the database.');
   else if (raid && !benchmarkRows && kills.length) advice.push('Not in the guild benchmarks yet: they\u2019re added when the raid is read (Read now).');
   return {
     code,

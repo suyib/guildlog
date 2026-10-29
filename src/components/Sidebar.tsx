@@ -75,7 +75,7 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'ranking
               <ShareButton path={`/a/${result.id}`} />
             </>
           ) : (
-            <p>This analysis wasn&rsquo;t saved, so there&rsquo;s no link yet. Check the Supabase settings in Vercel.</p>
+            <p>This analysis wasn&rsquo;t saved, so there&rsquo;s no link yet. Check the database settings in Vercel.</p>
           )}
         </div>
       )}

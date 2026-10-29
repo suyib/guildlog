@@ -1,21 +1,23 @@
 {
   "name": "guild-logs",
   "private": true,
-  "version": "0.36.7",
+  "version": "0.37.0",
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
     "dev:ui": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "tsx scripts/test-analysis.ts && tsx scripts/test-bot.ts && tsx scripts/test-pack.ts && tsx scripts/test-ranks.ts"
+    "test": "tsx scripts/test-analysis.ts && tsx scripts/test-bot.ts && tsx scripts/test-pack.ts && tsx scripts/test-ranks.ts && tsx scripts/test-db.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
     "@vercel/functions": "3.9.11",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.3.7",
     "@types/node": "22.10.2",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",

@@ -7,7 +7,7 @@ Paste a Warcraft Logs link, pick a boss and a player, and get a plain-English su
 
 The site is set up for one game version at a time (Burning Crusade logs from fresh.warcraftlogs.com for now; see "Game content" below).
 
-Every analysis is saved to Supabase, so it stays available after Warcraft Logs archives the report. The whole site sits behind one shared guild password.
+Every analysis is saved to the database (Supabase or any Postgres, such as Neon), so it stays available after Warcraft Logs archives the report. The whole site sits behind one shared guild password.
 
 ## Stack
 
@@ -15,17 +15,19 @@ Every analysis is saved to Supabase, so it stays available after Warcraft Logs a
 - Vercel Functions in `api/` call the Warcraft Logs v2 API (the client secret never reaches the browser). An analysis runs as several short requests (`/api/fight`, `/api/snapshot` per player, `/api/dashboard`, `/api/finish`) so long fights don't hit the function time limit.
 - Ability, buff and class icons load from Wowhead's icon CDN (wow.zamimg.com) using the icon names Warcraft Logs provides
 - Vercel Routing Middleware (`middleware.ts`) gates every page and API route behind the password
-- Supabase Postgres stores analyses (accessed only server-side with the service role key)
+- Postgres stores everything, accessed only server-side: Supabase (`SUPABASE_URL` + service role key, over its API) or any Postgres such as Neon (`DATABASE_URL`). The code is written once against Supabase's API style; `server/pgrest.ts` turns those requests into SQL for plain Postgres.
 
 ## Setup
 
 1. **Warcraft Logs API client**: create one at https://www.warcraftlogs.com/api/clients (any name; redirect URL: https://guildlog.uk). Copy the client ID and secret.
-2. **Supabase**: create a project, open the SQL editor and run `supabase/schema.sql`. Copy the project URL and the service role key (Settings → API).
+2. **Database**, either:
+   - **Supabase**: create a project, open the SQL editor and run `supabase/schema.sql`. Copy the project URL and the service role key (Settings → API) into `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+   - **Neon** (or any Postgres): create a free project (Vercel → Storage → Neon adds `DATABASE_URL` for you), then run `supabase/schema.sql` in Neon's SQL Editor. With `DATABASE_URL` set, Supabase isn't used. See `docs/new-guild.md` for keeping within Neon's free compute hours.
 3. **Vercel**: import this repo, then add these environment variables (see `.env.example`):
    - `APP_PASSWORD`: the guild password (optional once Discord sign-in is set up; remove it to allow Discord sign-in only)
    - `SESSION_SECRET`: a long random string (e.g. `openssl rand -hex 32`)
    - `WCL_CLIENT_ID`, `WCL_CLIENT_SECRET`
-   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, or `DATABASE_URL`
 4. **Optional, character portraits**: create a client at https://develop.battle.net/access/clients and add `BLIZZARD_CLIENT_ID` and `BLIZZARD_CLIENT_SECRET` in Vercel. Without them the class icon is shown instead. If portraits don't appear, set `BLIZZARD_PROFILE_NAMESPACES` to the namespace your realms use (e.g. `profile-classicann`).
 5. **Domain**: the live site is https://guildlog.uk. In Vercel → Project → Settings → Domains it's added with `www.guildlog.uk` and `guildlog-pi.vercel.app` redirecting to it. The app builds share links from whatever domain it's opened on, so no code changes are needed when the domain changes.
 
@@ -53,8 +55,8 @@ Sessions last 7 days (30 with the password).
 
 Every Discord sign-in records which server it's for, and a session only opens the site of that server, so the sign-in side is ready for more than one guild. Two ways to grow from here:
 
-- **A copy per guild** (no extra cost, data fully separate): each guild deploys this repo with its own Vercel, Supabase, Warcraft Logs client and Discord app. See the settings above.
-- **One hosted site for many guilds**: add a `guilds` table (server ID, name, officer role, allowed Warcraft Logs sites), add a `guild_id` column to the raid, claim and saved-data tables, and pick the guild from the signed-in session instead of `DISCORD_GUILD_ID`. Selling access needs Vercel Pro (the free plan is for non-commercial use) and likely a paid database.
+- **A copy per guild** (no extra cost, data fully separate): its own Vercel project, Neon database, Warcraft Logs client and Discord app, from this same repo. Step by step: `docs/new-guild.md`.
+- **One hosted site for many guilds**, which guilds add themselves like a raid planner bot. The roadmap is at the end of `docs/new-guild.md`.
 
 ## Local development
 

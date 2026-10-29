@@ -1,5 +1,25 @@
-// Minimal Supabase (PostgREST) access using the service role key. Server-side only.
+// The database, server-side only. Either Supabase (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY, over its
+// PostgREST API) or any Postgres (DATABASE_URL, e.g. Neon), where the same PostgREST-style requests
+// are turned into SQL by pgrest.ts. DATABASE_URL wins when both are set.
+import { neon } from '@neondatabase/serverless';
+import { type Exec, pgRest } from './pgrest.js';
 import type { AnalysisResult, HistoryRow } from './types.js';
+
+const pgUrl = () => process.env.DATABASE_URL?.trim() || null;
+let pgExec: { url: string; exec: Exec } | null = null;
+/** One Postgres query over Neon's HTTP driver (no connection to keep open between requests). */
+function postgres(): Exec {
+  const url = pgUrl()!;
+  if (pgExec?.url !== url) {
+    const sql = neon(url, { fullResults: true });
+    pgExec = { url, exec: (text, params) => sql.query(text, params) as ReturnType<Exec> };
+  }
+  return pgExec.exec;
+}
+/** Tests: run Postgres queries somewhere else (an in-memory database). */
+export const usePostgresForTests = (exec: Exec) => {
+  pgExec = { url: pgUrl()!, exec };
+};
 
 function cfg() {
   const url = process.env.SUPABASE_URL?.trim();
@@ -32,6 +52,14 @@ export class DbTimeout extends Error {
 }
 
 async function restOnce(path: string, init: RequestInit): Promise<any> {
+  if (pgUrl()) {
+    try {
+      return await pgRest(postgres(), path, init);
+    } catch (e) {
+      if (isTimeout(e)) throw new DbTimeout();
+      throw new Error(`Database: ${(e as Error).message.replace(/^Database: /, '').slice(0, 300)}`);
+    }
+  }
   const c = cfg();
   if (!c) throw new Error('Supabase is not configured');
   let res: Response;
@@ -59,7 +87,7 @@ async function restOnce(path: string, init: RequestInit): Promise<any> {
   return text ? JSON.parse(text) : null;
 }
 
-export const dbEnabled = () => cfg() !== null;
+export const dbEnabled = () => !!pgUrl() || cfg() !== null;
 
 export async function saveAnalysis(result: AnalysisResult): Promise<{ id: string; created_at: string } | null> {
   if (!dbEnabled()) return null;

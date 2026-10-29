@@ -1,4 +1,4 @@
-// Supabase tables used by the Discord bot (see supabase/schema.sql).
+// Database tables used by the Discord bot (see supabase/schema.sql).
 import { rest } from '../db.js';
 
 const q = encodeURIComponent;

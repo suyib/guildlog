@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.37.0',
+    date: '2026-10-29',
+    changes: [
+      'Runs on Neon (or any Postgres) as well as Supabase: set `DATABASE_URL` instead of the Supabase settings. Nothing changes for sites already on Supabase.',
+      'A step-by-step guide to running a copy for another guild, and a roadmap to one site that any guild can add on its own (`docs/new-guild.md`).',
+    ],
+  },
+  {
     version: '0.36.7',
     date: '2026-10-27',
     changes: ['Past raids: clicking a raid\u2019s name opens its whole night on Guild Logs.'],

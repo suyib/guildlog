@@ -67,7 +67,7 @@ function Terms() {
 
       <h2>Third-party services</h2>
       <p>
-        The service relies on Warcraft Logs, Blizzard, Discord, Vercel and Supabase, each under their own terms. Guild Logs isn&rsquo;t affiliated with
+        The service relies on Warcraft Logs, Blizzard, Discord, Vercel and the database host (Supabase or Neon), each under their own terms. Guild Logs isn&rsquo;t affiliated with
         or endorsed by Blizzard Entertainment, Warcraft Logs or Discord. World of Warcraft is a trademark of Blizzard Entertainment.
       </p>
 
@@ -140,7 +140,7 @@ function Privacy() {
       <ul>
         <li>Anyone with the guild password can see saved analyses. Share links also need the password.</li>
         <li>
-          Services that run Guild Logs process data for us: Vercel (hosting; keeps short-term request logs including IP addresses), Supabase (database),
+          Services that run Guild Logs process data for us: Vercel (hosting; keeps short-term request logs including IP addresses), Supabase or Neon (database),
           Warcraft Logs (combat data), Blizzard (character portraits) and Discord (the bot and direct messages).
         </li>
         <li>
