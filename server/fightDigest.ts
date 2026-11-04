@@ -173,8 +173,8 @@ export function digestFromPack(host: string, pack: FightPack): FightDigest {
       abilities: withPets(e).sort((a, b) => b.total - a.total).slice(0, 10),
       casts: castList.slice(0, 12),
       cooldowns: castList
-        .filter((c) => cooldownFor(c.name, host) !== undefined)
-        .map((c) => ({ name: c.name, uses: c.count, possible: possibleUses(seconds, cooldownFor(c.name, host)!) })),
+        .filter((c) => cooldownFor(c.name) !== undefined)
+        .map((c) => ({ name: c.name, uses: c.count, possible: possibleUses(seconds, cooldownFor(c.name)!) })),
       deaths: recaps.get(e.id) ?? deathEntries
         .filter((x) => x.name === e.name)
         .map((x) => ({ seconds: Math.round((num(x.deathTime ?? x.timestamp) - fight.startTime) / 1000), by: x.killingBlow?.name ?? x.ability?.name ?? 'Unknown' })),

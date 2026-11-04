@@ -17,7 +17,7 @@ globalThis.fetch = (async (input: string | URL, init: RequestInit = {}) => {
 }) as typeof fetch;
 
 const { bossRanks } = await import('../server/bossRanks.js');
-const r = await bossRanks('fresh.warcraftlogs.com', 652, 'speed', 'realm');
+const r = await bossRanks('forever.warcraftlogs.com', 652, 'speed', 'realm');
 assert.equal(r.top.length, 20, 'shows the top 20');
 assert.equal(r.top[0].rank, 1);
 assert.deepEqual(r.mine && r.mine.rank, 112, 'finds the guild on page 2');
@@ -26,10 +26,10 @@ const q = queries.filter((x) => x.query.includes('fightRankings'));
 assert.ok(q[0].query.includes('metric:speed') && q[0].query.includes('serverSlug:$slug'), 'asks for the realm by speed');
 assert.equal(q[0].variables.slug, 'nightslayer');
 assert.equal(q[0].variables.region, 'US');
-await bossRanks('fresh.warcraftlogs.com', 652, 'speed', 'realm');
+await bossRanks('forever.warcraftlogs.com', 652, 'speed', 'realm');
 assert.equal(queries.filter((x) => x.query.includes('fightRankings')).length, 2, 'kept for an hour');
 await assert.rejects(bossRanks('evil.example.com', 652, 'speed', 'world'));
-const w = await bossRanks('fresh.warcraftlogs.com', 652, 'nonsense', 'world');
+const w = await bossRanks('forever.warcraftlogs.com', 652, 'nonsense', 'world');
 assert.equal(w.metric, 'progress', 'unknown metrics fall back to first kill');
 assert.ok(!queries.at(-1)!.query.includes('serverRegion'), 'world has no region filter');
 console.log('All ranking checks passed.');

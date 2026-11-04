@@ -1,35 +1,25 @@
--- Keep only Burning Crusade data (fresh.warcraftlogs.com) and remove leftovers from features that
--- no longer exist. Safe to run more than once. Run in Supabase -> SQL Editor.
--- Later, for WoW Forever: change 'fresh.warcraftlogs.com' below to Forever's Warcraft Logs site.
+-- Start fresh for WoW Forever (forever.warcraftlogs.com): removes every raid, stored fight,
+-- analysis and benchmark from earlier game versions and test logs. Keeps people, ranks, claimed
+-- characters, guild details, reminders and bug reports. Safe to run more than once.
+-- Run in Supabase -> SQL Editor (or Neon -> SQL Editor). If the game version changes again,
+-- change 'forever.warcraftlogs.com' below to the new Warcraft Logs site.
 
 begin;
 
--- Saved analyses from any other game version
-delete from public.analyses where host <> 'fresh.warcraftlogs.com';
+-- Saved analyses, raids from /raidstart, Past raids and stored fights from any other site
+delete from public.analyses where host <> 'forever.warcraftlogs.com';
+delete from public.bot_raids where host <> 'forever.warcraftlogs.com';
+delete from public.guild_raids where host <> 'forever.warcraftlogs.com';
+delete from public.fight_packs where host <> 'forever.warcraftlogs.com';
 
--- Saved analyses made with comparisons that were removed (auto, top-ranked parse, previous kill)
-delete from public.analyses where compare_key in ('auto', 'top', 'previous');
-
--- Bot raids from any other game version
-delete from public.bot_raids where host <> 'fresh.warcraftlogs.com';
-
--- Past raids from any other game version
-delete from public.guild_raids where host <> 'fresh.warcraftlogs.com';
-
--- Stored fights from any other game version
-delete from public.fight_packs where host <> 'fresh.warcraftlogs.com';
-
--- Guild benchmarks from raids that are no longer on Past raids
+-- Guild benchmarks and trends from raids that are no longer on Past raids
 delete from public.kill_stats where report_code not in (select report_code from public.guild_raids);
 
--- Tables replaced in v0.23.0 (if migrate-0.23.sql wasn't run)
-drop table if exists public.snapshot_cache;
-drop table if exists public.saved_data;
-drop table if exists public.bot_raid_fights;
-drop table if exists public.top_cache;
+-- Item and enchant names are learned again from Forever's logs
+delete from public.item_names;
 
--- New analyses default to "no comparison"
-alter table public.analyses alter column compare_key set default 'none';
+-- Claimed characters from the old version: uncomment to clear them too (raiders /claim again)
+-- delete from public.bot_claims;
 
 commit;
 

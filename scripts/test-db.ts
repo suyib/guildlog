@@ -39,7 +39,7 @@ await store.removeClaim('7', 'Suy');
 assert.equal((await store.claimsFor('7')).length, 0);
 
 // Raids from /raidstart (upsert returning, is null, order)
-const raid = await store.createRaid({ host: 'fresh.warcraftlogs.com', report_code: 'R1', title: 'Kara', started_by: '7', logger_id: null });
+const raid = await store.createRaid({ host: 'forever.warcraftlogs.com', report_code: 'R1', title: 'Kara', started_by: '7', logger_id: null });
 assert.equal(raid.report_code, 'R1');
 assert.equal((await store.latestRaidStartedBy('7'))?.report_code, 'R1');
 await store.endRaid('R1');
@@ -85,8 +85,8 @@ assert.equal(rows.find((r) => r.name === 'Suy')!.parse, 91.5, 'numeric columns c
 assert.equal(typeof (await performance('8w')).kills, 'number');
 
 // Guild raids and a stored fight with a json path in the select
-await rest('guild_raids', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ report_code: 'R1', host: 'fresh.warcraftlogs.com', title: 'Kara', start_time: '2026-10-01T19:00:00Z', source: 'site', status: 'saved', card: { kills: 1 } }) });
-await rest('fight_packs?on_conflict=report_code,fight_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ report_code: 'R1', fight_id: 0, host: 'fresh.warcraftlogs.com', stage: 'meta-final', pack: 'x', digest: { zone: { id: 1007, name: 'Karazhan' }, pv: 3 } }) });
+await rest('guild_raids', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ report_code: 'R1', host: 'forever.warcraftlogs.com', title: 'Kara', start_time: '2026-10-01T19:00:00Z', source: 'site', status: 'saved', card: { kills: 1 } }) });
+await rest('fight_packs?on_conflict=report_code,fight_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ report_code: 'R1', fight_id: 0, host: 'forever.warcraftlogs.com', stage: 'meta-final', pack: 'x', digest: { zone: { id: 1007, name: 'Karazhan' }, pv: 3 } }) });
 const zones = await rest('fight_packs?fight_id=eq.0&report_code=in.(R1)&select=report_code,zone:digest->zone');
 assert.deepEqual(zones, [{ report_code: 'R1', zone: { id: 1007, name: 'Karazhan' } }]);
 const { listRaids, deleteRaid } = await import('../server/archive.js');

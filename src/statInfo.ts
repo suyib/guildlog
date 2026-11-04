@@ -81,16 +81,7 @@ const RATING: Record<string, (cls: string) => string> = {
 };
 
 /** Tooltip text for a stat, tailored to the class where it matters. Null when there's nothing useful to say. */
-export function statTooltip(stat: string, className: string, withLevel70Numbers = true): string | null {
+export function statTooltip(stat: string, className: string): string | null {
   const fn = RATING[stat] ?? RATING[stat.replace(/ Rating$/i, '')];
-  if (!fn) return null;
-  const text = fn(className);
-  if (withLevel70Numbers) return text;
-  // TESTING ONLY (Mists of Pandaria logs): the level-70 numbers would be wrong, so keep only the
-  // sentences without numbers. Remove this and the parameter when raiding starts.
-  const kept = text
-    .split(/(?<=\.)\s+/)
-    .map((s) => s.replace(/\s*\((about|around) [^)]*\d[^)]*\)/gi, ''))
-    .filter((s) => !/\d/.test(s));
-  return kept.join(' ').trim() || null;
+  return fn ? fn(className) : null;
 }

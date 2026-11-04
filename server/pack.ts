@@ -548,7 +548,7 @@ async function readBuffs(host: string, code: string, ref: FightRef, ids: number[
         auras: ((data.auras ?? []) as any[]).filter((a) => a?.guid).map((a) => {
           if (a.name) names.set(num(a.guid), { name: String(a.name), icon: typeof a.abilityIcon === 'string' ? a.abilityIcon : undefined });
           // Bands for Bloodlust, big cooldowns and potions (a potion's band at the pull is a pre-pot)
-          const keepBands = /^(Bloodlust|Heroism|Time Warp|Ancient Hysteria)$/.test(String(a.name)) || cooldownFor(String(a.name), host) !== undefined || POTION_IDS.has(num(a.guid));
+          const keepBands = /^(Bloodlust|Heroism|Time Warp|Ancient Hysteria)$/.test(String(a.name)) || cooldownFor(String(a.name)) !== undefined || POTION_IDS.has(num(a.guid));
           const bands = keepBands ? ((a.bands ?? []) as any[]).map((b) => [Math.round(num(b.startTime) - ref.startTime), Math.round(num(b.endTime) - ref.startTime)]) : undefined;
           return [num(a.guid), Math.round(num(a.totalUptime)), num(a.totalUses), ...(bands ? [bands] : [])] as [number, number, number, number[][]?];
         }),

@@ -34,7 +34,7 @@ function castEvents(cdTimes: number[], steadyTimes: number[], gapFrom: number, g
 const every = (step: number) => Array.from({ length: Math.floor(177 / step) }, (_, i) => 1 + i * step);
 
 const me = buildSnapshot({
-  host: 'fresh.warcraftlogs.com', code: 'ABC', fight,
+  host: 'forever.warcraftlogs.com', code: 'ABC', fight,
   actor: { id: 28, name: 'Suy', type: 'Player', subType: 'Hunter', petOwner: null },
   fightRow: { icon: 'Hunter-BeastMastery', activeTime: 172_000 },
   rankingRow: { rankPercent: 86, class: 'Hunter', spec: 'BeastMastery' },
@@ -43,7 +43,7 @@ const me = buildSnapshot({
 });
 
 const muddy = buildSnapshot({
-  host: 'fresh.warcraftlogs.com', code: 'ABC', fight,
+  host: 'forever.warcraftlogs.com', code: 'ABC', fight,
   actor: { id: 8, name: 'Muddy', type: 'Player', subType: 'Hunter', petOwner: null },
   fightRow: { icon: 'Hunter-BeastMastery', activeTime: 175_000 },
   rankingRow: { rankPercent: 95, class: 'Hunter', spec: 'BeastMastery' },
@@ -100,15 +100,11 @@ assert.equal(tank.abilities.find((a) => a.name === 'Cleave')?.avoidable, false, 
 
 // Stat tooltips explain the stat for the class
 assert.ok(statTooltip('Hit', 'Hunter')!.includes('142'));
-assert.ok(!/\d/.test(statTooltip('Hit', 'Hunter', false)!));
 
 // Cooldown names match regardless of case and curly apostrophes
 assert.equal(cooldownFor('bestial wrath'), 120);
 assert.equal(cooldownFor('Celestial Alignment'), undefined);
-// Testing period: Mists of Pandaria logs use their own list
-assert.equal(cooldownFor('Celestial Alignment', 'classic.warcraftlogs.com'), 180);
-assert.equal(cooldownFor('Arcane Power', 'classic.warcraftlogs.com'), 90);
-assert.equal(cooldownFor('Arcane Power', 'fresh.warcraftlogs.com'), 180);
+assert.equal(cooldownFor('Arcane Power'), 180);
 
 // The same line from stored per-second amounts
 const stored = seriesFromSeconds(Array.from({ length: 60 }, (_, i) => (i < 30 ? 2000 : 1000)), 1500);
@@ -119,7 +115,7 @@ assert.deepEqual(seriesFromSeconds(new Array(60).fill(0), 1500), [], 'nothing do
 
 // Pet damage folded into the hunter's table ("Melee", "Gore") is split back out and labeled as the pet's
 const withPet = buildSnapshot({
-  host: 'fresh.warcraftlogs.com', code: 'ABC', fight,
+  host: 'forever.warcraftlogs.com', code: 'ABC', fight,
   actor: { id: 28, name: 'Suy', type: 'Player', subType: 'Hunter', petOwner: null },
   tables: {
     ...tables(51, []),

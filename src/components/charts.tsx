@@ -288,7 +288,7 @@ export function StatsList({ stats, className, host }: { stats: Dashboard['stats'
   return (
     <dl className="stat-list">
       {stats.map((s) => {
-        const tip = statTooltip(s.name, className, host.startsWith('fresh.'));
+        const tip = statTooltip(s.name, className);
         const id = `stat-tip-${s.name.replace(/\W+/g, '-').toLowerCase()}`;
         return (
           <div key={s.name} className={tip ? 'stat-item has-tip' : 'stat-item'} tabIndex={tip ? 0 : undefined} aria-describedby={tip ? id : undefined}>

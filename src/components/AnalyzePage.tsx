@@ -9,6 +9,7 @@ import { HomeExtras, HomeHero } from './Home';
 import NightView from './NightView';
 import ResultView from './ResultView';
 import { go } from '../url';
+import { GAME } from '../../server/game';
 
 /** "Whole night" in the boss list (fight IDs start at 1, so 0 is free). */
 const OVERALL = 0;
@@ -388,7 +389,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
             <Glyph name="search" size={18} />
             <input
             type="url"
-            placeholder="https://fresh.warcraftlogs.com/reports/…"
+            placeholder={`https://${GAME.hosts[0]}/reports/…`}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             required
@@ -581,7 +582,7 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
       {breakdown && !result && (
         <Breakdown
           data={breakdown}
-          host={report?.host ?? 'fresh.warcraftlogs.com'}
+          host={report?.host ?? GAME.hosts[0]}
           onPick={(id) => {
             setPlayerId(id);
             setCompareWith('none');

@@ -5,7 +5,7 @@
 import { GAME } from './game.js';
 
 // Warcraft Logs answers sign-ins on each of its sites; if one is unavailable, the next is tried
-const TOKEN_URLS = ['https://www.warcraftlogs.com/oauth/token', 'https://fresh.warcraftlogs.com/oauth/token', 'https://classic.warcraftlogs.com/oauth/token'];
+const TOKEN_URLS = ['https://www.warcraftlogs.com/oauth/token', ...GAME.hosts.map((h) => `https://${h}/oauth/token`)];
 const HOST_RE = /^([a-z0-9-]+\.)?warcraftlogs\.com$/i;
 
 let cachedToken: { token: string; exp: number } | null = null;

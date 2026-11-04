@@ -64,7 +64,7 @@ const player = (name: string, dps: number, parse: number) => ({
   stats: [{ name: 'Agility', value: '800' }],
 });
 const digest = {
-  host: 'fresh.warcraftlogs.com', code: 'ABC', pending: 0,
+  host: 'forever.warcraftlogs.com', code: 'ABC', pending: 0,
   meta: { code: 'ABC', title: 'Gruul + Maggy', startTime: Date.UTC(2026, 9, 15, 19), zone: null, masterData: { actors: [] },
     fights: [
       { id: 1, encounterID: 1, name: 'High King Maulgar', startTime: 0, endTime: 180000, kill: true, size: 25, difficulty: 3 },
@@ -143,7 +143,7 @@ assert.equal(summary.components!.length, 2);
 // ...plus a link that opens the log on the site
 const siteButton = (summary.components![1] as any).components.at(-2);
 assert.equal(siteButton.style, 5);
-assert.equal(siteButton.url, 'https://guildlog.uk/?log=' + encodeURIComponent('https://fresh.warcraftlogs.com/reports/ABC'));
+assert.equal(siteButton.url, 'https://guildlog.uk/?log=' + encodeURIComponent('https://forever.warcraftlogs.com/reports/ABC'));
 assert.ok((summary.components![1] as any).components.length <= 5);
 
 // /help lists every command, only to the person who asked
@@ -160,11 +160,11 @@ assert.ok(!JSON.stringify(helpReply).includes('Made by suy'));
 assert.equal(helpReply.data.components[0].components[0].custom_id, 'bug:open');
 
 // Report a bug: the button opens a form; sending it needs somewhere to go
-const form: any = await handle({ type: 3, token: 't', user: { id: '1', username: 'suy' }, data: { custom_id: 'bug:open:fresh.warcraftlogs.com:ABC' } });
+const form: any = await handle({ type: 3, token: 't', user: { id: '1', username: 'suy' }, data: { custom_id: 'bug:open:forever.warcraftlogs.com:ABC' } });
 assert.equal(form.response.type, 9);
-assert.equal(form.response.data.custom_id, 'bug:submit:fresh.warcraftlogs.com:ABC');
+assert.equal(form.response.data.custom_id, 'bug:submit:forever.warcraftlogs.com:ABC');
 assert.equal(form.response.data.components.length, 2);
-assert.equal((summary.components![1] as any).components.at(-1).custom_id, 'bug:open:fresh.warcraftlogs.com:ABC');
+assert.equal((summary.components![1] as any).components.at(-1).custom_id, 'bug:open:forever.warcraftlogs.com:ABC');
 assert.equal(describe({ type: 5, token: 't', data: { custom_id: 'bug:submit' } } as any), 'Sent a bug report');
 
 // Bug reports are kept for the Admin page: fixed (telling the reporter by DM), and deleted by guild masters only
@@ -189,7 +189,7 @@ assert.equal(describe({ type: 5, token: 't', data: { custom_id: 'bug:submit' } }
     if (init.method === 'DELETE') rows.splice(rows.findIndex((r) => r.id === id), 1);
     return new Response(JSON.stringify(init.method ? [] : id ? rows.filter((r) => r.id === id) : rows), { status: 200 });
   }) as typeof fetch;
-  await saveBug({ discordId: '7', username: 'suy', place: '#tbc-test-raid-log', raid: { host: 'fresh.warcraftlogs.com', code: 'ABC' }, what: 'Potions said all 1 boss', doing: 'Quick summary' });
+  await saveBug({ discordId: '7', username: 'suy', place: '#tbc-test-raid-log', raid: { host: 'forever.warcraftlogs.com', code: 'ABC' }, what: 'Potions said all 1 boss', doing: 'Quick summary' });
   const [bug] = await listBugs();
   assert.deepEqual([bug.status, bug.username, bug.place, bug.raid?.code, bug.what], ['open', 'suy', '#tbc-test-raid-log', 'ABC', 'Potions said all 1 boss']);
   const officer = { id: '9', name: 'Officer', rank: 'officer' as const };
@@ -213,7 +213,7 @@ const line = auditLine(typed, 'ok', 1200);
 assert.ok(line.includes('/remind (options: message, time)') && line.includes('<@7> (suy)') && line.includes('in <#55>') && line.includes('ok, 1.2s'));
 assert.ok(!line.includes('secret plans') && !line.includes('19:45'), 'typed values stay private');
 assert.equal(describe({ type: 2, token: 't', data: { name: 'info', options: [{ name: 'lookup', type: 1, options: [{ name: 'search', type: 3, value: 'x' }] }] } } as any), '/info lookup (options: search)');
-assert.equal(describe({ type: 3, token: 't', data: { custom_id: 'raid:summary:fresh.warcraftlogs.com:AbC' } } as any), 'Button: Quick summary (fresh/AbC)');
+assert.equal(describe({ type: 3, token: 't', data: { custom_id: 'raid:summary:forever.warcraftlogs.com:AbC' } } as any), 'Button: Quick summary (forever/AbC)');
 assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').includes('in DMs · **FAILED** after 0.5s: boom'));
 
 // Slow database: reads are retried once, writes aren't (they may already have been saved)
@@ -250,7 +250,7 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
     }
     return new Response(JSON.stringify({ data: { ok: true } }), { status: 200 });
   }) as typeof fetch;
-  const results = await Promise.all([1, 2, 3].map(() => gql('fresh.warcraftlogs.com', '{x}', {})));
+  const results = await Promise.all([1, 2, 3].map(() => gql('forever.warcraftlogs.com', '{x}', {})));
   assert.deepEqual(results, [{ ok: true }, { ok: true }, { ok: true }]);
   assert.equal(tokenCalls, 2, 'one 503, then one shared sign-in on the next site');
   globalThis.fetch = realFetch;
@@ -450,7 +450,7 @@ delete process.env.SITE_ADMIN_IDS;
     return new Response(JSON.stringify({ data: { guildData: { guild: { id: 773392, name: 'lol', faction: { name: 'Horde' }, server: { name: 'Spineshatter', region: { slug: 'eu' } } } } } }), { status: 200 });
   }) as typeof fetch;
   const raid = (code: string, start: string, kills: [string, number | null][]) => ({
-    code, host: 'fresh.warcraftlogs.com', title: code, startTime: start, endTime: start, loggerName: null, source: 'discord', status: 'saved', saved: 1, total: 1,
+    code, host: 'forever.warcraftlogs.com', title: code, startTime: start, endTime: start, loggerName: null, source: 'discord', status: 'saved', saved: 1, total: 1,
     card: { bosses: kills.map(([name, secs], i) => ({ name, encounterId: i + 1, fightId: i + 10, kill: secs !== null, seconds: secs, wipes: 0 })), raidSeconds: 1, wipes: 0, deaths: 0, avgItemLevel: null,
       raiders: [{ name: 'Suy', className: 'Hunter', specName: 'BeastMastery', role: 'dps', bosses: 2 }, ...(code === 'K2' ? [{ name: 'Luke', className: 'Warrior', specName: 'Protection', role: 'tank', bosses: 2 }] : [])], kills: 2, summarized: 2, feedback: { good: [], work: [] } },
   });
@@ -463,7 +463,7 @@ delete process.env.SITE_ADMIN_IDS;
   assert.deepEqual([att.kills, att.best?.seconds, att.best?.code, att.firstKill], [2, 100, 'K2', raids[1].startTime], 'fastest kill and first kill');
   assert.deepEqual(roster(raids).map((p) => [p.name, p.raids, p.of]), [['Suy', 2, 2], ['Luke', 1, 2]]);
   const g = await wclGuild([1007]);
-  assert.equal(g.guild?.url, 'https://fresh.warcraftlogs.com/guild/id/773392');
+  assert.equal(g.guild?.url, 'https://forever.warcraftlogs.com/guild/id/773392');
   assert.equal(g.guild?.region, 'EU');
   assert.deepEqual(g.ranks.get(1007)?.progress?.server, { number: 4, color: 'legendary' });
   const n = asked.length;
@@ -506,15 +506,15 @@ delete process.env.SITE_ADMIN_IDS;
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async () => new Response(JSON.stringify([
-    { report_code: 'NEW1', host: 'fresh.warcraftlogs.com', title: 'Kara 2', start_time: '2026-10-20T19:00:00Z' },
-    { report_code: 'OLD9', host: 'fresh.warcraftlogs.com', title: 'Gruul + Mag', start_time: '2026-04-22T18:47:00Z' },
+    { report_code: 'NEW1', host: 'forever.warcraftlogs.com', title: 'Kara 2', start_time: '2026-10-20T19:00:00Z' },
+    { report_code: 'OLD9', host: 'forever.warcraftlogs.com', title: 'Gruul + Mag', start_time: '2026-04-22T18:47:00Z' },
   ]), { status: 200 })) as typeof fetch;
   const ask = (value: string) => handle({ type: 4, token: 't', data: { name: 'performance', options: [{ name: 'raid', type: 3, value, focused: true }] } } as any) as any;
   const all = (await ask('')).response.data.choices;
-  assert.deepEqual(all.map((c: any) => c.value), ['fresh.warcraftlogs.com:NEW1', 'fresh.warcraftlogs.com:OLD9'], 'every past raid, newest first');
+  assert.deepEqual(all.map((c: any) => c.value), ['forever.warcraftlogs.com:NEW1', 'forever.warcraftlogs.com:OLD9'], 'every past raid, newest first');
   assert.match(all[1].name, /Gruul \+ Mag · Wed, Apr 22, 2026/);
-  assert.deepEqual((await ask('gruul')).response.data.choices.map((c: any) => c.value), ['fresh.warcraftlogs.com:OLD9'], 'searchable');
-  assert.equal((await ask('https://fresh.warcraftlogs.com/reports/ABC?fight=3')).response.data.choices[0].name, 'Use this Warcraft Logs link');
+  assert.deepEqual((await ask('gruul')).response.data.choices.map((c: any) => c.value), ['forever.warcraftlogs.com:OLD9'], 'searchable');
+  assert.equal((await ask('https://forever.warcraftlogs.com/reports/ABC?fight=3')).response.data.choices[0].name, 'Use this Warcraft Logs link');
   globalThis.fetch = realFetch;
   for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) delete process.env[k];
 }
@@ -550,7 +550,7 @@ delete process.env.SITE_ADMIN_IDS;
     asked = String(url);
     return new Response(JSON.stringify(rows.map((r) => ({ ...r, report_code: 'OLD9' }))), { status: 200 });
   }) as typeof fetch;
-  const pick = await handle({ type: 4, token: 't', data: { name: 'performance', options: [{ name: 'raid', type: 3, value: 'fresh.warcraftlogs.com:OLD9' }, { name: 'character', type: 3, value: 'ae', focused: true }] } } as any) as any;
+  const pick = await handle({ type: 4, token: 't', data: { name: 'performance', options: [{ name: 'raid', type: 3, value: 'forever.warcraftlogs.com:OLD9' }, { name: 'character', type: 3, value: 'ae', focused: true }] } } as any) as any;
   assert.ok(asked.includes('report_code=eq.OLD9'), 'lists who was in the chosen raid');
   assert.deepEqual(pick.response.data.choices, [{ name: 'Aerdre (Shadow Priest)', value: 'Aerdre' }]);
   globalThis.fetch = realFetch;

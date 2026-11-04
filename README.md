@@ -5,7 +5,7 @@ Paste a Warcraft Logs link, pick a boss and a player, and get a plain-English su
 - anyone else in the same fight, or
 - someone in another log you load.
 
-The site is set up for one game version at a time (Burning Crusade logs from fresh.warcraftlogs.com for now; see "Game content" below).
+The site is set up for one game version at a time: WoW Forever logs from forever.warcraftlogs.com (see "Game content" below).
 
 Every analysis is saved to the database (Supabase or any Postgres, such as Neon), so it stays available after Warcraft Logs archives the report. The whole site sits behind one shared guild password.
 
@@ -69,17 +69,18 @@ npm test                     # offline checks of the analysis logic
 
 ## Game content
 
-Everything specific to the game version is marked `GAME CONTENT` at the top of its file. To switch to WoW Forever, update:
+The site is set up for **WoW Forever** (forever.warcraftlogs.com). Logs from any other Warcraft Logs site are refused, which keeps the database to one game version.
+
+Everything specific to the game version is marked `GAME CONTENT` at the top of its file. These still hold Burning Crusade values until Forever's are known; update them as logs come in:
 
 - `server/game.ts`: the version's name and which Warcraft Logs site(s) are accepted
 - `server/cooldowns.ts`: cooldowns to audit and their lengths
 - `server/buffs.ts`: buffs that any class can have (used for cross-class comparisons)
+- `server/gameData.ts`: potions, raid debuffs and the tank defense cap
 - `src/statInfo.ts`: what each stat does, and the rating numbers
 - `server/discord/info.ts`: the bot's consumables lists
 
-Then run `supabase/cleanup.sql` with the new site name to clear out the old version's data.
-
-While testing, Mists of Pandaria logs (classic.warcraftlogs.com) are also allowed. Everything for that is marked `TESTING ONLY`; remove it before raiding starts.
+When the game version changes, run `supabase/cleanup.sql` (with the new site name in it) to remove the old version's raids, fights, analyses and benchmarks. People, ranks, claims, guild details, reminders and bug reports are kept.
 
 ## Discord bot
 

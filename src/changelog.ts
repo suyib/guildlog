@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.38.0',
+    date: '2026-11-04',
+    changes: [
+      'WoW Forever: the site now takes logs from forever.warcraftlogs.com only. Burning Crusade and Mists of Pandaria test logs are no longer accepted, and the testing-only cooldowns and potions are gone.',
+      'A fresh start: `supabase/cleanup.sql` removes every raid, stored fight, analysis and benchmark from before Forever, keeping people, ranks, claims and settings.',
+    ],
+  },
+  {
     version: '0.37.0',
     date: '2026-10-29',
     changes: [

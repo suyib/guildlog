@@ -10,6 +10,7 @@ import { ZoneRanks, useHome } from './Home';
 import { ShareButton } from './ResultView';
 import { go, hashParam } from '../url';
 import { BossIcon, ClassIcon, SeverityDot, classCss } from './icons';
+import { GAME } from '../../server/game';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const ROLE_LABEL = { tank: 'Tanks', healer: 'Healers', dps: 'Damage', unknown: 'Role not known' } as const;
@@ -176,7 +177,7 @@ function AddRaid({ onAdded }: { onAdded: (r: SavedRaid) => void }) {
       <form onSubmit={submit} className="row">
         <label className="input-icon">
           <Glyph name="link" size={18} />
-          <input type="url" placeholder="Add a past raid: https://fresh.warcraftlogs.com/reports/…" value={url} onChange={(e) => setUrl(e.target.value)} required aria-label="Warcraft Logs link of a past raid" />
+          <input type="url" placeholder={`Add a past raid: https://${GAME.hosts[0]}/reports/…`} value={url} onChange={(e) => setUrl(e.target.value)} required aria-label="Warcraft Logs link of a past raid" />
         </label>
         <button type="submit" disabled={busy}>{busy ? 'Adding…' : 'Add raid'}</button>
       </form>

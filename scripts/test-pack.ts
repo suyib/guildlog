@@ -13,7 +13,7 @@ import { buildFindings, buildStrengths } from '../server/analysis';
 import { guildContext, recordKills, trendFor } from '../server/benchmarks';
 import { finish } from '../server/pipeline';
 
-const HOST = 'fresh.warcraftlogs.com';
+const HOST = 'forever.warcraftlogs.com';
 const CODE = 'PackTest1';
 const START = 1_000_000; // the fight's start, ms into the log
 const END = START + 120_000;

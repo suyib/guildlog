@@ -1,3 +1,4 @@
+import { GAME } from './game.js';
 // GAME CONTENT: spell lists and rules that depend on the game version. Swap these for WoW
 // Forever's when it arrives. IDs are Warcraft Logs ability IDs (the game's spell IDs).
 
@@ -18,14 +19,6 @@ export const POTION_IDS = new Set([
   41618, // Bottled Nethergon Energy
   27869, // Dark Rune
   16666, // Demonic Rune
-  // Mists of Pandaria (TESTING ONLY: remove before raiding)
-  105702, // Potion of the Jade Serpent
-  105697, // Virmen's Bite
-  105706, // Potion of Mogu Power
-  105709, // Master Mana Potion
-  105708, // Master Healing Potion
-  105698, // Potion of the Mountains
-  105704, // Alchemist's Rejuvenation
 ]);
 
 export const isPotion = (id: number, name?: string) => POTION_IDS.has(id) || /\bpotion\b|\brune\b/i.test(name ?? '');
@@ -60,14 +53,14 @@ export const MAINTENANCE: { label: string; names: string[] }[] = [
 export const NOT_A_DOT = new Set([
   'Mind Flay', 'Drain Life', 'Drain Soul', 'Drain Mana', 'Arcane Missiles', 'Blizzard', 'Rain of Fire', 'Hurricane', 'Volley',
   'Consecration', 'Hellfire', 'Hellfire Effect', 'Death and Decay', 'Flamestrike', 'Explosive Trap Effect', 'Immolation Trap Effect',
-  'Deep Wounds', 'Ignite', 'Seed of Corruption', 'Mind Sear', 'Fists of Fury', 'Spinning Crane Kick', 'Crackling Jade Lightning', 'Malefic Grasp',
+  'Deep Wounds', 'Ignite', 'Seed of Corruption', 'Mind Sear',
 ]);
 
 /**
  * Tanks: being critically hit by a boss's melee means the tank is under the defense cap
- * (490 defense skill in Burning Crusade). Later expansions removed crits on tanks.
+ * (490 defense skill at level 70). Only for this site's own game version.
  */
-export const tankCanBeCritCapped = (host: string) => host === 'fresh.warcraftlogs.com';
+export const tankCanBeCritCapped = (host: string) => GAME.hosts.includes(host);
 export const DEFENSE_CAP_NOTE = 'You need 490 defense skill to stop bosses critting you.';
 
 /** A boss's auto attack. */

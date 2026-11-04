@@ -37,7 +37,7 @@ export function describe(i: Interaction): string {
   return `Interaction type ${i.type}`;
 }
 
-/** "fresh.warcraftlogs.com:AbC123" -> "fresh/AbC123" (report codes are already public in the raid channel). */
+/** "forever.warcraftlogs.com:AbC123" -> "forever/AbC123" (report codes are already public in the raid channel). */
 function logRef(raid: string): string {
   const [host, code] = raid.includes(':') ? raid.split(':') : ['', raid];
   return host ? `${host.split('.')[0]}/${code}` : code;
