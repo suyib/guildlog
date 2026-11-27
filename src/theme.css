@@ -887,6 +887,9 @@ a.boss-pill:hover { text-decoration: none; border-color: var(--primary-light); b
   font: 400 13px/1.4 var(--font-sans); color: #fff; letter-spacing: 0; pointer-events: none; text-shadow: none;
 }
 .ptip:hover > .ptip-box, .ptip:focus-visible > .ptip-box, .ptip:focus-within > .ptip-box { display: flex; }
+/* With a mouse: next to the cursor (see followTips.ts), and above everything else on the page */
+.ptip:hover { z-index: 50; }
+.tips-follow .ptip:hover > .ptip-box { position: fixed; left: var(--tip-x, -9999px); top: var(--tip-y, -9999px); bottom: auto; }
 .ptip-name { font-size: 15px; font-weight: 700; }
 .ptip-line { color: #fff; }
 .ptip-grey { color: #9d9d9d; }

@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.46.3',
+    date: '2026-11-27',
+    changes: [
+      'Player tooltips follow the mouse, next to the cursor, instead of sitting on top of the names above. With a keyboard or on touch they still show above the name.',
+      'More spell icons in the meter tooltips (from the fight\u2019s spell list when the damage table has none).',
+    ],
+  },
+  {
     version: '0.46.2',
     date: '2026-11-27',
     changes: [

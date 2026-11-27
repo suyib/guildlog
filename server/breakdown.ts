@@ -41,7 +41,8 @@ export function breakdownFromPack(host: string, pack: FightPack): FightBreakdown
 
   // Spell icons by name (damage and healing tables), for each player's top spells
   const iconOf = new Map<string, string>();
-  for (const t of [pack.t.damage, heal.healing]) for (const e of (t?.data?.entries ?? []) as any[]) for (const a of (e?.abilities ?? []) as any[]) if (a?.name && typeof a.abilityIcon === 'string') iconOf.set(a.name, a.abilityIcon);
+  for (const [name, icon] of Object.values(pack.full?.names ?? {})) if (name && icon) iconOf.set(name, icon);
+  for (const t of [pack.t.damage, heal.healing, pack.t.casts]) for (const e of (t?.data?.entries ?? []) as any[]) for (const a of (e?.abilities ?? []) as any[]) if (a?.name && typeof a.abilityIcon === 'string') iconOf.set(a.name, a.abilityIcon);
   const top = (list: { name: string; total: number }[], total: number) =>
     total > 0 ? [...list].sort((a, b) => b.total - a.total).slice(0, 5).map((a) => ({ name: a.name, pct: Math.round((a.total / total) * 1000) / 10, ...(iconOf.has(a.name.replace(/ \(pet\)$/, '')) ? { icon: iconOf.get(a.name.replace(/ \(pet\)$/, ''))! } : {}) })) : [];
 
