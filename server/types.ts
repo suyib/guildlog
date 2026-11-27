@@ -55,6 +55,8 @@ export interface PlayerSnapshot {
   damageTaken: { name: string; total: number }[];
   /** Potions and runes used (missing before v0.25.0, and for fights read before then). */
   potions?: PotionUse;
+  /** Flask, elixirs and food (from v0.44.0). */
+  consumes?: Consumes;
   /** Your damage-over-time spells' uptime on their main target. */
   dots?: DotUptime[];
   /** The boss's melee swings at you (tanks). */

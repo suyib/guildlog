@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.44.0',
+    date: '2026-11-27',
+    changes: [
+      'New colors (Ironforge): stone charcoal with bronze buttons and amber accents. Buy me a coffee keeps its blue so it still stands out, and class, parse and item colors are unchanged. Discord embeds use the bronze too.',
+      'More game imagery: spec icons next to names (Frost rather than just Mage) and role icons on the role groups; game icons on the number tiles; real achievement icons; spell icons in \u201cWhat this means\u201d; boss portraits in Progress and a boss picker on Rankings; item icons framed in their quality color on Gear; and a faded game icon on empty pages.',
+      'Consumables on your analysis: flask, elixir, food and potion as icons with a tick or a cross (for fights read from now on).',
+    ],
+  },
+  {
     version: '0.43.0',
     date: '2026-11-27',
     changes: [

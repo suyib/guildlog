@@ -260,7 +260,7 @@ export function GearTable({ gear }: { gear: GearItem[] }) {
                 <td className="muted">{g.slotName}</td>
                 <td>
                   <span className="with-icon">
-                    <GameIcon file={g.icon} size={22} />
+                    <span className={`item-frame ${QUALITY[g.quality ?? 1] ?? 'q-common'}`}><GameIcon file={g.icon} size={28} /></span>
                     <span className={QUALITY[g.quality ?? 1] ?? 'q-common'}>{g.name ?? `Item ${g.id}`}</span>
                     {g.gems.map((gem, i) => (
                       <span key={i} title={`Gem ${gem.id}${gem.itemLevel ? `, item level ${gem.itemLevel}` : ''}`}>

@@ -64,7 +64,7 @@ function CharacterCard({ c }: { c: ProfileCharacter }) {
   return (
     <article className={`char-card ${c.className ? `${classCss(c.className)}-border` : ''}`}>
       <header className="char-head">
-        {portrait ? <img className="portrait" src={portrait} width={44} height={44} alt="" /> : c.className ? <ClassIcon className={c.className} size={44} /> : <span className="kpi-icon big"><Glyph name="users" size={22} /></span>}
+        {portrait ? <img className="portrait" src={portrait} width={44} height={44} alt="" /> : c.className ? <ClassIcon className={c.className} spec={c.specName} size={44} /> : <span className="kpi-icon big"><Glyph name="users" size={22} /></span>}
         <div>
           <h3 className={c.className ? classCss(c.className) : ''}>{c.name}</h3>
           <div className="muted small">

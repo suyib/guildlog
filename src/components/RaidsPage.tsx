@@ -11,7 +11,7 @@ import { PlayerTipBox } from './PlayerTip';
 import { ZoneRanks, useHome } from './Home';
 import { ShareButton } from './ResultView';
 import { go, hashParam } from '../url';
-import { BossIcon, ClassIcon, SeverityDot, classCss } from './icons';
+import { BossIcon, classCss, ClassIcon, EmptyNote, RoleIcon, SeverityDot, TileIcon } from './icons';
 import { GAME } from '../../server/game';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -134,7 +134,7 @@ export default function RaidsPage() {
 
       {raids && raids.length === 0 && (
         <section className="panel">
-          <p className="muted empty-note">No raids yet. When there are, each one shows on the calendar with its bosses, wipes, deaths and who was there, plus what went well and what to work on. Use <strong>/raidend</strong> in Discord after a raid, or add a Warcraft Logs link above.</p>
+          <EmptyNote icon="inv_misc_book_09">No raids yet. When there are, each one shows on the calendar with its bosses, wipes, deaths and who was there, plus what went well and what to work on. Use <strong>/raidend</strong> in Discord after a raid, or add a Warcraft Logs link above.</EmptyNote>
         </section>
       )}
 
@@ -210,7 +210,7 @@ function Overview({ raids }: { raids: SavedRaid[] }) {
 function Kpi({ glyph, label, value, sub }: { glyph: 'calendar' | 'check' | 'timer' | 'users'; label: string; value: string; sub: string }) {
   return (
     <div className="kpi">
-      <div className="kpi-head"><span className="kpi-icon"><Glyph name={glyph} size={18} /></span>{label}</div>
+      <div className="kpi-head"><TileIcon glyph={glyph} />{label}</div>
       <div className="kpi-value">{value}</div>
       <div className="kpi-sub">{sub}</div>
     </div>
@@ -426,7 +426,8 @@ function RaidCardView({ raid, raids, archiveDays, canDelete, officer, onDeleted,
                   {g.list.map((p) => (
                     <span key={p.name} className="comp-chip static ptip" tabIndex={0}>
                       <PlayerTipBox name={p.name} className={p.className} specName={p.specName} role={p.role} lines={[{ label: 'Kills tonight', value: `${p.bosses} of ${c.kills}` }]} />
-                      <ClassIcon className={p.className} size={16} />
+                      <RoleIcon role={p.role} />
+                      <ClassIcon className={p.className} spec={p.specName} size={16} />
                       <span className={classCss(p.className)}>{p.name}</span>
                       {c.kills > 0 && p.bosses < c.kills && <span className="muted small">{p.bosses}/{c.kills}</span>}
                     </span>

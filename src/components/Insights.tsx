@@ -3,7 +3,7 @@
 import type { AnalysisResult, DeathRecap, Mitigation, PlayerSnapshot } from '../../server/types';
 import { compact, mmss, n0, pct } from '../format';
 import Glyph from './Glyph';
-import { parseCss } from './icons';
+import { GameIcon, parseCss } from './icons';
 
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
@@ -41,12 +41,39 @@ export function GuildPanel({ result, value }: { result: AnalysisResult; value: n
 }
 
 /** Potions used, and the debuffs the raid kept on the boss. */
+/** Flask, elixir, food and potion as game icons with a tick or a cross. GAME CONTENT (icons) */
+function ConsumesRow({ me }: { me: PlayerSnapshot }) {
+  const c = me.consumes;
+  const p = me.potions;
+  if (!c && !p) return null;
+  const items = [
+    ...(c ? [
+      { label: 'Flask', icon: 'inv_potion_41', ok: c.flask },
+      { label: c.elixirs > 1 ? `${c.elixirs} elixirs` : 'Elixir', icon: 'inv_potion_62', ok: c.elixirs > 0 || c.flask },
+      { label: 'Food', icon: 'inv_misc_food_64', ok: c.food },
+    ] : []),
+    ...(p ? [{ label: 'Potion', icon: 'inv_alchemy_endlessflask_06', ok: p.used.length > 0 || p.prePot }] : []),
+  ];
+  return (
+    <ul className="consumes" aria-label="Consumables">
+      {items.map((x) => (
+        <li key={x.label} className={x.ok ? 'ok' : 'miss'}>
+          <span className="cons-slot"><GameIcon file={x.icon} size={40} /><span className="cons-mark" aria-hidden="true">{x.ok ? '\u2713' : '\u2715'}</span></span>
+          <span>{x.label}<span className="sr-only">{x.ok ? ': yes' : ': no'}</span></span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function PotionsAndDebuffs({ me }: { me: PlayerSnapshot }) {
-  if (!me.potions && !me.raidDebuffs) return null;
+  if (!me.potions && !me.raidDebuffs && !me.consumes) return null;
   const p = me.potions;
   return (
     <section className="panel">
-      <h2 className="panel-title">Potions and boss debuffs</h2>
+      <h2 className="panel-title">Consumables and boss debuffs</h2>
+      <ConsumesRow me={me} />
+      {me.consumes && !me.consumes.flask && <p className="muted small">An elixir counts when there&rsquo;s no flask; a flask covers both elixirs.</p>}
       {p && (
         p.used.length || p.prePot ? (
           <ul className="event-list">
@@ -54,7 +81,7 @@ export function PotionsAndDebuffs({ me }: { me: PlayerSnapshot }) {
             {p.used.map((u, i) => <li key={i}><span className="ev-time">{mmss(u.seconds)}</span>{u.name}</li>)}
           </ul>
         ) : (
-          <p className="warn-text small">No potion used this fight.</p>
+          <p className="muted small">No potion used this fight.</p>
         )
       )}
       {me.raidDebuffs && me.raidDebuffs.length > 0 && (

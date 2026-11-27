@@ -4,6 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { AdminEdit, AdminOverview, AdminPerson, AdminSignIn, BugReport, GuildSettings, Rank } from '../../server/types';
 import { RANK_LABEL, loadAdmin, saveAdminEdit } from '../api';
 import Glyph from './Glyph';
+import { TileIcon } from './icons';
 import { useHome } from './Home';
 
 const when = (iso: string) => new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
@@ -261,7 +262,7 @@ function PersonEditor({ person: p, assignable, self, onSaved }: { person: AdminP
 function Kpi({ glyph, label, value, sub }: { glyph: 'users' | 'shield' | 'alert'; label: string; value: string; sub: string }) {
   return (
     <div className="kpi">
-      <div className="kpi-head"><span className="kpi-icon"><Glyph name={glyph} size={18} /></span>{label}</div>
+      <div className="kpi-head"><TileIcon glyph={glyph} />{label}</div>
       <div className="kpi-value">{value}</div>
       <div className="kpi-sub">{sub}</div>
     </div>

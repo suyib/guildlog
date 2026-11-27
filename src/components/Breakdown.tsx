@@ -4,7 +4,7 @@ import { compact, mmss, n0, pct } from '../format';
 import { DpsChart } from './charts';
 import BossRankLine from './BossRankLine';
 import Glyph from './Glyph';
-import { BossIcon, ClassIcon, GameIcon, SeverityDot, classCss, parseCss } from './icons';
+import { BossIcon, classCss, ClassIcon, GameIcon, parseCss, SeverityDot, TileIcon } from './icons';
 import { recapLine } from '../../server/insights';
 
 type Player = FightBreakdown['players'][number];
@@ -208,7 +208,7 @@ export default function Breakdown({ data, host, onPick }: { data: FightBreakdown
                 <div className="comp-list">
                   {group.map((p) => (
                     <button key={p.id} type="button" className="comp-chip" onClick={() => onPick(p.id)} title={`${spaced(p.specName)} ${p.className}${p.itemLevel ? `, item level ${p.itemLevel}` : ''}`}>
-                      <ClassIcon className={p.className} size={16} />
+                      <ClassIcon className={p.className} spec={p.specName} size={16} />
                       <span className={classCss(p.className)}>{p.name}</span>
                     </button>
                   ))}
@@ -247,7 +247,7 @@ export default function Breakdown({ data, host, onPick }: { data: FightBreakdown
 function Kpi({ glyph, label, value, sub }: { glyph: 'bolt' | 'pulse' | 'alert' | 'shield'; label: string; value: string; sub: string }) {
   return (
     <div className="kpi">
-      <div className="kpi-head"><span className="kpi-icon"><Glyph name={glyph} size={18} /></span>{label}</div>
+      <div className="kpi-head"><TileIcon glyph={glyph} />{label}</div>
       <div className="kpi-value">{value}</div>
       <div className="kpi-sub">{sub}</div>
     </div>
@@ -262,7 +262,7 @@ function MeterRow({ rank, p, value, top, label, extra, onPick, healing = false }
     <li>
       <button type="button" className="meter-row" onClick={() => onPick(p.id)} aria-label={`Analyze ${p.name}`}>
         <span className="meter-rank">{rank}</span>
-        <ClassIcon className={p.className} size={18} />
+        <ClassIcon className={p.className} spec={p.specName} size={18} />
         <span className="meter-name">
           <span className={classCss(p.className)}>{p.name}</span>
           <span className="muted small">{extra ?? `${spaced(p.specName)}${p.deaths ? ` · died` : ''}`}</span>

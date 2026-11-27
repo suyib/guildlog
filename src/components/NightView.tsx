@@ -4,7 +4,7 @@
 import type { RaidOverview } from '../../server/types';
 import { compact, mmss, n0 } from '../format';
 import Glyph from './Glyph';
-import { BossIcon, ClassIcon, SeverityDot, classCss, parseCss } from './icons';
+import { BossIcon, classCss, ClassIcon, parseCss, RoleIcon, SeverityDot, TileIcon } from './icons';
 import { RaidCardBody } from './RaidCard';
 import WipePulls from './WipePulls';
 import { PlayerTipBox } from './PlayerTip';
@@ -85,7 +85,7 @@ export default function NightView({ data, onBoss, onPlayer, onRefresh, refreshin
                 <div className="comp-label">{role === 'tank' ? 'Tanks' : role === 'healer' ? 'Healers' : 'Damage'} ({list.length})</div>
                 <div className="comp-list">
                   {list.map((p) => (
-                    <span key={p.name} className="comp-chip static ptip" tabIndex={0}><PlayerTipBox name={p.name} className={p.className} specName={p.specName} role={p.role} lines={[{ label: 'Kills tonight', value: `${p.bosses} of ${c.kills}` }]} /><ClassIcon className={p.className} size={16} /><span className={classCss(p.className)}>{p.name}</span>{c.kills > 0 && p.bosses < c.kills && <span className="muted small">{p.bosses}/{c.kills}</span>}</span>
+                    <span key={p.name} className="comp-chip static ptip" tabIndex={0}><PlayerTipBox name={p.name} className={p.className} specName={p.specName} role={p.role} lines={[{ label: 'Kills tonight', value: `${p.bosses} of ${c.kills}` }]} /><RoleIcon role={p.role} /><ClassIcon className={p.className} spec={p.specName} size={16} /><span className={classCss(p.className)}>{p.name}</span>{c.kills > 0 && p.bosses < c.kills && <span className="muted small">{p.bosses}/{c.kills}</span>}</span>
                   ))}
                 </div>
               </div>
@@ -156,7 +156,7 @@ function PlayerTable({ title, unit, players, top, onPlayer }: {
                   note={`Click to analyze ${p.best.boss}`}
                 />
                 <span className="meter-rank">{i + 1}</span>
-                <ClassIcon className={p.className} size={18} />
+                <ClassIcon className={p.className} spec={p.specName} size={18} />
                 <span className="meter-name">
                   <span className={classCss(p.className)}>{p.name}</span>
                   <span className="muted small">{spaced(p.specName)} · {p.bosses} boss{p.bosses === 1 ? '' : 'es'}{p.deaths ? ` · died ${p.deaths}×` : ''}</span>
@@ -177,7 +177,7 @@ function PlayerTable({ title, unit, players, top, onPlayer }: {
 function Kpi({ glyph, label, value, sub }: { glyph: 'check' | 'timer' | 'alert' | 'shield'; label: string; value: string; sub: string }) {
   return (
     <div className="kpi">
-      <div className="kpi-head"><span className="kpi-icon"><Glyph name={glyph} size={18} /></span>{label}</div>
+      <div className="kpi-head"><TileIcon glyph={glyph} />{label}</div>
       <div className="kpi-value">{value}</div>
       <div className="kpi-sub">{sub}</div>
     </div>

@@ -9,9 +9,10 @@ export interface Achievement {
   name: string;
   sub: string;
   points: number;
-  /** A boss picture for the badge; otherwise a glyph. */
+  /** A boss picture for the badge (from Warcraft Logs)... */
   bossId?: number;
-  glyph?: 'check' | 'timer' | 'shield' | 'users' | 'bolt';
+  /** ...or a game icon by file name. GAME CONTENT */
+  icon?: string;
 }
 
 /** A raid night's achievements, best first. `start` is when the raid began (ms). */
@@ -26,15 +27,15 @@ export function raidAchievements(card: RaidCard, opts: { code: string; start: nu
     const p = bosses.find((x) => x.encounterId === b.encounterId);
     if (p?.firstKill && night(p.firstKill)) out.push({ key: `first-${b.encounterId}`, kind: 'Guild', name: `${b.name} Down!`, sub: 'The guild’s first kill', points: 25, bossId: b.encounterId });
   }
-  if (card.bosses.length >= 2 && card.kills === card.bosses.length) out.push({ key: 'clear', kind: 'Guild', name: 'Full Clear', sub: `All ${card.bosses.length} bosses in one night`, points: 25, glyph: 'check' });
+  if (card.bosses.length >= 2 && card.kills === card.bosses.length) out.push({ key: 'clear', kind: 'Guild', name: 'Full Clear', sub: `All ${card.bosses.length} bosses in one night`, points: 25, icon: 'achievement_dungeon_gloryoftheraider' });
   for (const b of card.bosses.filter((x) => x.kill)) {
     const p = bosses.find((x) => x.encounterId === b.encounterId);
-    if (p?.best?.code === opts.code && p.kills > 1 && b.seconds !== null) out.push({ key: `record-${b.encounterId}`, kind: 'Raid', name: `Record: ${b.name}`, sub: `Fastest kill yet, ${mmss(b.seconds)}`, points: 10, bossId: b.encounterId });
+    if (p?.best?.code === opts.code && p.kills > 1 && b.seconds !== null) out.push({ key: `record-${b.encounterId}`, kind: 'Raid', name: `Record: ${b.name}`, sub: `Fastest kill yet, ${mmss(b.seconds)}`, points: 10, icon: 'inv_misc_pocketwatch_01' });
   }
   for (const b of card.bosses.filter((x) => x.kill && x.deaths === 0)) {
     out.push({ key: `deathless-${b.encounterId}`, kind: 'Raid', name: `Deathless ${b.name}`, sub: `${b.name} killed with nobody dying`, points: 10, bossId: b.encounterId });
   }
-  if (card.kills > 0 && card.wipes === 0) out.push({ key: 'nowipes', kind: 'Raid', name: 'Not a Single Wipe', sub: `Every pull was a kill (${card.kills})`, points: 10, glyph: 'shield' });
+  if (card.kills > 0 && card.wipes === 0) out.push({ key: 'nowipes', kind: 'Raid', name: 'Not a Single Wipe', sub: `Every pull was a kill (${card.kills})`, points: 10, icon: 'spell_holy_divineintervention' });
   return out;
 }
 
@@ -44,5 +45,5 @@ export function attendanceAchievement(roster: HomeData['roster']): Achievement |
   if (of < 3) return null;
   const all = roster.filter((p) => p.raids >= of).map((p) => p.name);
   if (!all.length) return null;
-  return { key: 'attendance', kind: 'Guild', name: 'Perfect Attendance', sub: `Every raid in 8 weeks: ${all.slice(0, 6).join(', ')}${all.length > 6 ? ` and ${all.length - 6} more` : ''}`, points: 10, glyph: 'users' };
+  return { key: 'attendance', kind: 'Guild', name: 'Perfect Attendance', sub: `Every raid in 8 weeks: ${all.slice(0, 6).join(', ')}${all.length > 6 ? ` and ${all.length - 6} more` : ''}`, points: 10, icon: 'inv_misc_groupneedmore' };
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { HistoryRow } from '../../server/types';
 import { loadHistory } from '../api';
 import { n0 } from '../format';
-import { ClassIcon, classCss, compareLabel, parseCss } from './icons';
+import { classCss, ClassIcon, compareLabel, EmptyNote, parseCss } from './icons';
 
 export default function HistoryPage() {
   const [rows, setRows] = useState<HistoryRow[] | null>(null);
@@ -26,7 +26,7 @@ export default function HistoryPage() {
       </div>
       {error && <p className="error">{error}</p>}
       {!rows && !error && <p className="muted">Loading…</p>}
-      {rows && shown.length === 0 && <p className="muted empty-note">{rows.length ? 'Nothing matches that filter.' : <>Nothing saved yet. Every analysis you run on <a href="/">Analyze</a> is saved here, so you can open it again or share its link.</>}</p>}
+      {rows && shown.length === 0 && <EmptyNote icon="inv_misc_note_01">{rows.length ? 'Nothing matches that filter.' : <>Nothing saved yet. Every analysis you run on <a href="/">Analyze</a> is saved here, so you can open it again or share its link.</>}</EmptyNote>}
       {shown.length > 0 && (
         <div className="scroll">
           <table className="grid">
@@ -38,7 +38,7 @@ export default function HistoryPage() {
                 <tr key={r.id} className="clickable" onClick={() => (window.location.href = `/a/${r.id}`)}>
                   <td className="muted">{r.created_at.slice(0, 10)}</td>
                   <td>
-                    <a href={`/a/${r.id}`} className={`with-icon ${classCss(r.class_name)}`}><ClassIcon className={r.class_name} size={16} />{r.player_name}</a>
+                    <a href={`/a/${r.id}`} className={`with-icon ${classCss(r.class_name)}`}><ClassIcon className={r.class_name} spec={r.spec_name} size={16} />{r.player_name}</a>
                   </td>
                   <td>{r.encounter_name}</td>
                   <td className="muted">{compareLabel(r.compare_key)}</td>

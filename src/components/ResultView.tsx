@@ -10,7 +10,7 @@ import { DamageDonut, DpsChart, GearTable, StatsList } from './charts';
 import Feedback, { FeedbackPanels } from './Feedback';
 import BossRankLine from './BossRankLine';
 import Glyph from './Glyph';
-import { ClassIcon, GameIcon, classCss, compareLabel, parseCss } from './icons';
+import { classCss, ClassIcon, compareLabel, GameIcon, parseCss, TileIcon } from './icons';
 import Takeaway from './Takeaway';
 import { castsTakeaway, cooldownTakeaway, damageTakeaway, healingTakeaway, rotationTakeaway, survivalTakeaway } from '../takeaways';
 import Timeline from './Timeline';
@@ -136,7 +136,7 @@ function Portrait({ snapshot }: { snapshot: PlayerSnapshot }) {
       live = false;
     };
   }, [snapshot.host, snapshot.reportCode, snapshot.name, snapshot.server]);
-  if (!url) return <ClassIcon className={snapshot.className} size={44} />;
+  if (!url) return <ClassIcon className={snapshot.className} spec={snapshot.specName} size={44} />;
   return <img className={`portrait ${classCss(snapshot.className)}-border`} src={url} width={44} height={44} alt={`${snapshot.name}'s character portrait`} />;
 }
 
@@ -148,7 +148,7 @@ function Kpi({ glyph, label, value, valueCls = '', delta, sub }: { glyph: GlyphN
   return (
     <div className="kpi">
       <div className="kpi-head">
-        <span className="kpi-icon"><Glyph name={glyph} size={18} /></span>
+        <TileIcon glyph={glyph} />
         {label}
       </div>
       <div className={`kpi-value ${valueCls}`}>{value}</div>
@@ -526,7 +526,7 @@ function BuffsView({ result }: { result: AnalysisResult }) {
   return (
     <>
       <Survival result={result} />
-      {(me.potions || me.raidDebuffs || me.dots?.length) && (
+      {(me.potions || me.consumes || me.raidDebuffs || me.dots?.length) && (
         <div className="grid-2">
           <PotionsAndDebuffs me={me} />
           <DotsPanel me={me} />
@@ -772,7 +772,7 @@ function PlayerTable({ players, children, showCrossClass = false }: { players: R
             {players.map((p) => (
               <th key={p.label} className="r">
                 <span className="th-player">
-                  <ClassIcon className={p.s.className} size={16} />
+                  <ClassIcon className={p.s.className} spec={p.s.specName} size={16} />
                   <span className={classCss(p.s.className)}>{p.me ? 'You' : p.s.name}</span>
                 </span>
                 {showCrossClass && !p.sameClass && <div className="tag">{p.s.className === players[0].s.className ? 'Different spec' : 'Different class'}</div>}

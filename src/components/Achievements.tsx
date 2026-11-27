@@ -2,8 +2,7 @@
 // the points. Praise only.
 import { useState } from 'react';
 import type { Achievement } from '../achievements';
-import Glyph from './Glyph';
-import { BossIcon } from './icons';
+import { BossIcon, GameIcon } from './icons';
 
 export default function Achievements({ list, title = 'Achievements', max = 4 }: { list: Achievement[]; title?: string; max?: number }) {
   const [all, setAll] = useState(false);
@@ -13,7 +12,7 @@ export default function Achievements({ list, title = 'Achievements', max = 4 }: 
     <section className="achievements" aria-label={title}>
       {shown.map((a) => (
         <div key={a.key} className="ach">
-          <span className="ach-badge">{a.bossId ? <BossIcon id={a.bossId} size="big" /> : <Glyph name={a.glyph ?? 'check'} size={24} />}</span>
+          <span className="ach-badge">{a.bossId ? <BossIcon id={a.bossId} size="big" /> : <GameIcon file={a.icon ?? 'achievement_general'} size={52} />}</span>
           <div className="ach-text">
             <div className="ach-kind">{a.kind} achievement</div>
             <div className="ach-name">{a.name}</div>

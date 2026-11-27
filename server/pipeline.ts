@@ -7,7 +7,7 @@ import { guildContext } from './benchmarks.js';
 import { saveAnalysis } from './db.js';
 import { healingFromPack } from './dashboard.js';
 import { type FightPack, getMeta, storedStages } from './pack.js';
-import { deathRecaps, dotsFor, mitigationFor, potionsFor, raidDebuffs } from './insights.js';
+import { consumesFor, deathRecaps, dotsFor, mitigationFor, potionsFor, raidDebuffs } from './insights.js';
 import { detailRows, num, rankingRows } from './tables.js';
 import type { ActorRef, AnalysisResult, Comparison, Dashboard, FightPlayerRow, PlayerSnapshot, ReportSummary } from './types.js';
 import { type CastEvent, type Fight, parseReportUrl } from './wcl.js';
@@ -148,6 +148,8 @@ export function snapshotFromPack(host: string, code: string, pack: FightPack, ac
   if (recaps) snapshot.deaths = recaps;
   const potions = potionsFor(pack, id);
   if (potions) snapshot.potions = potions;
+  const consumes = consumesFor(pack, id);
+  if (consumes) snapshot.consumes = consumes;
   const dots = dotsFor(pack, id);
   if (dots?.length) snapshot.dots = dots;
   const mitigation = mitigationFor(pack, id);

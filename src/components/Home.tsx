@@ -5,7 +5,7 @@ import type { GuildRankings, HomeData, SavedRaid, ZoneProgress } from '../../ser
 import { loadHome } from '../api';
 import { mmss, n0 } from '../format';
 import Glyph from './Glyph';
-import { ClassIcon, classCss, parseCss } from './icons';
+import { BossIcon, classCss, ClassIcon, EmptyNote, parseCss, RoleIcon, TileIcon } from './icons';
 import { RaidCardBody } from './RaidCard';
 import Achievements from './Achievements';
 import PlayerTip from './PlayerTip';
@@ -118,7 +118,7 @@ export function HomeExtras() {
           {d.zones.length > 0 ? <Progress zones={d.zones} wcl={d.wcl} /> : (
             <section className="panel">
               <h2 className="panel-title">Progress</h2>
-              <p className="muted empty-note">Each raid shows here with every boss, its first kill and fastest kill, once the guild&rsquo;s first log is on Past raids. Use <strong>/raidend</strong> in Discord after a raid, or add a log on <a href="/#/raids">Past raids</a>.</p>
+              <EmptyNote icon="inv_misc_map_01">Each raid shows here with every boss, its first kill and fastest kill, once the guild&rsquo;s first log is on Past raids. Use <strong>/raidend</strong> in Discord after a raid, or add a log on <a href="/#/raids">Past raids</a>.</EmptyNote>
             </section>
           )}
         </div>
@@ -190,7 +190,7 @@ function RecentAnalyses({ list }: { list: HomeData['recentAnalyses'] }) {
           <tbody>
             {list.map((a) => (
               <tr key={a.id} className="clickable" onClick={() => (window.location.href = `/a/${a.id}`)}>
-                <td><a href={`/a/${a.id}`} className={`with-icon ${classCss(a.class_name)}`}><ClassIcon className={a.class_name} size={16} />{a.player_name}</a></td>
+                <td><a href={`/a/${a.id}`} className={`with-icon ${classCss(a.class_name)}`}><ClassIcon className={a.class_name} spec={a.spec_name} size={16} />{a.player_name}</a></td>
                 <td>{a.encounter_name}</td>
                 <td className={`r strong ${parseCss(a.parse_percent)}`}>{a.parse_percent === null ? '–' : Math.round(a.parse_percent)}</td>
                 <td className="muted">{shortDate(a.created_at)}</td>
@@ -206,7 +206,7 @@ function RecentAnalyses({ list }: { list: HomeData['recentAnalyses'] }) {
 function Kpi({ glyph, label, value, sub }: { glyph: 'calendar' | 'check' | 'timer' | 'users'; label: string; value: string; sub: string }) {
   return (
     <div className="kpi">
-      <div className="kpi-head"><span className="kpi-icon"><Glyph name={glyph} size={18} /></span>{label}</div>
+      <div className="kpi-head"><TileIcon glyph={glyph} />{label}</div>
       <div className="kpi-value">{value}</div>
       <div className="kpi-sub">{sub}</div>
     </div>
@@ -243,7 +243,7 @@ function Progress({ zones, wcl }: { zones: ZoneProgress[]; wcl: HomeData['wcl'] 
                 <tbody>
                   {z.bosses.map((b) => (
                     <tr key={b.encounterId}>
-                      <td>{b.best ? <a href={fightLink(b.best)} className="boss-link" title="Open the fastest kill">{b.name}</a> : <span className="muted">{b.name}</span>}</td>
+                      <td><span className="with-icon"><BossIcon id={b.encounterId} size="small" />{b.best ? <a href={fightLink(b.best)} className="boss-link" title="Open the fastest kill">{b.name}</a> : <span className="muted">{b.name}</span>}</span></td>
                       <td className="muted">{b.firstKill ? day(b.firstKill) : 'Not yet'}</td>
                       <td className="r">{b.kills || '–'}</td>
                       <td className="r">
@@ -305,11 +305,11 @@ function Composition({ roster, rankings }: { roster: HomeData['roster']; ranking
           const list = roster.filter((p) => (p.role ?? 'dps') === role);
           return (
             <div key={role}>
-              <div className="comp-label">{label} ({list.length})</div>
+              <div className="comp-label with-icon"><RoleIcon role={role} />{label} ({list.length})</div>
               <ul className="roster">
                 {list.map((p) => (
                   <li key={p.name}>
-                    <ClassIcon className={p.className} size={18} />
+                    <ClassIcon className={p.className} spec={p.specName} size={18} />
                     <PlayerTip
                       name={p.name}
                       className={p.className}

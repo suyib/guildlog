@@ -82,7 +82,7 @@ export interface Embed {
 }
 
 export const EPHEMERAL = 64;
-export const BRAND = 0x007cad;
+export const BRAND = 0xb8863b; // Ironforge bronze, like the site
 
 /** Credit line in the raid summary's footer. */
 export const CREDIT = 'Made by suy';

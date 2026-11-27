@@ -5,7 +5,7 @@ import type { BossRanks, HomeData, SavedRaid, WclRank, ZoneProgress } from '../.
 import { loadBossRanks, loadRaids } from '../api';
 import { mmss, n0 } from '../format';
 import { RANK_CSS, ZonePicker, mainZone, useHome } from './Home';
-import { BossIcon } from './icons';
+import { BossIcon, EmptyNote } from './icons';
 import { RaidCardBody } from './RaidCard';
 import { go, hashParam } from '../url';
 
@@ -35,7 +35,7 @@ export default function RankingsPage() {
     return (
       <section className="panel">
         <h1>Rankings</h1>
-        <p className="muted empty-note">Once the guild&rsquo;s first log is on Past raids, each raid shows here with the guild&rsquo;s world, region and realm ranks, every boss&rsquo;s top guilds by first kill or fastest kill, and the raids you&rsquo;ve logged there. Use <strong>/raidend</strong> in Discord after a raid, or add a log on <a href="/#/raids">Past raids</a>.</p>
+        <EmptyNote icon="achievement_dungeon_gloryoftheraider">Once the guild&rsquo;s first log is on Past raids, each raid shows here with the guild&rsquo;s world, region and realm ranks, every boss&rsquo;s top guilds by first kill or fastest kill, and the raids you&rsquo;ve logged there. Use <strong>/raidend</strong> in Discord after a raid, or add a log on <a href="/#/raids">Past raids</a>.</EmptyNote>
       </section>
     );
   }
@@ -67,6 +67,14 @@ export default function RankingsPage() {
         </div>
         <div className="zone-card">
           <RaidCardBody id={zone.id} name={zone.name} heading="h2" sub={`${zone.killed} of ${zone.total} bosses killed`} />
+        </div>
+        <div className="boss-picker" role="group" aria-label="Bosses">
+          <button type="button" className={`boss-pick${picked ? '' : ' on'}`} aria-pressed={!picked} onClick={() => pickBoss(null)}>Whole raid</button>
+          {zone.bosses.map((b) => (
+            <button key={b.encounterId} type="button" className={`boss-pick${picked?.encounterId === b.encounterId ? ' on' : ''}`} aria-pressed={picked?.encounterId === b.encounterId} onClick={() => pickBoss(b.encounterId)}>
+              <BossIcon id={b.encounterId} size="small" />{b.name}
+            </button>
+          ))}
         </div>
         <p className="help">The guild&rsquo;s ranks from Warcraft Logs{d.wcl ? '' : ' (link the guild on the Admin page to see your own)'}: the whole raid, or one boss&rsquo;s top guilds by first kill or fastest kill.</p>
       </section>

@@ -8,7 +8,7 @@ import Glyph from './Glyph';
 import { Schedule, mainZone } from './Home';
 import PlayerTip from './PlayerTip';
 import { Attendance, RANGES, type RangeId, outcome } from './RaidsPage';
-import { ClassIcon, classCss, parseCss } from './icons';
+import { classCss, ClassIcon, EmptyNote, parseCss, RoleIcon, TileIcon } from './icons';
 
 const hm = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : `${Math.round(s / 60)}m`);
 
@@ -88,7 +88,7 @@ export default function GuildPage() {
       ) : (
         <section className="panel">
           <h2 className="panel-title">Attendance</h2>
-          <p className="muted empty-note">Who came to each raid, worked out from the logs, shows here once raids are on <a href="/#/raids">Past raids</a>.</p>
+          <EmptyNote icon="inv_misc_book_11">Who came to each raid, worked out from the logs, shows here once raids are on <a href="/#/raids">Past raids</a>.</EmptyNote>
         </section>
       )}
     </>
@@ -98,7 +98,7 @@ export default function GuildPage() {
 function Kpi({ glyph, label, value, sub }: { glyph: 'calendar' | 'check' | 'timer' | 'users'; label: string; value: string; sub: string }) {
   return (
     <div className="kpi">
-      <div className="kpi-head"><span className="kpi-icon"><Glyph name={glyph} size={18} /></span>{label}</div>
+      <div className="kpi-head"><TileIcon glyph={glyph} />{label}</div>
       <div className="kpi-value">{value}</div>
       <div className="kpi-sub">{sub}</div>
     </div>
@@ -118,19 +118,19 @@ function GuildComposition({ roster, rankings, period }: { roster: HomeData['rost
         <span className="muted small">Everyone in a raid, {period}</span>
       </div>
       {roster.length === 0 ? (
-        <p className="muted empty-note">Nobody raided {period}. Pick a longer period at the top, or the team shows here once raids are on <a href="/#/raids">Past raids</a>.</p>
+        <EmptyNote icon="inv_misc_groupneedmore">Nobody raided {period}. Pick a longer period at the top, or the team shows here once raids are on <a href="/#/raids">Past raids</a>.</EmptyNote>
       ) : (
         <div className="guild-comp">
           {ROLES.map(([role, label]) => {
             const list = roster.filter((p) => (p.role ?? 'dps') === role).sort((a, b) => (b.itemLevel ?? 0) - (a.itemLevel ?? 0) || a.name.localeCompare(b.name));
             return (
               <div key={role} className={`guild-comp-col ${role}`}>
-                <h3 className="guild-comp-head">{label} <span className="count-badge">{list.length}</span></h3>
+                <h3 className="guild-comp-head"><RoleIcon role={role} size={20} />{label} <span className="count-badge">{list.length}</span></h3>
                 {list.length === 0 ? <p className="muted small">None yet</p> : (
                   <ul className="guild-comp-list">
                     {list.map((p) => (
                       <li key={p.name}>
-                        <ClassIcon className={p.className} size={18} />
+                        <ClassIcon className={p.className} spec={p.specName} size={18} />
                         <PlayerTip
                           name={p.name}
                           className={p.className}
