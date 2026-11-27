@@ -1,6 +1,7 @@
 // Offline check of the analysis logic with mock WCL-shaped data (modelled on the Magtheridon kill).
 import assert from 'node:assert/strict';
-import { buildFindings, buildSnapshot, findGaps, healingFeedback, possibleUses } from '../server/analysis';
+import { buildFindings, buildSnapshot, findGaps, healingFeedback, insightFeedback, possibleUses } from '../server/analysis';
+import { ADVICE, LIMITS, asLine, say } from '../server/coach';
 import type { Fight, PlayerTables } from '../server/wcl';
 import { healingFrom, seriesFrom, seriesFromSeconds, survivalFrom } from '../server/dashboard';
 import { statTooltip } from '../src/statInfo';
@@ -169,5 +170,15 @@ const takenLine = seriesFrom([
 ], 0, 30, 400, true);
 assert.equal(takenLine[10].note, 'Mostly Shatter');
 assert.equal(takenLine.length, 30);
+
+// One source of wording: the site's analysis says what the bot and the officers' lists say
+{
+  const me: any = { host: 'forever.warcraftlogs.com', fightSeconds: LIMITS.potionFight + 30, potions: { used: [], prePot: false }, dots: [{ name: 'Corruption', uptimePct: 70, sharePct: 10 }], consumes: { flask: false, elixirs: 0, food: true } };
+  const fb = insightFeedback(me, false);
+  assert.ok(fb.work.some((w) => w.title === say.potionMissed(null, false).title && w.detail === ADVICE.potion(false)), 'potion advice from the coach');
+  assert.ok(fb.work.some((w) => w.detail === say.flaskMissing(null).detail), 'flask advice from the coach');
+  assert.ok(fb.work.some((w) => w.title === say.dotsLow([{ name: 'Corruption', up: 70 }]).title), 'damage over time from the coach');
+  assert.equal(asLine(say.cooldownsMissed(['A 1 of 2', 'B 0 of 1'])), `Cooldowns left unused: A 1 of 2 and B 0 of 1. ${ADVICE.cooldowns}`);
+}
 
 console.log('\nAll analysis checks passed.');

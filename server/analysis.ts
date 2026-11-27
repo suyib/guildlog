@@ -1,3 +1,4 @@
+import { ADVICE, LIMITS, say } from './coach.js';
 import { GAP_SECONDS, IGNORE_FOR_GAPS, cooldownFor } from './cooldowns.js';
 import { isGeneralBuff } from './buffs.js';
 import { DEFENSE_CAP_NOTE, tankCanBeCritCapped } from './gameData.js';
@@ -240,7 +241,7 @@ export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Fi
     out.push({
       severity: (theirs?.uses ?? 0) > uses || uses === 0 ? 'high' : 'medium',
       title: `${name}: ${uses} of ${possible} possible uses`,
-      detail: `You used it ${uses}×${when} in a ${mmss(me.fightSeconds)} fight with a ${Math.round((cd / 60) * 10) / 10}-minute cooldown.${refPart} Use it early and again as soon as it's ready unless a big damage window is due within a few seconds.`,
+      detail: `You used it ${uses}×${when} in a ${mmss(me.fightSeconds)} fight with a ${Math.round((cd / 60) * 10) / 10}-minute cooldown.${refPart} ${ADVICE.cooldowns}`,
     });
   }
 
@@ -271,7 +272,7 @@ export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Fi
       severity: gapTotal / me.fightSeconds > 0.08 ? 'high' : 'medium',
       title: `${Math.round(gapTotal)}s with no casts`,
       detail: `Longest gaps: ${worst.map((g) => `${mmss(g.start)}–${mmss(g.end)} (${Math.round(g.seconds)}s)`).join(', ')}.` +
-        (refGap !== null ? ` ${refName} had ${Math.round(refGap)}s.` : '') + ' Check whether these were forced (movement, phase change) or avoidable.',
+        (refGap !== null ? ` ${refName} had ${Math.round(refGap)}s.` : '') + ` ${ADVICE.gaps}`,
     });
   }
 
@@ -305,7 +306,7 @@ export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Fi
   // 5. Deaths
   for (const d of me.deaths) {
     const recap = recapLine(d, short);
-    out.push({ severity: 'high', title: `Died at ${mmss(d.seconds)}`, detail: `Killing blow: ${d.by}.${recap ? ` ${recap}.` : ''} Everything after this was lost damage.` });
+    out.push({ severity: 'high', ...say.died(`Died at ${mmss(d.seconds)}`, `Killing blow: ${d.by}.${recap ? ` ${recap}.` : ''}`) });
   }
 
   // Potions, damage over time and tanking (from the whole fight's events)
@@ -319,20 +320,21 @@ export function buildFindings(me: PlayerSnapshot, comparisons: Comparison[]): Fi
       out.push({
         severity: 'medium',
         title: 'More damage taken from some abilities',
-        detail: worse.map((d) => `${d.name}: ${Math.round(d.total).toLocaleString()} vs ${Math.round(theirs.get(d.name) ?? 0).toLocaleString()}`).join('; ') + '. Often this is standing in something; moving out sooner keeps you casting.',
+        detail: worse.map((d) => `${d.name}: ${Math.round(d.total).toLocaleString()} vs ${Math.round(theirs.get(d.name) ?? 0).toLocaleString()}`).join('; ') + `. Often this is standing in something. ${ADVICE.avoidable}`,
       });
     }
   }
 
   // 7. Activity (general)
-  if (me.activePct !== null && me.activePct < 95) {
-    out.push({ severity: 'medium', title: `Active ${me.activePct}% of the fight`, detail: `${ref?.activePct ? `${refName}: ${ref.activePct}%. ` : ''}Time spent not attacking is the cheapest damage to win back.` });
+  if (me.activePct !== null && me.activePct < LIMITS.activeLow) {
+    const pt = say.activeLow(`${me.activePct}% of the fight`);
+    out.push({ severity: 'medium', title: pt.title, detail: `${ref?.activePct ? `${refName}: ${ref.activePct}%. ` : ''}${pt.detail}` });
   }
 
   // 8. Misses on your main abilities (your own numbers)
   // Only abilities you cast yourself (not auto attacks or pet abilities).
-  for (const a of me.abilities.filter((x) => !x.isPet && !IGNORE_FOR_GAPS.has(x.name) && (me.castCounts[x.name] ?? 0) >= 10 && (x.missPct ?? 0) >= 4).slice(0, 2)) {
-    out.push({ severity: 'low', title: `${a.missPct}% misses on ${a.name}`, detail: 'Check whether you are at the hit cap for boss-level targets.' });
+  for (const a of me.abilities.filter((x) => !x.isPet && !IGNORE_FOR_GAPS.has(x.name) && (me.castCounts[x.name] ?? 0) >= LIMITS.missCasts && (x.missPct ?? 0) >= LIMITS.missPct).slice(0, 2)) {
+    out.push({ severity: 'low', ...say.misses(a.name, a.missPct!) });
   }
 
   // 9. Item level (general)
@@ -355,8 +357,8 @@ export function buildStrengths(me: PlayerSnapshot, comparisons: Comparison[], ge
   const classRef = comparisons.find((c) => c.sameClass)?.snapshot;
 
   // Parse
-  if (me.parsePercent !== null && me.parsePercent >= 75) {
-    out.push({ weight: 10, title: `Parsed ${Math.round(me.parsePercent)}`, detail: me.parsePercent >= 95 ? 'A top-tier performance for your spec on this boss.' : 'Better than most of your spec on this boss.' });
+  if (me.parsePercent !== null && me.parsePercent >= LIMITS.parseStrong) {
+    out.push({ weight: 10, title: `Parsed ${Math.round(me.parsePercent)}`, detail: me.parsePercent >= LIMITS.parseTop ? 'A top-tier performance for your spec on this boss.' : 'Better than most of your spec on this boss.' });
   }
 
   // DPS against the comparisons
@@ -375,12 +377,12 @@ export function buildStrengths(me: PlayerSnapshot, comparisons: Comparison[], ge
   if (me.deaths.length === 0 && (!ref || ref.deaths.length > 0)) {
     out.push({ weight: ref && ref.deaths.length ? 8 : 5, title: 'Stayed alive the whole fight', detail: ref && ref.deaths.length ? `${ref.name} died; you kept doing damage to the end.` : 'No deaths, so no lost damage.' });
   }
-  if (me.activePct !== null && (me.activePct >= 95 || (ref?.activePct && me.activePct >= ref.activePct + 2))) {
+  if (me.activePct !== null && (me.activePct >= LIMITS.activeGood || (ref?.activePct && me.activePct >= ref.activePct + 2))) {
     out.push({ weight: 7, title: `Active ${me.activePct}% of the fight`, detail: ref?.activePct ? `${ref.name}: ${ref.activePct}%. Little time lost to downtime.` : 'Almost no time spent not attacking.' });
   }
   const myGap = me.gaps.reduce((s, g) => s + g.seconds, 0);
   if (me.gaps.length === 0) {
-    out.push({ weight: 6, title: 'No gaps over 4 seconds', detail: 'You kept casting from pull to kill.' });
+    out.push({ weight: 6, title: `No gaps over ${LIMITS.gapSeconds} seconds`, detail: 'You kept casting from pull to kill.' });
   } else if (ref && myGap + 3 < ref.gaps.reduce((s, g) => s + g.seconds, 0)) {
     out.push({ weight: 5, title: 'Less downtime than ' + ref.name, detail: `${Math.round(myGap)}s with no casts vs ${Math.round(ref.gaps.reduce((s, g) => s + g.seconds, 0))}s.` });
   }
@@ -415,7 +417,7 @@ export function buildStrengths(me: PlayerSnapshot, comparisons: Comparison[], ge
   if (gear?.length) {
     const enchantable = gear.filter((g) => g.enchantable);
     if (enchantable.length && enchantable.every((g) => g.enchant || g.enchantId)) {
-      out.push({ weight: 4, title: 'Fully enchanted', detail: `All ${enchantable.length} enchantable slots have an enchant.` });
+      out.push({ weight: 4, ...say.enchantsFull(enchantable.length) });
     }
   }
 
@@ -468,34 +470,31 @@ export function healingFeedback(me: PlayerSnapshot, h: Healing, ref?: PlayerSnap
   }
 
   // Parse and place among the healers
-  if (h.parse !== null && h.parse < 25) work.push({ severity: 'high', title: `Healing parse ${round(h.parse)}`, detail: 'Below most players of your spec on this boss. Overhealing and time spent not casting (below) are the usual reasons.' });
-  if (h.parse !== null && h.parse >= 75) good.push({ title: `Healing parse ${round(h.parse)}`, detail: 'Better than most players of your spec on this boss.' });
+  if (h.parse !== null && h.parse < LIMITS.parseWeak) work.push({ severity: 'high', title: `Healing parse ${round(h.parse)}`, detail: 'Below most players of your spec on this boss. Overhealing and time spent not casting (below) are the usual reasons.' });
+  if (h.parse !== null && h.parse >= LIMITS.parseStrong) good.push({ title: `Healing parse ${round(h.parse)}`, detail: 'Better than most players of your spec on this boss.' });
   if (h.rank && h.rank.of > 1 && h.rank.place === 1) good.push({ title: 'Top healer in the raid', detail: `Most healing of the ${h.rank.of} healers on this fight.` });
 
   // Overhealing: overall, then the spells that waste the most
-  if (h.overhealPct !== null && h.overhealPct >= 45) {
-    work.push({ severity: 'medium', title: `${round(h.overhealPct)}% overhealing`, detail: 'Almost half of what you cast healed people who were already full. Waiting a moment longer, or switching to a smaller heal, saves mana for when it’s needed.' });
-  } else if (h.overhealPct !== null && h.overhealPct <= 25) {
-    good.push({ title: `Only ${round(h.overhealPct)}% overhealing`, detail: 'Very little of your healing was wasted on full health bars.' });
-  }
-  for (const a of h.abilities.filter((x) => x.share >= 0.1 && (x.overhealPct ?? 0) >= 60).slice(0, 2)) {
-    work.push({ severity: 'low', title: `${a.name}: ${round(a.overhealPct!)}% overheal`, detail: `${a.name} is ${round(a.share * 100)}% of your healing but mostly lands on people who are already full. Use it later, or on someone lower.` });
+  if (h.overhealPct !== null && h.overhealPct >= LIMITS.overhealHigh) work.push({ severity: 'medium', ...say.overhealHigh(h.overhealPct) });
+  else if (h.overhealPct !== null && h.overhealPct <= LIMITS.overhealLow) good.push(say.overhealLow(h.overhealPct));
+  for (const a of h.abilities.filter((x) => x.share >= LIMITS.overhealSpellShare && (x.overhealPct ?? 0) >= LIMITS.overhealSpell).slice(0, 2)) {
+    work.push({ severity: 'low', ...say.overhealSpell(a.name, a.overhealPct!, a.share) });
   }
 
   // Staying busy (healers have quiet moments, so the bar is lower than for damage)
-  if (h.activePct !== null && h.activePct < 60) work.push({ severity: 'medium', title: `Active ${h.activePct}% of the fight`, detail: 'A lot of time not casting. Keeping a heal-over-time or shield rolling on the tank, or adding damage in quiet moments, helps.' });
-  else if (h.activePct !== null && h.activePct >= 85) good.push({ title: `Active ${h.activePct}% of the fight`, detail: 'Always casting something.' });
+  if (h.activePct !== null && h.activePct < LIMITS.healerActiveLow) work.push({ severity: 'medium', ...say.activeLow(`${h.activePct}% of the fight`, true) });
+  else if (h.activePct !== null && h.activePct >= LIMITS.healerActiveGood) good.push(say.activeGood(`${h.activePct}% of the fight`));
 
   // Cooldowns (mana and healing cooldowns that are tracked)
   for (const c of me.cooldowns.filter((x) => x.possible > 0 && x.uses < x.possible).slice(0, 2)) {
-    work.push({ severity: 'medium', title: `${c.name}: ${c.uses} of ${c.possible} possible uses`, detail: 'Use it early and again as soon as it’s ready, unless a big damage phase is coming within a few seconds.' });
+    work.push({ severity: 'medium', title: `${c.name}: ${c.uses} of ${c.possible} possible uses`, detail: ADVICE.cooldowns });
   }
-  if (me.cooldowns.length && me.cooldowns.every((x) => x.uses >= x.possible)) good.push({ title: 'Cooldowns on time', detail: 'Every tracked cooldown used as often as the fight allowed.' });
+  if (me.cooldowns.length && me.cooldowns.every((x) => x.uses >= x.possible)) good.push(say.cooldownsOnTime());
 
   // Alive, and prepared
   if (me.deaths.length) {
     const recap = recapLine(me.deaths[0], short);
-    work.push({ severity: 'high', title: `Died at ${mmss(me.deaths[0].seconds)}`, detail: `Killed by ${me.deaths[0].by}.${recap ? ` ${recap}.` : ''} A dead healer puts the whole raid at risk; the Buffs & survival page shows what hit you.` });
+    work.push({ severity: 'high', ...say.died(`Died at ${mmss(me.deaths[0].seconds)}`, `Killed by ${me.deaths[0].by}.${recap ? ` ${recap}.` : ''} A dead healer puts the whole raid at risk; the Buffs & survival page shows what hit you.`) });
   } else good.push({ title: 'Stayed alive the whole fight', detail: 'No deaths, so no lost healing.' });
   const extra = insightFeedback(me, true);
   work.push(...extra.work);
@@ -515,29 +514,33 @@ const short = (v: number) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}m` : v >= 1e3 ?
 export function insightFeedback(me: PlayerSnapshot, healer: boolean): { work: Finding[]; good: Strength[] } {
   const work: Finding[] = [];
   const good: Strength[] = [];
-  const long = me.fightSeconds >= 90;
+  const long = me.fightSeconds >= LIMITS.potionFight;
 
   // Potions: one before the pull and one during the fight
   const pots = me.potions;
   if (pots && long) {
     const n = pots.used.length + (pots.prePot ? 1 : 0);
     if (n === 0) {
-      work.push({ severity: 'medium', title: 'No potion used', detail: `A combat potion is free ${healer ? 'healing (a mana potion)' : 'damage'}: drink one just before the pull and another during the fight.` });
+      work.push({ severity: 'medium', ...say.potionMissed(null, healer) });
     } else {
       good.push({ title: pots.prePot && pots.used.length ? 'Pre-potted and used a potion' : 'Potion used', detail: [pots.prePot ? 'One running at the pull' : '', ...pots.used.map((u) => `${u.name} at ${mmss(u.seconds)}`)].filter(Boolean).join(', ') + '.' });
-      if (!pots.prePot && me.fightSeconds >= 150) work.push({ severity: 'low', title: 'Potion before the pull too', detail: 'Drinking one just before the pull gives you a second potion in a fight this long.' });
+      if (!pots.prePot && me.fightSeconds >= LIMITS.prePotFight) work.push({ severity: 'low', ...say.prePot() });
     }
   }
 
   // Damage over time kept up on the main target
-  const dots = (me.dots ?? []).filter((d) => d.sharePct >= 5);
-  const lowDots = dots.filter((d) => d.uptimePct < 80);
+  const dots = (me.dots ?? []).filter((d) => d.sharePct >= LIMITS.dotShare);
+  const lowDots = dots.filter((d) => d.uptimePct < LIMITS.dotLow);
   for (const d of lowDots.slice(0, 2)) {
-    work.push({ severity: d.uptimePct < 60 ? 'high' : 'medium', title: `${d.name} up ${d.uptimePct}% of the fight`, detail: `It's ${d.sharePct}% of your damage, so every second it's missing costs you. Refresh it just before it runs out.` });
+    const pt = say.dotsLow([{ name: d.name, up: d.uptimePct }]);
+    work.push({ severity: d.uptimePct < 60 ? 'high' : 'medium', title: pt.title, detail: `It's ${d.sharePct}% of your damage, so every second it's missing costs you. ${pt.detail}` });
   }
-  if (dots.length && !lowDots.length && dots.every((d) => d.uptimePct >= 90)) {
-    good.push({ title: 'Damage over time kept up', detail: dots.map((d) => `${d.name} ${d.uptimePct}%`).join(', ') + '.' });
-  }
+  if (dots.length && !lowDots.length && dots.every((d) => d.uptimePct >= LIMITS.dotGood)) good.push(say.dotsGood(dots.map((d) => ({ name: d.name, up: d.uptimePct }))));
+
+  // Flask or elixirs, and food (from the whole fight's buffs)
+  const c = me.consumes;
+  if (c && !c.flask && !c.elixirs) work.push({ severity: 'medium', ...say.flaskMissing(null) });
+  if (c && !c.food && long) work.push({ severity: 'low', ...say.foodMissing(null) });
 
   // Tanks: crits from the boss's melee mean you're under the defense cap
   const m = me.mitigation;

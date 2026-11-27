@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.47.0',
+    date: '2026-11-27',
+    changes: [
+      'One voice for the site and the Discord bot: every \u201cwhat went well\u201d, \u201cwhat to work on\u201d, \u201croom to improve\u201d and \u201cwhat this means\u201d now comes from the same place, with the same limits and the same advice, so a DM, /performance, an analysis and a raid page never disagree.',
+      'Limits that didn\u2019t match are now the same everywhere: active time is pointed out under 90% and praised from 95% (healers 60% and 85%); damage over time under 80% (praised from 90%); overhealing from 45% overall or 60% on one big spell; misses from 4% on a spell cast 10+ times. The officers\u2019 \u201croom to improve\u201d still looks for gains above those, by design.',
+      'Your analysis now points out a missing flask or elixir (and food on longer fights), like the bot and raid summaries already did.',
+    ],
+  },
+  {
     version: '0.46.3',
     date: '2026-11-27',
     changes: [

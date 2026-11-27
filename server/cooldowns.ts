@@ -1,5 +1,6 @@
 // GAME CONTENT (Burning Crusade for now; replace with WoW Forever's values once they're known).
 // Major cooldowns to audit, by cast name, with the cooldown in seconds.
+import { LIMITS } from './coach.js';
 const TBC: Record<string, number> = {
   // Hunter
   'Bestial Wrath': 120,
@@ -47,4 +48,4 @@ export function cooldownFor(name: string): number | undefined {
 export const IGNORE_FOR_GAPS = new Set(['Auto Shot', 'Shoot', 'Melee', 'Auto Attack', 'Attack']);
 
 // A gap is any stretch with no non-auto casts longer than this many seconds.
-export const GAP_SECONDS = 4;
+export const GAP_SECONDS = LIMITS.gapSeconds;

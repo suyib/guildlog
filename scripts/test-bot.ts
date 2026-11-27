@@ -136,7 +136,7 @@ assert.equal(personalPage('overview', digest, 'Nobody', null), null);
 const quick = personalPage('summary', digest, 'Suy', null)!;
 const quickFields = Object.fromEntries(quick.embeds![0].fields!.map((f) => [f.name, f.value]));
 assert.ok(quickFields['What went well'].includes('**No deaths**'));
-assert.ok(quickFields['What to work on'].includes('Bestial Wrath 2/4'), 'under-used cooldowns are listed');
+assert.ok(quickFields['What to work on'].includes('Bestial Wrath 2 of 4'), 'under-used cooldowns are listed');
 assert.ok(quickFields['What to work on'].includes('No enchant on: head'));
 // Six page buttons, split across two rows (Discord allows five per row)
 assert.equal(summary.components!.length, 2);
@@ -303,7 +303,7 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
   assert.equal(qf['Healing parse'], '85');
   assert.equal(qf['Average HPS'], '1,125', 'healing on kills over time on kills');
   assert.ok(qf['What went well'].includes('Top healer'));
-  assert.ok(qf['What to work on'].includes('Circle of Healing overheals'));
+  assert.ok(qf['What to work on'].includes('Circle of Healing: 70% overheal'));
   const hb = personalPage('damage', hd, 'Healz', null)!.embeds![0];
   assert.ok(hb.title!.startsWith('Healing breakdown'));
   assert.ok(hb.fields!.some((f) => f.value.includes('**Circle of Healing**')));
@@ -538,7 +538,7 @@ delete process.env.SITE_ADMIN_IDS;
   const fd = (o: any) => ({ name: 'Ilrox', className: 'Warlock', specName: 'Destruction', role: 'dps', total: 1, dps: 1, parse: 92, itemLevel: 114, activePct: 96, abilities: [], casts: [], cooldowns: [], deaths: [], taken: 0, avoidable: 0, avoidableTop: [], potions: { used: [{ name: 'Destruction Potion', seconds: 20 }], prePot: true }, ...o });
   const good = characterMessage({ label: 'ID 10', oneNight: false, minKills: 1 }, rows as any, 'Ilrox', '', [{ id: 1, name: 'Gruul', kill: true, seconds: 120, players: [fd({ activePct: 85, cooldowns: [{ name: 'Curse of Doom', uses: 1, possible: 2 }], potions: { used: [], prePot: false } })] }] as any);
   const room = good.embeds![1].description!;
-  assert.match(room, /Active time Gruul 85%/);
+  assert.match(room, /Active 85% on Gruul/);
   assert.match(room, /Curse of Doom 1 of 2 on Gruul/);
   assert.match(room, /No potion on Gruul/);
   const top = characterMessage({ label: 'ID 10', oneNight: false, minKills: 1 }, [row('Best', 'Gruul', 99.5), row('Best', 'Maulgar', 99.2)] as any, 'Best', '');

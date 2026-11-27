@@ -1,4 +1,5 @@
 // What the bot posts: the raid summary in the channel, and each person's own summaries by DM.
+import { LIMITS, listed, say } from '../coach.js';
 import { BRAND, CREDIT, type Embed, type MessageBody, bugButton, button, env, linkButton, row } from './api.js';
 import { activeOver, raidFeedback } from '../raidFeedback.js';
 import { DEFENSE_CAP_NOTE, tankCanBeCritCapped } from '../gameData.js';
@@ -254,8 +255,8 @@ function quickSummary(rows: Rows): { good: Point[]; work: Point[] } {
   const specName = `${spaced(me.specName)} ${spaced(me.className)}`.trim();
 
   // Parses
-  if (h.best && h.best.p.parse! >= 75) good.push({ title: `Best boss: ${h.best.fight.name}`, detail: `Parse ${Math.round(h.best.p.parse!)}.` });
-  if (h.worst && h.parseAvg !== null && rows.length > 1 && h.parseAvg - h.worst.p.parse! >= 15) {
+  if (h.best && h.best.p.parse! >= LIMITS.parseStrong) good.push({ title: `Best boss: ${h.best.fight.name}`, detail: `Parse ${Math.round(h.best.p.parse!)}.` });
+  if (h.worst && h.parseAvg !== null && rows.length > 1 && h.parseAvg - h.worst.p.parse! >= LIMITS.weakBossGap) {
     work.push({ title: `Weakest boss: ${h.worst.fight.name}`, detail: `Parse ${Math.round(h.worst.p.parse!)} against your average of ${Math.round(h.parseAvg)}; its full analysis shows what was different.` });
   }
 
@@ -278,14 +279,14 @@ function quickSummary(rows: Rows): { good: Point[]; work: Point[] } {
   else work.push({ title: `Died ${deaths.length}×`, detail: `${deaths.slice(0, 3).join(', ')}. The survival page has the details.` });
 
   // Activity
-  if (h.activeAvg !== null && h.activeAvg >= 95) good.push({ title: 'Always busy', detail: `Active ${h.activeAvg.toFixed(1)}% of the time.` });
-  else if (h.activeAvg !== null && h.activeAvg < 90) work.push({ title: 'Time spent not casting', detail: `Active ${h.activeAvg.toFixed(1)}% of the time on average; aim for 95% or more. Pre-positioning and instant casts while moving help.` });
+  if (h.activeAvg !== null && h.activeAvg >= LIMITS.activeGood) good.push(say.activeGood(`${h.activeAvg.toFixed(1)}% on average`));
+  else if (h.activeAvg !== null && h.activeAvg < LIMITS.activeLow) work.push(say.activeLow(`${h.activeAvg.toFixed(1)}% on average`));
 
   // Cooldowns
   const cds = sumCooldowns(rows);
   const under = [...cds].filter(([, c]) => c.uses < c.possible);
-  if (cds.size && !under.length) good.push({ title: 'Cooldowns on time', detail: 'Used as often as the fights allowed.' });
-  if (under.length) work.push({ title: 'Use cooldowns more', detail: `${under.slice(0, 3).map(([n, c]) => `${n} ${c.uses}/${c.possible}`).join(', ')}. Use them at the pull and again as soon as they’re ready.` });
+  if (cds.size && !under.length) good.push(say.cooldownsOnTime('Used as often as the fights allowed.'));
+  if (under.length) work.push(say.cooldownsMissed(under.slice(0, 3).map(([n, c]) => `${n} ${c.uses} of ${c.possible}`)));
   const extra = insightPoints(rows, false);
   work.push(...extra.work);
   good.push(...extra.good);
@@ -307,8 +308,8 @@ function quickSummary(rows: Rows): { good: Point[]; work: Point[] } {
   // Gear
   if (h.gearRow) {
     const missing = missingEnchants(h.gearRow.p);
-    if (!missing.length) good.push({ title: 'Fully enchanted', detail: 'Every slot that takes an enchant has one.' });
-    else work.push({ title: 'Missing enchants', detail: `No enchant on: ${missing.join(', ')}. Cheap, permanent damage and survival.` });
+    if (!missing.length) good.push(say.enchantsFull());
+    else work.push(say.enchantsMissing(missing));
   }
 
   return { good: good.slice(0, 6), work: work.slice(0, 6) };
@@ -323,25 +324,29 @@ function insightPoints(rows: Rows, healer: boolean): { good: Point[]; work: Poin
   const work: Point[] = [];
   // Potions on bosses of 90 seconds or more: only known for bosses read in full, so judged once
   // at least half of them have been (otherwise one boss would speak for the whole night)
-  const long = rows.filter((r) => r.fight.seconds >= 90);
+  const long = rows.filter((r) => r.fight.seconds >= LIMITS.potionFight);
   const potRows = long.filter((r) => r.p.potions);
   if (potRows.length && potRows.length * 2 >= long.length) {
     const none = potRows.filter((r) => !r.p.potions!.used.length && !r.p.potions!.prePot).map((r) => r.fight.name);
     const of = potRows.length < long.length ? ` (${potRows.length} of ${long.length} bosses checked)` : '';
-    if (none.length) work.push({ title: 'Potions', detail: `None used on ${none.slice(0, 4).join(', ')}${of}. One before the pull and one during the fight is free ${healer ? 'healing' : 'damage'}.` });
+    if (none.length) work.push(say.potionMissed(`${listed(none.slice(0, 4))}${of}`, healer));
     else good.push({ title: 'Potions', detail: potRows.length === 1 ? `Used on ${potRows[0].fight.name}.` : `Used on every boss${of}.` });
   }
   // Damage over time: uptime across the night, weighted by fight length
   const dots = new Map<string, { up: number; secs: number }>();
   for (const { fight, p } of rows) for (const d of p.dots ?? []) {
-    if (d.sharePct < 5) continue;
+    if (d.sharePct < LIMITS.dotShare) continue;
     const x = dots.get(d.name) ?? { up: 0, secs: 0 };
     dots.set(d.name, { up: x.up + d.uptimePct * fight.seconds, secs: x.secs + fight.seconds });
   }
   const dotAvg = [...dots].map(([name, x]) => ({ name, up: Math.round(x.up / (x.secs || 1)) }));
-  const lowDots = dotAvg.filter((d) => d.up < 80);
-  if (lowDots.length) work.push({ title: 'Keep your damage over time up', detail: `${lowDots.slice(0, 3).map((d) => `${d.name} ${d.up}%`).join(', ')} on average. Refresh just before it runs out.` });
-  else if (dotAvg.length && dotAvg.every((d) => d.up >= 90)) good.push({ title: 'Damage over time kept up', detail: dotAvg.slice(0, 3).map((d) => `${d.name} ${d.up}%`).join(', ') + '.' });
+  const lowDots = dotAvg.filter((d) => d.up < LIMITS.dotLow);
+  if (lowDots.length) work.push(say.dotsLow(lowDots.slice(0, 3)));
+  else if (dotAvg.length && dotAvg.every((d) => d.up >= LIMITS.dotGood)) good.push(say.dotsGood(dotAvg.slice(0, 3)));
+  // Flask or elixirs (once the bosses have been read in full)
+  const consRows = rows.filter((r) => r.p.consumes);
+  const noFlask = consRows.filter((r) => !r.p.consumes!.flask && !r.p.consumes!.elixirs).map((r) => r.fight.name);
+  if (noFlask.length) work.push(say.flaskMissing(listed(noFlask.slice(0, 4))));
   // Tanks: crits from bosses' melee mean they're under the defense cap
   const tankRows = rows.filter((r) => r.p.role === 'tank' && r.p.mitigation && r.p.mitigation.swings >= 30 && tankCanBeCritCapped(pageHost));
   if (tankRows.length) {
@@ -426,11 +431,13 @@ function rotationFields(rows: Rows, healer = false): Field[] {
 
   const good: Point[] = [];
   const work: Point[] = [];
-  if (h.activeAvg !== null && h.activeAvg >= 95) good.push({ title: 'Always busy', detail: `${h.activeAvg.toFixed(1)}% active on average.` });
-  else if (h.activeAvg !== null && h.activeAvg < 90) work.push({ title: 'Time spent not casting', detail: `${h.activeAvg.toFixed(1)}% active on average; aim for 95% or more. Gaps usually come from movement or waiting on cooldowns.` });
+  const lo = healer ? LIMITS.healerActiveLow : LIMITS.activeLow;
+  const hi = healer ? LIMITS.healerActiveGood : LIMITS.activeGood;
+  if (h.activeAvg !== null && h.activeAvg >= hi) good.push(say.activeGood(`${h.activeAvg.toFixed(1)}% on average`));
+  else if (h.activeAvg !== null && h.activeAvg < lo) work.push(say.activeLow(`${h.activeAvg.toFixed(1)}% on average`, healer));
   const under = [...cds].filter(([, c]) => c.uses < c.possible);
-  if (cds.size && !under.length) good.push({ title: 'Cooldowns on time', detail: 'Every tracked cooldown used as often as possible.' });
-  for (const [name, c] of under.slice(0, 3)) work.push({ title: name, detail: `Used ${c.uses} of ${c.possible} possible times. Press it at the pull and again as soon as it’s ready.` });
+  if (cds.size && !under.length) good.push(say.cooldownsOnTime());
+  if (under.length) work.push(say.cooldownsMissed(under.slice(0, 3).map(([n, c]) => `${n} ${c.uses} of ${c.possible}`)));
   for (const [name, v] of [...mine.perMinute].sort((a, b) => b[1] - a[1]).slice(0, 6)) {
     const other = peerCpm.get(name);
     if (other !== undefined && other >= 1 && v < other * 0.8) work.push({ title: `Fewer ${name} casts`, detail: `${v.toFixed(1)} a minute against ${other.toFixed(1)} for others of your spec.` });
@@ -608,15 +615,15 @@ function healerQuickSummary(rows: Rows): { good: Point[]; work: Point[] } {
   const work: Point[] = [];
   const h = healerHeadline(rows);
 
-  if (h.best && h.best.p.healing.parse! >= 75) good.push({ title: `Best boss: ${h.best.fight.name}`, detail: `Healing parse ${Math.round(h.best.p.healing.parse!)}.` });
-  if (h.worst && h.parseAvg !== null && rows.length > 1 && h.parseAvg - h.worst.p.healing.parse! >= 15) {
+  if (h.best && h.best.p.healing.parse! >= LIMITS.parseStrong) good.push({ title: `Best boss: ${h.best.fight.name}`, detail: `Healing parse ${Math.round(h.best.p.healing.parse!)}.` });
+  if (h.worst && h.parseAvg !== null && rows.length > 1 && h.parseAvg - h.worst.p.healing.parse! >= LIMITS.weakBossGap) {
     work.push({ title: `Weakest boss: ${h.worst.fight.name}`, detail: `Healing parse ${Math.round(h.worst.p.healing.parse!)} against your average of ${Math.round(h.parseAvg)}.` });
   }
   const top = h.hr.filter(({ fight, p }) => healerRank(fight, p).place === 1).length;
   if (top) good.push({ title: 'Top healer', detail: `Most healing in the raid on ${bosses(top)}.` });
 
-  if (h.overhealPct !== null && h.overhealPct >= 45) work.push({ title: `${Math.round(h.overhealPct)}% overhealing`, detail: 'Almost half your healing landed on people already at full health. Waiting a moment longer, or a smaller heal, saves mana.' });
-  else if (h.overhealPct !== null && h.overhealPct <= 25) good.push({ title: `Only ${Math.round(h.overhealPct)}% overhealing`, detail: 'Very little of your healing was wasted.' });
+  if (h.overhealPct !== null && h.overhealPct >= LIMITS.overhealHigh) work.push(say.overhealHigh(h.overhealPct));
+  else if (h.overhealPct !== null && h.overhealPct <= LIMITS.overhealLow) good.push(say.overhealLow(h.overhealPct));
   // The spell that wastes the most
   const spells = new Map<string, { total: number; over: number }>();
   for (const { p } of h.hr) for (const a of p.healing.abilities) {
@@ -624,20 +631,20 @@ function healerQuickSummary(rows: Rows): { good: Point[]; work: Point[] } {
     const overAmount = a.overhealPct !== null && a.overhealPct < 100 ? (a.total * a.overhealPct) / (100 - a.overhealPct) : 0;
     spells.set(a.name, { total: x.total + a.total, over: x.over + overAmount });
   }
-  const wasteful = [...spells].map(([n, x]) => ({ n, pct: (x.over / (x.total + x.over || 1)) * 100, share: x.total / (h.total || 1) })).filter((x) => x.share >= 0.1 && x.pct >= 60).sort((a, b) => b.pct - a.pct)[0];
-  if (wasteful) work.push({ title: `${wasteful.n} overheals ${Math.round(wasteful.pct)}%`, detail: `It's ${Math.round(wasteful.share * 100)}% of your healing but mostly hits full health bars. Use it later or on someone lower.` });
+  const wasteful = [...spells].map(([n, x]) => ({ n, pct: (x.over / (x.total + x.over || 1)) * 100, share: x.total / (h.total || 1) })).filter((x) => x.share >= LIMITS.overhealSpellShare && x.pct >= LIMITS.overhealSpell).sort((a, b) => b.pct - a.pct)[0];
+  if (wasteful) work.push(say.overhealSpell(wasteful.n, wasteful.pct, wasteful.share));
 
   const deaths = rows.flatMap((r) => r.p.deaths.map((d) => `${r.fight.name} (${d.by})`));
   if (!deaths.length) good.push({ title: 'No deaths', detail: `Survived all ${bosses(rows.length)}.` });
   else work.push({ title: `Died ${deaths.length}×`, detail: `${deaths.slice(0, 3).join(', ')}. A dead healer puts the raid at risk; the survival page has the details.` });
 
-  if (h.activeAvg !== null && h.activeAvg >= 85) good.push({ title: 'Always casting', detail: `Active ${h.activeAvg.toFixed(1)}% of the time.` });
-  else if (h.activeAvg !== null && h.activeAvg < 60) work.push({ title: 'Time spent not casting', detail: `Active ${h.activeAvg.toFixed(1)}% of the time. Keeping a heal-over-time or shield going in quiet moments helps.` });
+  if (h.activeAvg !== null && h.activeAvg >= LIMITS.healerActiveGood) good.push(say.activeGood(`${h.activeAvg.toFixed(1)}% on average`));
+  else if (h.activeAvg !== null && h.activeAvg < LIMITS.healerActiveLow) work.push(say.activeLow(`${h.activeAvg.toFixed(1)}% on average`, true));
 
   const cds = sumCooldowns(rows);
   const under = [...cds].filter(([, c]) => c.uses < c.possible);
-  if (cds.size && !under.length) good.push({ title: 'Cooldowns on time', detail: 'Used as often as the fights allowed.' });
-  if (under.length) work.push({ title: 'Use cooldowns more', detail: `${under.slice(0, 3).map(([n, c]) => `${n} ${c.uses}/${c.possible}`).join(', ')}.` });
+  if (cds.size && !under.length) good.push(say.cooldownsOnTime('Used as often as the fights allowed.'));
+  if (under.length) work.push(say.cooldownsMissed(under.slice(0, 3).map(([n, c]) => `${n} ${c.uses} of ${c.possible}`)));
   const extra = insightPoints(rows, true);
   work.push(...extra.work);
   good.push(...extra.good);
@@ -645,8 +652,8 @@ function healerQuickSummary(rows: Rows): { good: Point[]; work: Point[] } {
   const withGear = [...rows].reverse().find((r) => r.p.gear?.length)?.p;
   if (withGear) {
     const missing = missingEnchants(withGear);
-    if (!missing.length) good.push({ title: 'Fully enchanted', detail: 'Every slot that takes an enchant has one.' });
-    else work.push({ title: 'Missing enchants', detail: `No enchant on: ${missing.join(', ')}.` });
+    if (!missing.length) good.push(say.enchantsFull());
+    else work.push(say.enchantsMissing(missing));
   }
   return { good: good.slice(0, 6), work: work.slice(0, 6) };
 }

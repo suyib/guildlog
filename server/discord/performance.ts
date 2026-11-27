@@ -1,6 +1,7 @@
 // /performance (officers, by DM): who's doing well and who could use a hand, from the guild's kills
 // in Past raids (kill_stats), with what to watch for, how to help, and how to keep track. Tanks are
 // judged on deaths and item level only, as parses say little about tanking.
+import { ADVICE, LIMITS, asLine, listed, say } from '../coach.js';
 import { dbEnabled, rest } from '../db.js';
 import { type FightDigest, healsMost } from '../fightDigest.js';
 import { BRAND, type Embed, type MessageBody } from './api.js';
@@ -286,7 +287,6 @@ export function characterMessage(scope: PerfScope, rows: Row[], character: strin
   return { embeds };
 }
 
-const listed = (xs: string[]) => (xs.length > 2 ? `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}` : xs.join(' and '));
 
 /**
  * Small, concrete gains for one character, from their fight summaries when the raid's been read
@@ -306,28 +306,28 @@ function roomToImprove(p: PerfPlayer, mine: Row[], fights: FightDigest[], raidIl
     if (Number(hi.v) - Number(lo.v) >= 5) out.push(`**${lo.boss}** was their lowest (${Math.round(Number(lo.v))} against ${Math.round(Number(hi.v))} on ${hi.boss}). Comparing the two on the site shows what was different.`);
   }
   // Downtime
-  const idle = theirs.filter((t) => !healer && t.x.activePct !== null && t.x.activePct < 92).map((t) => `${t.boss} ${Math.round(t.x.activePct!)}%`);
-  if (idle.length) out.push(`Active time ${listed(idle)} (aim for 92%+). Fewer gaps (casting while moving, pre-positioning) is usually the easiest gain.`);
+  const idle = theirs.filter((t) => !healer && t.x.activePct !== null && t.x.activePct < LIMITS.activeGood).map((t) => `${Math.round(t.x.activePct!)}% on ${t.boss}`);
+  if (idle.length) out.push(asLine(say.activeLow(listed(idle))));
   // Cooldowns not used as often as the fight allowed
   const cds = theirs.flatMap((t) => t.x.cooldowns.filter((c) => c.possible > c.uses).map((c) => `${c.name} ${c.uses} of ${c.possible} on ${t.boss}`));
-  if (cds.length) out.push(`Cooldowns left unused: ${listed(cds.slice(0, 4))}${cds.length > 4 ? ' and more' : ''}.`);
+  if (cds.length) out.push(asLine(say.cooldownsMissed(cds.length > 4 ? [...cds.slice(0, 4), `${cds.length - 4} more`] : cds)));
   // Potions on longer fights (GAME CONTENT: one combat potion per fight, plus one before the pull)
-  const noPot = theirs.filter((t) => t.x.potions && !t.x.potions.used.length && !t.x.potions.prePot && t.seconds >= 90).map((t) => t.boss);
-  if (noPot.length) out.push(`No potion on ${listed(noPot)}. One before the pull and one during the fight is free ${healer ? 'healing' : 'damage'}.`);
+  const noPot = theirs.filter((t) => t.x.potions && !t.x.potions.used.length && !t.x.potions.prePot && t.seconds >= LIMITS.potionFight).map((t) => t.boss);
+  if (noPot.length) out.push(asLine(say.potionMissed(listed(noPot), healer)));
   // Flask or elixirs, and food (once the fight's been read in full)
   const noFlask = theirs.filter((t) => t.x.consumes && !t.x.consumes.flask && !t.x.consumes.elixirs).map((t) => t.boss);
-  if (noFlask.length) out.push(`No flask or elixir on ${listed(noFlask)}. They last the whole fight; \`/info consumables\` lists what fits the role.`);
+  if (noFlask.length) out.push(asLine(say.flaskMissing(listed(noFlask))));
   const noFood = theirs.filter((t) => t.x.consumes && !t.x.consumes.food).map((t) => t.boss);
-  if (noFood.length && noFood.length >= Math.ceil(theirs.length / 2)) out.push(`No food buff on ${listed(noFood)}. It's the cheapest buff there is.`);
+  if (noFood.length && noFood.length >= Math.ceil(theirs.length / 2)) out.push(asLine(say.foodMissing(listed(noFood))));
   // DoTs that matter, falling off
-  const dots = theirs.flatMap((t) => (t.x.dots ?? []).filter((d) => d.sharePct >= 5 && d.uptimePct < 90).map((d) => `${d.name} ${d.uptimePct}% on ${t.boss}`));
-  if (dots.length) out.push(`Damage over time not kept up: ${listed(dots.slice(0, 3))}. Aim for 90%+.`);
+  const dots = theirs.flatMap((t) => (t.x.dots ?? []).filter((d) => d.sharePct >= LIMITS.dotShare && d.uptimePct < LIMITS.dotGood).map((d) => ({ name: `${d.name} on ${t.boss}`, up: d.uptimePct })));
+  if (dots.length) out.push(asLine(say.dotsLow(dots.slice(0, 3))));
   // Avoidable damage
   const avoid = [...new Set(theirs.flatMap((t) => t.x.avoidableTop.map((a) => a.name)))];
-  if (avoid.length) out.push(`Took avoidable damage from ${listed(avoid.slice(0, 3))}. Less of it frees the healers up.`);
+  if (avoid.length) out.push(`Took avoidable damage from ${listed(avoid.slice(0, 3))}. ${ADVICE.avoidable}`);
   // Overhealing
-  const over = theirs.filter((t) => healer && (t.x.healing?.overhealPct ?? 0) >= 35).map((t) => `${t.boss} ${Math.round(t.x.healing!.overhealPct!)}%`);
-  if (over.length) out.push(`High overhealing on ${listed(over)}. Smaller or later heals, or a different assignment, can turn it into effective healing.`);
+  const over = theirs.filter((t) => healer && (t.x.healing?.overhealPct ?? 0) >= LIMITS.overhealPolish).map((t) => `${t.boss} ${Math.round(t.x.healing!.overhealPct!)}%`);
+  if (over.length) out.push(`High overhealing on ${listed(over)}. ${ADVICE.overheal}`);
   // Gear
   if (raidIlvl && p.itemLevel && p.itemLevel < raidIlvl) out.push(`Item level ${p.itemLevel}, a little under the raid\u2019s ${raidIlvl}. Each upgrade adds up.`);
   if (!out.length) out.push(theirs.length ? 'Nothing obvious: no downtime, unused cooldowns, missed potions or avoidable damage. Small gains now come from fight-specific tricks and gear.' : 'Open their fights on the site for the details (active time, cooldowns, potions): this raid\u2019s fight summaries aren\u2019t stored yet.');

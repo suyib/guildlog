@@ -2,6 +2,7 @@
 // out from the numbers (not a description of the chart). Kept short: the biggest thing first.
 import type { Healing, PlayerSnapshot, Survival } from '../server/types';
 import { compact, mmss } from './format';
+import { ADVICE, LIMITS } from '../server/coach';
 
 const AUTO = /^(Auto Shot|Shoot|Melee|Auto Attack|Attack)$/;
 
@@ -23,15 +24,15 @@ export function rotationTakeaway(me: PlayerSnapshot, ref?: PlayerSnapshot | null
   const gaps = me.gaps ?? [];
   const lost = gaps.reduce((t, g) => t + g.seconds, 0);
   const active = me.activePct;
-  if (!gaps.length) out.push(L(`No gaps over 4 seconds: you kept casting the whole fight${active !== null ? ` (${r0(active)}% active)` : ''}. That's the foundation of good damage.`));
+  if (!gaps.length) out.push(L(`No gaps over ${LIMITS.gapSeconds} seconds: you kept casting the whole fight${active !== null ? ` (${r0(active)}% active)` : ''}. That's the foundation of good damage.`));
   else {
     const longest = gaps.reduce((a, g) => (g.seconds > a.seconds ? g : a));
-    out.push(L(`${gaps.length} gap${gaps.length > 1 ? 's' : ''} over 4 seconds added up to ${r0(lost)}s of ${mmss(me.fightSeconds)} (the longest was ${r0(longest.seconds)}s at ${mmss(longest.start)}). Gaps are usually the easiest damage to win back: casting while moving, or being in place before the boss moves you.`));
+    out.push(L(`${gaps.length} gap${gaps.length > 1 ? 's' : ''} over ${LIMITS.gapSeconds} seconds added up to ${r0(lost)}s of ${mmss(me.fightSeconds)} (the longest was ${r0(longest.seconds)}s at ${mmss(longest.start)}). ${ADVICE.active}`));
   }
   if (ref && ref.activePct !== null && active !== null && Math.abs(ref.activePct - active) >= 3) {
     out.push(L(`${ref.name} was active ${r0(ref.activePct)}% of their fight against your ${r0(active)}%.`));
   }
-  if (me.fightSeconds < 60) out.push(L(`A short fight (${mmss(me.fightSeconds)}), so the opener matters most: cooldowns and your strongest spells right at the pull.`));
+  if (me.fightSeconds < 60) out.push(L(`${mmss(me.fightSeconds)}: ${ADVICE.opener}`));
   return out;
 }
 
@@ -43,8 +44,8 @@ export function cooldownTakeaway(me: PlayerSnapshot): Line[] {
   const first = Math.min(...cds.flatMap((c) => c.times).filter((t) => Number.isFinite(t)), Infinity);
   const out: Line[] = [];
   if (!missed.length) out.push(L(`Every cooldown went out as often as the fight allowed${Number.isFinite(first) ? `, the first at ${mmss(first)}` : ''}. Nothing to gain here.`, cds[0].icon));
-  else out.push(L(`${missed.map((c) => `${c.name} ${c.uses} of ${c.possible}`).join(', ')}. Each missed use is a window of extra damage you didn't get; unless the fight needs them saved, use them again as soon as they're ready.`, missed[0].icon ?? iconOf(me, missed[0].name)));
-  if (Number.isFinite(first) && first > 10) out.push(L(`Your first cooldown was at ${mmss(first)}. On most bosses using them at the pull gives an extra use by the end.`));
+  else out.push(L(`${missed.map((c) => `${c.name} ${c.uses} of ${c.possible}`).join(', ')}. Each missed use is a window of extra damage you didn't get. ${ADVICE.cooldowns}`, missed[0].icon ?? iconOf(me, missed[0].name)));
+  if (Number.isFinite(first) && first > 10) out.push(L(`Your first cooldown was at ${mmss(first)}. ${ADVICE.cooldownsLate}`));
   return out;
 }
 
@@ -73,8 +74,8 @@ export function damageTakeaway(me: PlayerSnapshot, ref?: PlayerSnapshot | null):
   out.push(L(`${top.name} did ${r0(top.share * 100)}% of your damage, and your top 3 spells ${r0(top3 * 100)}%. Those are the ones to get right first.`, top.icon));
   const pet = list.filter((a) => a.isPet).reduce((t, a) => t + a.share, 0);
   if (pet >= 0.1) out.push(L(`Your pet did ${r0(pet * 100)}%: keeping it alive and attacking matters.`));
-  const missy = list.filter((a) => !a.isPet && (a.missPct ?? 0) >= 5 && a.share >= 0.05).sort((a, b) => (b.missPct ?? 0) - (a.missPct ?? 0));
-  if (missy.length) out.push(L(`${missy[0].name} missed ${r0(missy[0].missPct!)}% of the time. More hit rating turns those into damage.`, missy[0].icon));
+  const missy = list.filter((a) => !a.isPet && (a.missPct ?? 0) >= LIMITS.missPct && (me.castCounts[a.name] ?? a.casts) >= LIMITS.missCasts).sort((a, b) => (b.missPct ?? 0) - (a.missPct ?? 0));
+  if (missy.length) out.push(L(`${missy[0].name} missed ${r0(missy[0].missPct!)}% of the time. ${ADVICE.misses}`, missy[0].icon));
   if (ref?.abilities.length) {
     const theirs = new Map(ref.abilities.map((a) => [a.name, a.share]));
     const d = list.slice(0, 6).filter((a) => theirs.has(a.name)).map((a) => ({ n: a.name, a: a.share, b: theirs.get(a.name)! })).sort((x, y) => Math.abs(y.b - y.a) - Math.abs(x.b - x.a))[0];
@@ -89,9 +90,9 @@ export function healingTakeaway(h: Healing): Line[] {
   const out: Line[] = [];
   const top = h.abilities[0];
   out.push(L(`${top.name} did ${r0(top.share * 100)}% of your healing${h.overhealPct !== null ? `, and ${r0(h.overhealPct)}% of everything you cast overhealed` : ''}.`, top.icon));
-  const waste = h.abilities.filter((a) => (a.overhealPct ?? 0) >= 40 && a.share >= 0.1).sort((a, b) => (b.overhealPct ?? 0) - (a.overhealPct ?? 0));
-  if (waste.length) out.push(L(`${waste[0].name} overhealed ${r0(waste[0].overhealPct!)}%. Casting it a little later, a smaller rank, or on someone lower usually turns that into real healing.`, waste[0].icon));
-  else if ((h.overhealPct ?? 0) < 25) out.push(L('Very little overhealing: your heals were landing where they were needed.'));
+  const waste = h.abilities.filter((a) => (a.overhealPct ?? 0) >= LIMITS.overhealSpell && a.share >= LIMITS.overhealSpellShare).sort((a, b) => (b.overhealPct ?? 0) - (a.overhealPct ?? 0));
+  if (waste.length) out.push(L(`${waste[0].name} overhealed ${r0(waste[0].overhealPct!)}%. ${ADVICE.overhealSpell}`, waste[0].icon));
+  else if ((h.overhealPct ?? 0) <= LIMITS.overhealLow) out.push(L('Very little overhealing: your heals were landing where they were needed.'));
   return out;
 }
 
@@ -99,11 +100,11 @@ export function healingTakeaway(h: Healing): Line[] {
 export function survivalTakeaway(me: PlayerSnapshot, sv?: Survival): Line[] {
   const out: Line[] = [];
   const total = sv?.total ?? me.damageTaken.reduce((t, x) => t + x.total, 0);
-  if (me.deaths.length) out.push(L(`You died at ${me.deaths.map((d) => mmss(d.seconds)).join(', ')}${me.deaths[0].by ? ` (${me.deaths[0].by})` : ''}. Everything after that is lost damage, so surviving comes first.`, 'spell_holy_resurrection'));
+  if (me.deaths.length) out.push(L(`You died at ${me.deaths.map((d) => mmss(d.seconds)).join(', ')}${me.deaths[0].by ? ` (${me.deaths[0].by})` : ''}. ${ADVICE.death}`, 'spell_holy_resurrection'));
   if (sv) {
     const share = total > 0 ? sv.avoidableTotal / total : 0;
     const worst = sv.abilities.filter((a) => a.avoidable).sort((a, b) => b.total - a.total)[0];
-    if (share >= 0.1 && worst) out.push(L(`${r0(share * 100)}% of the damage you took was likely avoidable, most of it ${worst.name} (${compact(worst.total)}). Fewer of those hits saves your healers mana.`, worst.icon));
+    if (share >= 0.1 && worst) out.push(L(`${r0(share * 100)}% of the damage you took was likely avoidable, most of it ${worst.name} (${compact(worst.total)}). ${ADVICE.avoidable}`, worst.icon));
     else if (!me.deaths.length) out.push(L(`Hardly any avoidable damage, and you took ${total <= sv.raidMedianTotal ? 'less' : 'more'} than the typical ${sv.isTank ? 'tank' : 'raider'} on this fight.`));
   }
   if (!out.length) out.push(L('You survived the whole fight.'));

@@ -278,7 +278,7 @@ assert.ok(sting.uptimePct >= 45 && sting.uptimePct <= 55, `Serpent Sting up abou
 assert.ok(!suy.dots!.some((d) => d.name === 'Steady Shot'), 'only ticking spells');
 assert.deepEqual(suy.raidDebuffs, [{ label: 'Armor reduction (Sunder / Expose Armor)', uptimePct: 92 }, { label: 'Faerie Fire', uptimePct: 50 }]);
 const suyFindings = buildFindings(suy, []);
-assert.ok(suyFindings.some((f) => f.title === `Serpent Sting up ${sting.uptimePct}% of the fight`));
+assert.ok(suyFindings.some((f) => f.title === `Serpent Sting up ${Math.round(sting.uptimePct)}% of the time`));
 assert.ok(suyFindings.some((f) => f.title === 'Died at 1:40' && f.detail.includes('Cave In 9k, Melee 3k')), 'death recap in the finding');
 assert.ok(buildStrengths(suy, []).some((g) => g.title === 'Pre-potted and used a potion'));
 const tanky = snapshotFromPack(HOST, CODE, pack, { id: 3, name: 'Tanky', className: 'Warrior' });

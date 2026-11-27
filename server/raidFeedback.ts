@@ -2,6 +2,7 @@
 // breakdown) or every boss in a night (the Discord /raidend summary). Written for people who don't
 // read logs, so it talks about deaths, standing in bad, staying busy and cooldowns, not numbers.
 // Things to work on never name anyone; only praise does (on the site, not in Discord).
+import { ADVICE, LIMITS } from './coach.js';
 import type { FightDigest, PlayerDigest } from './discord/digest.js';
 import type { RaidFeedback, RaidPoint } from './types.js';
 
@@ -93,16 +94,16 @@ export function raidFeedback(fights: FightDigest[], opts: RaidFeedbackOptions = 
   for (const { f, p } of rows) if (p.role === 'dps') byPlayer.set(p.name, [...(byPlayer.get(p.name) ?? []), { fight: f, p }]);
   const activity = [...byPlayer].map(([name, list]) => ({ name, pct: activeOver(list) })).filter((x): x is { name: string; pct: number } => x.pct !== null);
   const avgActive = activity.length ? activity.reduce((t, x) => t + x.pct, 0) / activity.length : null;
-  const idle = activity.filter((x) => x.pct < 85).map((x) => x.name);
-  if (avgActive !== null && avgActive >= 92 && !idle.length) good.push({ title: 'Everyone kept attacking', detail: `${avgActive.toFixed(0)}% average active time; very little standing around.` });
-  if (idle.length) work.push({ title: `${plural(idle.length, 'player')} spent a lot of time not attacking`, detail: 'More than 15% of their time on bosses with nothing being cast. Often it’s movement; casting while moving or pre-positioning helps.' });
+  const idle = activity.filter((x) => x.pct < LIMITS.raidIdle).map((x) => x.name);
+  if (avgActive !== null && avgActive >= LIMITS.activeLow && !idle.length) good.push({ title: 'Everyone kept attacking', detail: `${avgActive.toFixed(0)}% average active time; very little standing around.` });
+  if (idle.length) work.push({ title: `${plural(idle.length, 'player')} spent a lot of time not attacking`, detail: `More than ${100 - LIMITS.raidIdle}% of their time on bosses with nothing being cast. ${ADVICE.active}` });
 
   // ---- Cooldowns ----
   const withCds = rows.filter(({ p }) => p.cooldowns.length);
   if (withCds.length) {
     const under = people((p) => p.cooldowns.some((c) => c.uses < c.possible));
     if (!under.length) good.push({ title: 'Cooldowns used on time', detail: 'Everyone pressed their big damage cooldowns as often as the fight allowed.' });
-    else work.push({ title: `${plural(under.length, 'player')} could use cooldowns more`, detail: 'Big cooldowns should go out at the pull and again as soon as they’re ready.' });
+    else work.push({ title: `${plural(under.length, 'player')} could use cooldowns more`, detail: ADVICE.cooldowns });
   }
 
   // ---- Parses ----
@@ -110,21 +111,21 @@ export function raidFeedback(fights: FightDigest[], opts: RaidFeedbackOptions = 
   const parseOf = (p: PlayerDigest) => (p.role === 'healer' ? p.healing?.parse ?? null : p.parse);
   const ranked = (p: PlayerDigest) => parseOf(p) !== null;
   if (rows.some(({ p }) => ranked(p))) {
-    const strong = people((p) => ranked(p) && parseOf(p)! >= 75);
-    const weak = people((p) => ranked(p) && parseOf(p)! < 25);
-    if (strong.length) good.push({ title: `${plural(strong.length, 'strong performance')}`, detail: 'Parsed 75 or higher, better than most players of the same spec on that boss.', who: strong });
-    if (weak.length) work.push({ title: `${plural(weak.length, 'player')} well below their spec`, detail: 'Parsed under 25. A look at their own summary (or a chat about rotation and gear) will help most.' });
+    const strong = people((p) => ranked(p) && parseOf(p)! >= LIMITS.parseStrong);
+    const weak = people((p) => ranked(p) && parseOf(p)! < LIMITS.parseWeak);
+    if (strong.length) good.push({ title: `${plural(strong.length, 'strong performance')}`, detail: `Parsed ${LIMITS.parseStrong} or higher, better than most players of the same spec on that boss.`, who: strong });
+    if (weak.length) work.push({ title: `${plural(weak.length, 'player')} well below their spec`, detail: `Parsed under ${LIMITS.parseWeak}. A look at their own summary (or a chat about rotation and gear) will help most.` });
   }
 
   // ---- Consumables: potions (kills of 90 seconds or more) and flasks or elixirs, once read in full ----
   // Each is only judged once at least half of the kills it applies to have been read in full.
   // One point for both, so the list stays short.
-  const longFights = fights.filter((f) => f.seconds >= 90);
+  const longFights = fights.filter((f) => f.seconds >= LIMITS.potionFight);
   const readFights = longFights.filter((f) => f.players.some((p) => p.potions));
   const potsJudged = readFights.length > 0 && readFights.length * 2 >= longFights.length;
   const withConsumes = fights.filter((f) => f.players.some((p) => p.consumes));
   const flasksJudged = withConsumes.length > 0 && withConsumes.length * 2 >= fights.length;
-  const noPot = potsJudged ? people((p, f) => !!p.potions && f.seconds >= 90 && !p.potions.used.length && !p.potions.prePot) : [];
+  const noPot = potsJudged ? people((p, f) => !!p.potions && f.seconds >= LIMITS.potionFight && !p.potions.used.length && !p.potions.prePot) : [];
   const noFlask = flasksJudged ? people((p) => !!p.consumes && !p.consumes.flask && !p.consumes.elixirs) : [];
   if (potsJudged || flasksJudged) {
     const missing = new Set([...noPot, ...noFlask]);
@@ -132,7 +133,7 @@ export function raidFeedback(fights: FightDigest[], opts: RaidFeedbackOptions = 
     if (!missing.size) good.push({ title: potsJudged && flasksJudged ? 'Everyone used potions and flasks' : potsJudged ? 'Everyone used a potion' : 'Everyone flasked or used elixirs', detail: `On every boss${where}${potsJudged ? ' long enough to need one' : ''}. That's free damage, healing and survival.` });
     else work.push({
       title: `${plural(missing.size, 'player')} ${noPot.length && noFlask.length ? 'skipped consumables' : noPot.length ? 'skipped potions' : 'without a flask or elixir'}`,
-      detail: `Everyone should have ${what} on every boss: a combat potion before the pull and another during the fight, and a flask (or battle and guardian elixirs) that lasts all fight. \`/info consumables\` lists what fits each role.`,
+      detail: `Everyone should have ${what} on every boss. ${[potsJudged ? ADVICE.potion(false) : null, flasksJudged ? ADVICE.flask : null].filter(Boolean).join(' ')}`,
     });
   }
 
@@ -141,9 +142,9 @@ export function raidFeedback(fights: FightDigest[], opts: RaidFeedbackOptions = 
   for (const f of fights) for (const d of f.debuffs ?? []) debuffs.set(d.label, [...(debuffs.get(d.label) ?? []), d.uptimePct]);
   if (debuffs.size) {
     const avgUp = [...debuffs].map(([label, ups]) => ({ label, up: Math.round(ups.reduce((t, v) => t + v, 0) / ups.length) }));
-    const low = avgUp.filter((d) => d.up < 80).sort((a, b) => a.up - b.up);
+    const low = avgUp.filter((d) => d.up < LIMITS.dotLow).sort((a, b) => a.up - b.up);
     if (low.length) work.push({ title: 'Boss debuffs dropping off', detail: `${low.slice(0, 3).map((d) => `${d.label} ${d.up}%`).join(', ')} of the time${single ? '' : ' on average'}. Whoever applies them should keep them up all fight.` });
-    else if (avgUp.every((d) => d.up >= 90)) good.push({ title: 'Boss debuffs kept up', detail: avgUp.slice(0, 4).map((d) => `${d.label} ${d.up}%`).join(', ') + '.' });
+    else if (avgUp.every((d) => d.up >= LIMITS.dotGood)) good.push({ title: 'Boss debuffs kept up', detail: avgUp.slice(0, 4).map((d) => `${d.label} ${d.up}%`).join(', ') + '.' });
   }
 
   // ---- Bloodlust (single fight) ----
