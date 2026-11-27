@@ -9,6 +9,13 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.50.1',
+    date: '2026-11-27',
+    changes: [
+      'Analyze a log: with \u201cWhole night\u201d picked, you can now pick a player to open their whole night, boss by boss (the \u201cYour night\u201d page). Your own characters; officers, raid leaders and loot council can pick anyone.',
+    ],
+  },
+  {
     version: '0.50.0',
     date: '2026-11-27',
     changes: [

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AnalysisResult, CompareChoice, FightBreakdown, RaidOverview, ReportSummary, SavedRaid } from '../../server/types';
-import { type Progress, loadBreakdown, loadOverall, loadRaids, loadReport, runAnalysis } from '../api';
+import { type Progress, canLookup, loadBreakdown, loadMe, loadOverall, loadProfile, loadRaids, loadReport, runAnalysis } from '../api';
 import { mmss } from '../format';
 import { useNav } from '../nav';
 import Glyph from './Glyph';
@@ -44,6 +44,8 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
   const [report, setReport] = useState<ReportSummary | null>(null);
   const [fightId, setFightId] = useState<number | ''>('');
   const [playerId, setPlayerId] = useState<number | ''>('');
+  /** Whose whole night you can open: everyone (officers, raid leaders, loot council) or your own characters. */
+  const [nightPeople, setNightPeople] = useState<'all' | string[]>([]);
   const [compareWith, setCompareWith] = useState('none');
   // A second log to compare against
   const [otherUrl, setOtherUrl] = useState('');
@@ -73,6 +75,14 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
   useEffect(() => () => nav.setResult(null), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fightPlayers = playersIn(report, fightId);
+  /** On "Whole night", the people whose night you can open (their "Your night" page). */
+  const nightPlayers = fightId === OVERALL ? fightPlayers.filter((p) => nightPeople === 'all' || nightPeople.includes(p.name.toLowerCase())) : [];
+  const openNight = (name: string) => {
+    if (!report) return;
+    go(`/#/me/raid?host=${encodeURIComponent(report.host)}&raid=${encodeURIComponent(report.code)}&character=${encodeURIComponent(name)}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    window.scrollTo({ top: 0 });
+  };
   const me = fightPlayers.find((p) => p.id === playerId);
   const chosen = compareWith.startsWith('p:') ? fightPlayers.find((p) => p.id === Number(compareWith.slice(2))) : undefined;
   const otherPlayers = playersIn(other, otherFightId);
@@ -166,6 +176,17 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
 
   // Opened from a link with a log in it (Discord, Past raids): skip the home page while it loads
   const [openedWithLog] = useState(() => new URLSearchParams(window.location.search).has('log'));
+
+  useEffect(() => {
+    let live = true;
+    loadMe().then(async (m) => {
+      if (canLookup(m.rank)) return 'all' as const;
+      if (m.kind !== 'discord') return [];
+      const p = await loadProfile();
+      return p.characters.filter((c) => c.status === 'approved').map((c) => c.name.toLowerCase());
+    }).then((v) => live && setNightPeople(v)).catch(() => undefined);
+    return () => { live = false; };
+  }, []);
 
   // Links from the Discord bot open the site with ?log=<Warcraft Logs link> and load it straight away
   useEffect(() => {
@@ -448,13 +469,20 @@ export default function AnalyzePage({ initial }: { initial?: AnalysisResult }) {
             </label>
             <label>
               Player
-              <select value={playerId} disabled={fightId === OVERALL} onChange={(e) => {
-                setPlayerId(e.target.value === '' ? '' : Number(e.target.value));
+              <select value={playerId} disabled={fightId === OVERALL && !nightPlayers.length} onChange={(e) => {
+                const id = e.target.value === '' ? '' : Number(e.target.value);
+                // Whole night with one person: their night, boss by boss (the "Your night" page)
+                if (fightId === OVERALL) {
+                  const p = nightPlayers.find((x) => x.id === id);
+                  if (p) openNight(p.name);
+                  return;
+                }
+                setPlayerId(id);
                 setAutoRun(true);
               }}>
                 <option value="">{fightId === OVERALL ? 'Whole raid' : 'Whole raid (fight breakdown)'}</option>
-                {fightPlayers.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} ({cls(p.className)})</option>
+                {(fightId === OVERALL ? nightPlayers : fightPlayers).map((p) => (
+                  <option key={p.id} value={p.id}>{p.name} ({cls(p.className)}){fightId === OVERALL ? ': whole night' : ''}</option>
                 ))}
               </select>
             </label>
