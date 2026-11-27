@@ -5,7 +5,7 @@ import { sectionsFor, useNav } from '../nav';
 import Glyph from './Glyph';
 import { ShareButton } from './ResultView';
 
-export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'rankings' | 'history' | 'admin' | 'me' | 'changelog' | 'saved' }) {
+export default function Sidebar({ page }: { page: 'analyze' | 'guild' | 'raids' | 'rankings' | 'history' | 'admin' | 'me' | 'changelog' | 'saved' }) {
   const { result, section, setSection, view } = useNav();
   const [me, setMe] = useState<Me | null>(null);
   useEffect(() => {
@@ -38,6 +38,7 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'ranking
       {me?.signedIn && (
         <nav className="side-nav side-menu" id="side-menu" aria-label="Pages" onClick={() => setOpen(false)}>
           <a href="/" className={page === 'analyze' || page === 'saved' ? 'on' : ''}><Glyph name="compass" />Analyze</a>
+          <a href="/#/guild" className={page === 'guild' ? 'on' : ''}><Glyph name="users" />Guild</a>
           <a href="/#/raids" className={page === 'raids' ? 'on' : ''}><Glyph name="calendar" />Past raids</a>
           <a href="/#/rankings" className={page === 'rankings' ? 'on' : ''}><Glyph name="bars" />Rankings</a>
           <a href="/#/history" className={page === 'history' ? 'on' : ''}><Glyph name="clock" />History</a>

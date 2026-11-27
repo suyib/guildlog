@@ -136,12 +136,11 @@ export async function trendFor(name: string, weeks = 8): Promise<TrendWeek[]> {
   }));
 }
 
-/** A character's bosses over the last `weeks` weeks: first and latest parse, best, and kills, most kills first. */
-export async function bossTrendsFor(name: string, weeks = 12): Promise<BossTrend[]> {
+/** A character's bosses across every guild raid: first and latest parse, best, and kills, most kills first. */
+export async function bossTrendsFor(name: string): Promise<BossTrend[]> {
   if (!dbEnabled()) return [];
-  const since = new Date(Date.now() - weeks * 7 * 86_400_000).toISOString();
   const rows: Pick<KillRow, 'encounter_id' | 'encounter_name' | 'healer' | 'parse' | 'hps_parse'>[] =
-    (await rest(`kill_stats?name_key=eq.${q(key(name))}&start_time=gte.${q(since)}&select=encounter_id,encounter_name,healer,parse,hps_parse&order=start_time.asc&limit=500`).catch(() => null)) ?? [];
+    (await rest(`kill_stats?name_key=eq.${q(key(name))}&select=encounter_id,encounter_name,healer,parse,hps_parse&order=start_time.asc&limit=1000`).catch(() => null)) ?? [];
   if (!rows.length) return [];
   const healer = rows.filter((r) => r.healer).length * 2 > rows.length;
   const byBoss = new Map<number, typeof rows>();

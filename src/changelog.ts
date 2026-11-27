@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.42.0',
+    date: '2026-11-27',
+    changes: [
+      'A Guild page in the menu: the guild and its progress, the numbers for the last 8 weeks, the raid team by role with item levels (hover a name for more), a small calendar of raid nights and the usual raid times, and attendance.',
+      'Profiles always show Your progress now. With raids in two different weeks out of the last 8 it\u2019s week by week; otherwise it compares your first and latest kill of each boss. Each boss now covers every guild raid, not just the last 12 weeks.',
+      'Profile cards are wider, so the boss table fits, and Remove on a goal is a quieter link.',
+    ],
+  },
+  {
     version: '0.41.0',
     date: '2026-11-27',
     changes: [

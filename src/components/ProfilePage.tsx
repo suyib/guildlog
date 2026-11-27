@@ -99,10 +99,10 @@ function CharacterCard({ c }: { c: ProfileCharacter }) {
         <p className="muted small">No raids with this character yet. It fills in after the next /raidend.</p>
       )}
 
-      {c.trend && c.trend.length > 1 && (
-        <div>
-          <div className="comp-label">{c.healer ? 'Healing parse' : 'Parse'} by week</div>
-          <TrendHeadline c={c} />
+      <div className="char-progress">
+        <div className="comp-label">Your progress</div>
+        <TrendHeadline c={c} />
+        {c.trend && c.trend.length > 1 && (
           <ol className="trend">
             {c.trend.map((w) => (
               <li key={w.week}>
@@ -112,9 +112,8 @@ function CharacterCard({ c }: { c: ProfileCharacter }) {
               </li>
             ))}
           </ol>
-        </div>
-      )}
-
+        )}
+      </div>
       <BossProgress c={c} />
       {c.status === 'approved' && <Goals c={c} />}
 
@@ -127,23 +126,35 @@ function CharacterCard({ c }: { c: ProfileCharacter }) {
   );
 }
 
-/** "Up 12 points since Oct 6": the first week with a parse against the latest. */
+/**
+ * "Up 12 points since Oct 6", from the weekly averages; with only one week, from each boss's first
+ * and latest parse; with nothing yet, what will show here.
+ */
 function TrendHeadline({ c }: { c: ProfileCharacter }) {
   const weeks = (c.trend ?? []).filter((w) => w.parse !== null);
-  if (weeks.length < 2) return null;
-  const change = weeks.at(-1)!.parse! - weeks[0].parse!;
-  const since = new Date(`${weeks[0].week}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  if (Math.abs(change) < 3) return <p className="small muted trend-head">Steady since {since}.</p>;
-  return <p className={`small trend-head ${change > 0 ? 'up' : 'down'}`}>{change > 0 ? `Up ${change} points since ${since}. Keep it going.` : `Down ${-change} points since ${since}. Your bosses below show where.`}</p>;
+  if (weeks.length >= 2) {
+    const change = weeks.at(-1)!.parse! - weeks[0].parse!;
+    const since = new Date(`${weeks[0].week}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    if (Math.abs(change) < 3) return <p className="small muted trend-head">Steady since {since} ({weeks.at(-1)!.parse} average this week).</p>;
+    return <p className={`small trend-head ${change > 0 ? 'up' : 'down'}`}>{change > 0 ? `Up ${change} points since ${since}. Keep it going.` : `Down ${-change} points since ${since}. Each boss below shows where.`}</p>;
+  }
+  const bosses = (c.bosses ?? []).filter((b) => b.kills > 1 && b.first !== null && b.latest !== null);
+  if (bosses.length) {
+    const change = Math.round(bosses.reduce((t, b) => t + (b.latest! - b.first!), 0) / bosses.length);
+    if (Math.abs(change) < 3) return <p className="small muted trend-head">About the same as your first kills on each boss.</p>;
+    return <p className={`small trend-head ${change > 0 ? 'up' : 'down'}`}>{change > 0 ? `Up ${change} points on average since your first kill of each boss.` : `Down ${-change} points on average since your first kill of each boss.`}</p>;
+  }
+  return <p className="small muted trend-head">{(c.bosses ?? []).length ? 'Kill a boss a second time to see whether you\u2019re going up or down.' : 'This fills in after your raids are on Past raids: whether your parse is going up or down, week by week and boss by boss.'} The week-by-week view needs raids in two different weeks out of the last 8.</p>;
 }
 
-/** Each boss over the last 12 weeks: first parse to latest, and the best. */
+/** Each boss across every guild raid: first parse to latest, and the best. */
 function BossProgress({ c }: { c: ProfileCharacter }) {
   const list = (c.bosses ?? []).filter((b) => b.latest !== null);
   if (!list.length) return null;
   return (
     <div>
-      <div className="comp-label">Each boss (last 12 weeks)</div>
+      <div className="comp-label">Each boss</div>
+      <div className="scroll">
       <table className="grid boss-trend">
         <thead><tr><th>Boss</th><th className="r">First</th><th className="r">Latest</th><th className="r">Best</th><th className="r">Kills</th></tr></thead>
         <tbody>
@@ -161,6 +172,7 @@ function BossProgress({ c }: { c: ProfileCharacter }) {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -202,7 +214,7 @@ function Goals({ c }: { c: ProfileCharacter }) {
           {open.map((g) => (
             <li key={g.id}>
               <span><strong className={parseCss(g.target)}>{g.target}+</strong> on {g.encounter ?? 'any boss'}</span>
-              <button type="button" className="link-button small" onClick={() => remove(g.id)}>Remove</button>
+              <button type="button" className="link-button small goal-remove" onClick={() => remove(g.id)} aria-label={`Remove the goal ${g.target}+ on ${g.encounter ?? 'any boss'}`}>Remove</button>
             </li>
           ))}
         </ul>

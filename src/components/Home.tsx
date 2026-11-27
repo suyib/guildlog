@@ -11,7 +11,7 @@ import Achievements from './Achievements';
 import PlayerTip from './PlayerTip';
 import { attendanceAchievement, raidAchievements } from '../achievements';
 
-export { RANK_CSS, mainZone, ZonePicker, ZoneRanks };
+export { RANK_CSS, mainZone, Schedule, ZonePicker, ZoneRanks };
 
 let homePromise: Promise<HomeData | null> | null = null;
 /** Read once per page load and shared by both parts of the home page. undefined while loading, null if it failed. */

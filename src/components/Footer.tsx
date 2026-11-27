@@ -17,6 +17,7 @@ export default function Footer() {
         <nav aria-label="Site">
           <div className="footer-label">Site</div>
           <a href="/">Analyze</a>
+          <a href="/#/guild">Guild</a>
           <a href="/#/raids">Past raids</a>
           <a href="/#/rankings">Rankings</a>
           <a href="/#/history">History</a>

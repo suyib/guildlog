@@ -16,13 +16,13 @@ import { GAME } from '../../server/game';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const ROLE_LABEL = { tank: 'Tanks', healer: 'Healers', dps: 'Damage', unknown: 'Role not known' } as const;
-const RANGES = [
+export const RANGES = [
   { id: '4w', label: 'Last 4 weeks', days: 28 },
   { id: '8w', label: 'Last 8 weeks', days: 56 },
   { id: '6m', label: 'Last 6 months', days: 183 },
   { id: 'all', label: 'All raids', days: Infinity },
 ] as const;
-type RangeId = (typeof RANGES)[number]['id'];
+export type RangeId = (typeof RANGES)[number]['id'];
 
 const hm = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : `${Math.round(s / 60)}m`);
 const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
@@ -32,7 +32,7 @@ const logLink = (r: SavedRaid, fightId?: number | null) => `https://${r.host}/re
 const siteLink = (r: SavedRaid, fightId?: number | null) => `/?log=${encodeURIComponent(logLink(r, fightId))}`;
 
 /** How the raid went, for the calendar chip's color. */
-function outcome(r: SavedRaid): 'full' | 'partial' | 'none' | 'pending' {
+export function outcome(r: SavedRaid): 'full' | 'partial' | 'none' | 'pending' {
   const c = r.card;
   if (!c) return 'pending';
   if (c.kills === 0) return 'none';
@@ -499,7 +499,7 @@ function CompareRaids({ raid, raids }: { raid: SavedRaid; raids: SavedRaid[] }) 
 
 // ---------- Attendance ----------
 
-function Attendance({ raids, range, onRange, onSelect, officer }: { raids: SavedRaid[]; range: RangeId; onRange: (r: RangeId) => void; onSelect: (code: string) => void; officer: boolean }) {
+export function Attendance({ raids, range, onRange, onSelect, officer }: { raids: SavedRaid[]; range: RangeId; onRange: (r: RangeId) => void; onSelect: (code: string) => void; officer: boolean }) {
   const days = RANGES.find((r) => r.id === range)!.days;
   const inRange = raids
     .filter((r) => r.card && Date.now() - new Date(r.startTime!).getTime() <= days * 86_400_000)

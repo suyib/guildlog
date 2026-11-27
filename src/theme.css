@@ -707,8 +707,8 @@ label.button:focus-within { outline: 2px solid var(--primary-light); outline-off
 .profile-head img { border-radius: 50%; }
 .profile-head h1 { margin: 2px 0 6px; }
 .profile-out { margin-left: auto; }
-.char-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space); }
-.char-card { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 14px; background: var(--raised); border-top-width: 3px; border-top-style: solid; }
+.char-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: var(--space); }
+.char-card { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 14px; background: var(--raised); border-top-width: 3px; border-top-style: solid; min-width: 0; }
 .char-card:not([class*='-border']) { border-top-color: var(--line); } /* class color on top otherwise */
 .char-head { display: flex; flex-direction: row; align-items: center; gap: 12px; }
 .char-head > img, .char-head > .kpi-icon { flex: none; }
@@ -970,8 +970,36 @@ progress.pull-bar { width: 100%; height: 8px; color: var(--medium); }
 .goal-list.done li { color: var(--ink-3); }
 .goal-list.done .glyph { stroke: var(--win); vertical-align: -2px; }
 .goal-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.goal-remove { color: var(--ink-3); font-weight: 400; }
+.goal-remove:hover { color: var(--high); }
+.char-progress { display: flex; flex-direction: column; gap: 2px; }
 .goal-form select { flex: 1 1 140px; }
 .goal-form input { width: 80px; }
+
+/* ---------- Guild page ---------- */
+.guild-comp { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr); gap: 20px; padding: 14px 16px; border-radius: 12px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--line); }
+.guild-comp-head { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 16px; font-weight: 700; }
+.count-badge { padding: 0 7px; border-radius: 5px; background: var(--raised); border: 1px solid var(--line); font: 700 13px var(--font-mono); color: var(--ink-2); }
+.guild-comp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-size: 13px; font-weight: 600; }
+.guild-comp-col.dps .guild-comp-list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
+.guild-comp-list li { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.guild-comp-list .ptip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ilvl-badge { padding: 0 5px; border-radius: 4px; background: var(--raised); border: 1px solid var(--line); font: 400 11px var(--font-mono); color: var(--ink-2); }
+@media (max-width: 960px) { .guild-comp { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .guild-comp-col.dps { grid-column: 1 / -1; } }
+@media (max-width: 480px) { .guild-comp { grid-template-columns: minmax(0, 1fr); } .guild-comp-col.dps .guild-comp-list { grid-template-columns: minmax(0, 1fr); } }
+.mini-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; text-align: center; }
+.mini-cal-wd { font: 400 11px var(--font-mono); color: var(--ink-3); padding-bottom: 2px; }
+.mini-cal-day { display: grid; place-items: center; aspect-ratio: 1; border-radius: 6px; font: 400 12px var(--font-mono); color: var(--ink-2); background: var(--raised); }
+.mini-cal-day.out { opacity: 0.35; }
+.mini-cal-day.today { box-shadow: inset 0 0 0 1px var(--primary-light); }
+a.mini-cal-day { font-weight: 700; color: #0f0d0b; text-decoration: none; }
+a.mini-cal-day:hover { filter: brightness(1.15); }
+.mini-cal-day.raid.full { background: var(--win); }
+.mini-cal-day.raid.partial { background: var(--medium); }
+.mini-cal-day.raid.none { background: var(--high); }
+.mini-cal-day.raid.pending { background: var(--ink-3); }
+a.zone-chip { color: var(--ink); }
+a.zone-chip:hover { text-decoration: none; background: var(--hover); }
 
 /* ---------- Admin: setup checklist ---------- */
 .setup > summary { font-size: 16px; }

@@ -550,7 +550,7 @@ export interface ProfileCharacter {
   } | null;
   /** Week by week over the last 8 weeks of guild raids (missing before v0.25.0). */
   trend?: TrendWeek[];
-  /** Each boss over the last 12 weeks: first and latest parse, best, and kills (v0.41.0). */
+  /** Each boss across every guild raid: first and latest parse, best, and kills (v0.41.0). */
   bosses?: BossTrend[];
   /** Their goals for this character (only ever sent to its owner). */
   goals?: PlayerGoal[];
