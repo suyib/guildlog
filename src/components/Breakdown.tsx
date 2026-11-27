@@ -108,7 +108,14 @@ export default function Breakdown({ data, host, onPick }: { data: FightBreakdown
         <section className="panel">
           <h2 className="panel-title">Damage done</h2>
           {players.length > 0 && players.every((p) => p.parse === null) && (
-            <p className="muted small">No parses yet: Warcraft Logs ranks a fight a while after it&rsquo;s uploaded. The site asks again when you open it later (at most every 6 hours).</p>
+            data.parsesNote ? (
+              <p className="muted small">
+                No parses: {data.parsesNote} The usual reason is that the report is <strong>private</strong> on Warcraft Logs, since private
+                reports are never ranked. Changing it to public or unlisted there fixes it, and the site asks again within 6 hours.
+              </p>
+            ) : (
+              <p className="muted small">No parses yet: Warcraft Logs ranks a fight a while after it&rsquo;s uploaded. The site asks again when you open it later (at most every 6 hours).</p>
+            )
           )}
           <p className="muted small">Hover anyone for their top spells and numbers; click to analyze them.</p>
           <ol className="meter">

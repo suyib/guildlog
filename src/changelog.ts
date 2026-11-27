@@ -9,6 +9,20 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.46.2',
+    date: '2026-11-27',
+    changes: [
+      'Damage and healing meters in a new \u201ctinted glass\u201d style: names in their class color, a soft class-colored tint that strengthens toward the end of the bar, and a bright edge where it ends. Easier to read than the dark bars, especially on 25-player lists.',
+    ],
+  },
+  {
+    version: '0.46.1',
+    date: '2026-11-27',
+    changes: [
+      'When a fight still has no parses after asking Warcraft Logs again, the breakdown says what Warcraft Logs answered, and that private reports are never ranked (making the report public or unlisted on Warcraft Logs fixes it).',
+    ],
+  },
+  {
     version: '0.46.0',
     date: '2026-11-27',
     changes: [

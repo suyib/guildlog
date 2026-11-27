@@ -133,6 +133,7 @@ export function breakdownFromPack(host: string, pack: FightPack): FightBreakdown
     ...(digest.debuffs ? { debuffs: digest.debuffs } : {}),
     dpsSeries,
     feedback: raidFeedback([digest], { bloodlust: bloodlust.map((b) => b.seconds) }),
+    ...(pack.ranksNote ? { parsesNote: pack.ranksNote } : {}),
   };
 }
 

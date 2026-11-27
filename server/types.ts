@@ -331,6 +331,8 @@ export interface FightBreakdown {
     topHealing?: { name: string; pct: number; icon?: string }[];
   }[];
   deaths: (DeathRecap & { name: string; className: string })[];
+  /** Why there are no parses, when they were asked for again and none came back. */
+  parsesNote?: string;
   /** Debuffs the raid kept on the boss (missing for fights read before v0.25.0). */
   debuffs?: RaidDebuff[];
   takenByAbility: { name: string; icon?: string; total: number; playersHit: number; avoidable: boolean }[];

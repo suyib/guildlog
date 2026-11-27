@@ -96,6 +96,8 @@ export interface FightPack {
   fullTriedAt?: number;
   /** When parses were last asked for again because the fight had none yet (see backfillRanks). */
   ranksTriedAt?: number;
+  /** What Warcraft Logs said the last time parses were asked for and none came back. */
+  ranksNote?: string;
 }
 
 const q = encodeURIComponent;
@@ -660,9 +662,18 @@ const hasRanks = (r: any) => ['tanks', 'healers', 'dps'].some((k) => (r?.data?.[
  */
 async function backfillRanks(host: string, code: string, pack: FightPack): Promise<FightPack> {
   if (!pack.fight.kill || hasRanks(pack.t.rankings) || (pack.ranksTriedAt && Date.now() - pack.ranksTriedAt < 6 * 3_600_000)) return pack;
-  const c = await getTables(host, code, pack.fight.id, 'rankings(fightIDs:$fid, playerMetric:dps) hps: rankings(fightIDs:$fid, playerMetric:hps)', 12_000).catch(() => null);
+  let error: string | null = null;
+  const c = await getTables(host, code, pack.fight.id, 'rankings(fightIDs:$fid, playerMetric:dps) hps: rankings(fightIDs:$fid, playerMetric:hps)', 12_000)
+    .catch((e) => { error = (e as Error).message || String(e); return null; });
   const next: FightPack = { ...pack, ranksTriedAt: Date.now() };
-  if (c && hasRanks(trimRankings(c.rankings))) next.t = { ...pack.t, rankings: trimRankings(c.rankings), hps: trimRankings(c.hps) };
+  if (c && hasRanks(trimRankings(c.rankings))) {
+    next.t = { ...pack.t, rankings: trimRankings(c.rankings), hps: trimRankings(c.hps) };
+    delete next.ranksNote;
+  } else {
+    // Why, for the page: an error from Warcraft Logs, or an answer with nobody ranked
+    const fights = Array.isArray(c?.rankings?.data) ? c!.rankings.data.length : 0;
+    next.ranksNote = error ? `Warcraft Logs answered: ${String(error).slice(0, 160)}` : fights ? 'Warcraft Logs has this fight but no parses for anyone in it.' : 'Warcraft Logs has no rankings for this fight.';
+  }
   await writePack(host, code, next, digestFromPack(host, next)).catch(() => undefined);
   return next;
 }
