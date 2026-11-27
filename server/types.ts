@@ -528,8 +528,16 @@ export interface ZoneProgress {
     firstKill: string | null;
     kills: number;
     best: { seconds: number; host: string; code: string; fightId: number } | null;
+    /** The lowest boss health a wipe got it to (0–100), when known. */
+    bestPct?: number | null;
   }[];
   ranks: { progress: RankSet | null; speed: RankSet | null } | null;
+  /** How many saved raids went here. */
+  visits?: number;
+  /** The latest raid here: when, how long, and its kills and wipes on this raid's bosses. */
+  lastRaid?: { code: string; host: string; title: string | null; date: string; seconds: number; kills: number; wipes: number } | null;
+  /** The quickest night that killed every boss here (first pull to last kill). */
+  fastestClear?: { code: string; host: string; date: string; seconds: number } | null;
 }
 
 export interface ProfileCharacter {

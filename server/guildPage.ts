@@ -91,15 +91,18 @@ async function zonesOf(raids: SavedRaid[]): Promise<Map<string, { id: number; na
 export async function zoneProgress(raids: SavedRaid[]): Promise<ZoneProgress[]> {
   const dated = raids.filter((r) => r.startTime && r.card).sort((a, b) => a.startTime!.localeCompare(b.startTime!));
   const zoneOf = await zonesOf(dated);
-  const zones = new Map<number, ZoneProgress & { last: string }>();
+  const zones = new Map<number, Omit<ZoneProgress, 'visits'> & { last: string; nights: SavedRaid[] }>();
   for (const r of dated) {
     const z = zoneOf.get(r.code);
     if (!z) continue;
-    const zone = zones.get(z.id) ?? { id: z.id, name: z.name, host: r.host, killed: 0, total: 0, bosses: [], ranks: null, last: r.startTime! };
+    const zone = zones.get(z.id) ?? { id: z.id, name: z.name, host: r.host, killed: 0, total: 0, bosses: [], ranks: null, last: r.startTime!, nights: [] as SavedRaid[] };
     zone.last = r.startTime!;
+    zone.nights.push(r);
     for (const b of r.card!.bosses) {
       let boss = zone.bosses.find((x) => x.encounterId === b.encounterId);
-      if (!boss) zone.bosses.push((boss = { name: b.name, encounterId: b.encounterId, firstKill: null, kills: 0, best: null }));
+      if (!boss) zone.bosses.push((boss = { name: b.name, encounterId: b.encounterId, firstKill: null, kills: 0, best: null, bestPct: null }));
+      // How far the best wipe got (boss health left), for bosses not killed yet
+      for (const p of b.pulls ?? []) if (p.pct !== null && (boss.bestPct === null || boss.bestPct === undefined || p.pct < boss.bestPct)) boss.bestPct = p.pct;
       if (!b.kill || !b.seconds || !b.fightId) continue;
       boss.kills++;
       boss.firstKill ??= r.startTime!;
@@ -109,7 +112,22 @@ export async function zoneProgress(raids: SavedRaid[]): Promise<ZoneProgress[]> 
   }
   return [...zones.values()]
     .sort((a, b) => b.bosses.length - a.bosses.length || b.last.localeCompare(a.last))
-    .map(({ last, ...z }) => ({ ...z, killed: z.bosses.filter((b) => b.kills).length, total: z.bosses.length }));
+    .map(({ last, nights: visits, ...z }): ZoneProgress => {
+      const ids = z.bosses.map((b) => b.encounterId);
+      const latest = visits.at(-1)!;
+      // Full clears: every boss known in this raid killed in one night
+      const clears = visits.filter((r) => r.card!.raidSeconds > 0 && ids.every((id) => r.card!.bosses.some((b) => b.encounterId === id && b.kill)));
+      const fastest = clears.reduce<SavedRaid | null>((m, r) => (!m || r.card!.raidSeconds < m.card!.raidSeconds ? r : m), null);
+      const inZone = (r: SavedRaid) => r.card!.bosses.filter((b) => ids.includes(b.encounterId));
+      return {
+        ...z,
+        killed: z.bosses.filter((b) => b.kills).length,
+        total: z.bosses.length,
+        visits: visits.length,
+        lastRaid: { code: latest.code, host: latest.host, title: latest.title, date: latest.startTime!, seconds: latest.card!.raidSeconds, kills: inZone(latest).filter((b) => b.kill).length, wipes: inZone(latest).reduce((t, b) => t + b.wipes, 0) },
+        fastestClear: fastest ? { code: fastest.code, host: fastest.host, date: fastest.startTime!, seconds: fastest.card!.raidSeconds } : null,
+      };
+    });
 }
 
 /** Everyone in a raid in the last 8 weeks, with how many of those raids they were in. */

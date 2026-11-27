@@ -19,13 +19,15 @@ function RaidArt({ id, name }: { id: number | null | undefined; name: string }) 
  * What goes inside a raid card. The caller gives the outer element the "zone-card" class (a
  * summary, a header or a div), so the card can open an accordion or head a page.
  */
-export function RaidCardBody({ id, name, title, sub, heading = 'strong', children }: {
+export function RaidCardBody({ id, name, title, sub, details, heading = 'strong', children }: {
   id: number | null | undefined;
   /** The raid (zone) name, which picks the art and size. */
   name: string;
   /** What the card says, when not the raid name (e.g. a report's title). */
   title?: string;
   sub?: React.ReactNode;
+  /** More lines under the name (boss portraits, last visit…). */
+  details?: React.ReactNode;
   heading?: 'strong' | 'h1' | 'h2';
   children?: React.ReactNode;
 }) {
@@ -38,6 +40,7 @@ export function RaidCardBody({ id, name, title, sub, heading = 'strong', childre
       <span className="zone-card-text">
         <Title className="zone-card-name">{title ?? name}</Title>
         {sub && <span className="zone-card-sub">{sub}</span>}
+        {details}
       </span>
       {children}
     </>

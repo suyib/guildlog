@@ -233,8 +233,9 @@ function Progress({ zones, wcl }: { zones: ZoneProgress[]; wcl: HomeData['wcl'] 
         {zones.map((z) => (
           <details key={z.id} className="accordion zone-acc" open={z.id === main}>
             <summary className="zone-card">
-              <RaidCardBody id={z.id} name={z.name} sub={<ZoneRanks ranks={z.ranks} wcl={wcl} />}>
+              <RaidCardBody id={z.id} name={z.name} sub={<ZoneRanks ranks={z.ranks} wcl={wcl} />} details={<ZoneDetails z={z} />}>
                 <span className={`zone-count${z.killed === z.total ? ' full' : ''}`}>{z.killed}/{z.total}</span>
+                <progress className="zone-bar" max={z.total || 1} value={z.killed} aria-label={`${z.killed} of ${z.total} bosses killed`} />
               </RaidCardBody>
             </summary>
             <div className="scroll">
@@ -258,6 +259,41 @@ function Progress({ zones, wcl }: { zones: ZoneProgress[]; wcl: HomeData['wcl'] 
         ))}
       </div>
     </section>
+  );
+}
+
+/**
+ * Under a raid's name on its card: every boss as a portrait (grey until killed; a killed one opens
+ * its fastest kill), the last visit, and what's next (the next boss and the best pull on it) or,
+ * once cleared, the fastest full clear.
+ */
+function ZoneDetails({ z }: { z: ZoneProgress }) {
+  const next = z.bosses.find((b) => !b.kills);
+  const last = z.lastRaid;
+  const raidLink = (host: string, code: string) => `/?log=${encodeURIComponent(`https://${host}/reports/${code}`)}`;
+  return (
+    <span className="zone-details">
+      <span className="zone-bosses">
+        {z.bosses.map((b) => (
+          b.best
+            ? <a key={b.encounterId} href={fightLink(b.best)} className="zone-boss" title={`${b.name}: killed ${b.kills}\u00d7, fastest ${mmss(b.best.seconds)}`}><BossIcon id={b.encounterId} size="small" /></a>
+            : <span key={b.encounterId} className="zone-boss alive" title={`${b.name}: not killed yet${b.bestPct !== null && b.bestPct !== undefined ? `, best pull ${b.bestPct}%` : ''}`}><BossIcon id={b.encounterId} size="small" /></span>
+        ))}
+      </span>
+      {last && (
+        <span className="zone-line">
+          <a href={raidLink(last.host, last.code)}>Last raid {shortDate(last.date)}</a>
+          {last.seconds > 0 && ` \u00b7 ${hm(last.seconds)}`}
+          {` \u00b7 ${last.wipes ? `${last.wipes} wipe${last.wipes === 1 ? '' : 's'}` : 'no wipes'}`}
+          {z.visits && z.visits > 1 ? ` \u00b7 ${z.visits} raids logged` : ''}
+        </span>
+      )}
+      {next ? (
+        <span className="zone-line next">Next: <strong>{next.name}</strong>{next.bestPct !== null && next.bestPct !== undefined ? `, best pull to ${next.bestPct}%` : ''}</span>
+      ) : z.fastestClear ? (
+        <span className="zone-line">Fastest full clear <a href={raidLink(z.fastestClear.host, z.fastestClear.code)}><strong>{hm(z.fastestClear.seconds)}</strong></a> on {shortDate(z.fastestClear.date)}</span>
+      ) : null}
+    </span>
   );
 }
 

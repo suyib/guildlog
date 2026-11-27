@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.45.0',
+    date: '2026-11-27',
+    changes: [
+      'Raid cards on Home say more: every boss as a portrait (grey until killed; a killed one opens its fastest kill), the last raid there (date, length, wipes, how many raids logged), what\u2019s next (the next boss and the best pull on it) or, once cleared, the fastest full clear, and a progress bar along the bottom.',
+      'Testing: raid sizes for the Burning Crusade raids, so older test logs get their size badge. They go when fresh.warcraftlogs.com does.',
+    ],
+  },
+  {
     version: '0.44.0',
     date: '2026-11-27',
     changes: [

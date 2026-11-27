@@ -11,7 +11,12 @@ export const GAME = {
    */
   hosts: ['forever.warcraftlogs.com', 'fresh.warcraftlogs.com'],
   /** How many players each raid takes, by name, for the raid cards. */
-  raidSizes: { 'Barrow Deeps': 10, 'Hyjal Summit': 20, "Onyxia's Lair": 40 } as Record<string, number>,
+  raidSizes: {
+    'Barrow Deeps': 10, 'Hyjal Summit': 20, "Onyxia's Lair": 40,
+    // Burning Crusade, for testing with older logs (remove with fresh.warcraftlogs.com)
+    Karazhan: 10, 'Gruul / Magtheridon': 25, "Gruul's Lair": 25, "Magtheridon's Lair": 25, "Zul'Aman": 10,
+    'Serpentshrine Cavern': 25, 'Tempest Keep': 25, 'Serpentshrine Cavern / Tempest Keep': 25, 'Black Temple': 25, 'Mount Hyjal': 25, 'Sunwell Plateau': 25,
+  } as Record<string, number>,
 };
 
 /** A raid's size by name (ignoring case and curly apostrophes), when known. GAME CONTENT */
