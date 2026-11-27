@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.46.0',
+    date: '2026-11-27',
+    changes: [
+      'Missing parses: Warcraft Logs ranks a fight a while after it\u2019s uploaded, so raids saved while they were being logged could be stored without parses for good. A kill with no parses now asks again when it\u2019s opened (at most every 6 hours) and keeps them once they\u2019re there. The meter says so while they\u2019re missing.',
+      'Fight breakdown: hover anyone in Damage done or Healing done for their top 5 spells (with icons and their share), parse, DPS or HPS, share of the raid\u2019s total, active time or overheal, deaths, interrupts and item level.',
+    ],
+  },
+  {
     version: '0.45.0',
     date: '2026-11-27',
     changes: [

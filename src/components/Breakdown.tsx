@@ -4,6 +4,7 @@ import { compact, mmss, n0, pct } from '../format';
 import { DpsChart } from './charts';
 import BossRankLine from './BossRankLine';
 import Glyph from './Glyph';
+import { PlayerTipBox } from './PlayerTip';
 import { BossIcon, classCss, ClassIcon, GameIcon, parseCss, SeverityDot, TileIcon } from './icons';
 import { recapLine } from '../../server/insights';
 
@@ -106,9 +107,13 @@ export default function Breakdown({ data, host, onPick }: { data: FightBreakdown
       <div className="grid-2">
         <section className="panel">
           <h2 className="panel-title">Damage done</h2>
+          {players.length > 0 && players.every((p) => p.parse === null) && (
+            <p className="muted small">No parses yet: Warcraft Logs ranks a fight a while after it&rsquo;s uploaded. The site asks again when you open it later (at most every 6 hours).</p>
+          )}
+          <p className="muted small">Hover anyone for their top spells and numbers; click to analyze them.</p>
           <ol className="meter">
             {players.map((p, i) => (
-              <MeterRow key={p.id} rank={i + 1} p={p} value={p.dps} top={topDps} label={`${n0(p.dps)}`} onPick={onPick} />
+              <MeterRow key={p.id} rank={i + 1} p={p} value={p.dps} top={topDps} raid={totals.damage} label={`${n0(p.dps)}`} onPick={onPick} />
             ))}
           </ol>
         </section>
@@ -125,6 +130,7 @@ export default function Breakdown({ data, host, onPick }: { data: FightBreakdown
                   p={p}
                   value={p.hps}
                   top={topHps}
+                  raid={totals.healing}
                   label={n0(p.hps)}
                   extra={p.overhealPct !== null ? `${Math.round(p.overhealPct)}% overheal` : undefined}
                   onPick={onPick}
@@ -254,13 +260,33 @@ function Kpi({ glyph, label, value, sub }: { glyph: 'bolt' | 'pulse' | 'alert' |
   );
 }
 
-function MeterRow({ rank, p, value, top, label, extra, onPick, healing = false }: {
-  rank: number; p: Player; value: number; top: number; label: string; extra?: string; onPick: (id: number) => void; healing?: boolean;
+function MeterRow({ rank, p, value, top, raid, label, extra, onPick, healing = false }: {
+  rank: number; p: Player; value: number; top: number; raid: number; label: string; extra?: string; onPick: (id: number) => void; healing?: boolean;
 }) {
   const showParse = healing ? p.role === 'healer' : p.role !== 'healer';
+  const amount = healing ? p.healing : p.total;
   return (
     <li>
-      <button type="button" className="meter-row" onClick={() => onPick(p.id)} aria-label={`Analyze ${p.name}`}>
+      <button type="button" className="meter-row ptip" onClick={() => onPick(p.id)} aria-label={`Analyze ${p.name}`}>
+        <PlayerTipBox
+          name={p.name}
+          className={p.className}
+          specName={p.specName}
+          role={p.role}
+          lines={[
+            ...(showParse ? [{ label: healing ? 'Healing parse' : 'Parse', value: p.parse === null ? 'not ranked yet' : String(Math.round(p.parse)), cls: parseCss(p.parse) }] : []),
+            { label: healing ? 'HPS' : 'DPS', value: n0(value) },
+            { label: `Share of the raid's ${healing ? 'healing' : 'damage'}`, value: raid > 0 ? `${((amount / raid) * 100).toFixed(1)}%` : '–' },
+            ...(healing && p.overhealPct !== null ? [{ label: 'Overheal', value: `${Math.round(p.overhealPct)}%` }] : []),
+            ...(!healing && p.activePct !== null ? [{ label: 'Active time', value: `${Math.round(p.activePct)}%` }] : []),
+            ...(p.deaths ? [{ label: 'Deaths', value: String(p.deaths), cls: 'warn-text' }] : []),
+            ...(p.interrupts ? [{ label: 'Interrupts', value: String(p.interrupts) }] : []),
+            ...(p.itemLevel ? [{ label: 'Item level', value: String(Math.round(p.itemLevel)) }] : []),
+          ]}
+          spells={healing ? p.topHealing : p.topDamage}
+          spellsLabel={healing ? 'Top heals' : 'Top damage'}
+          note="Click to analyze them"
+        />
         <span className="meter-rank">{rank}</span>
         <ClassIcon className={p.className} spec={p.specName} size={18} />
         <span className="meter-name">

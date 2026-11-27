@@ -39,6 +39,12 @@ export function breakdownFromPack(host: string, pack: FightPack): FightBreakdown
   const interrupts = new Map(Object.entries(pack.t.interrupts ?? {}));
   const dispels = new Map(Object.entries(pack.t.dispels ?? {}));
 
+  // Spell icons by name (damage and healing tables), for each player's top spells
+  const iconOf = new Map<string, string>();
+  for (const t of [pack.t.damage, heal.healing]) for (const e of (t?.data?.entries ?? []) as any[]) for (const a of (e?.abilities ?? []) as any[]) if (a?.name && typeof a.abilityIcon === 'string') iconOf.set(a.name, a.abilityIcon);
+  const top = (list: { name: string; total: number }[], total: number) =>
+    total > 0 ? [...list].sort((a, b) => b.total - a.total).slice(0, 5).map((a) => ({ name: a.name, pct: Math.round((a.total / total) * 1000) / 10, ...(iconOf.has(a.name.replace(/ \(pet\)$/, '')) ? { icon: iconOf.get(a.name.replace(/ \(pet\)$/, ''))! } : {}) })) : [];
+
   const players = digest.players.map((p) => {
     const h = healBy.get(p.id);
     const healing = h?.total ?? 0;
@@ -64,6 +70,8 @@ export function breakdownFromPack(host: string, pack: FightPack): FightBreakdown
       deaths: p.deaths.length,
       interrupts: interrupts.get(p.name) ?? 0,
       dispels: dispels.get(p.name) ?? 0,
+      topDamage: top(p.abilities, p.total),
+      topHealing: top(p.healing?.abilities ?? [], p.healing?.total ?? 0),
     };
   });
 

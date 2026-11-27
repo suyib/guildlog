@@ -94,6 +94,8 @@ export interface FightPack {
   /** Why the full read didn't work last time, and when it was tried (it's tried again later). */
   fullError?: string;
   fullTriedAt?: number;
+  /** When parses were last asked for again because the fight had none yet (see backfillRanks). */
+  ranksTriedAt?: number;
 }
 
 const q = encodeURIComponent;
@@ -649,8 +651,25 @@ export async function getPack(host: string, code: string, ref: FightRef, want: S
   }
 }
 
+const hasRanks = (r: any) => ['tanks', 'healers', 'dps'].some((k) => (r?.data?.[0]?.roles?.[k]?.characters ?? []).some((c: any) => typeof c.rankPercent === 'number'));
+
+/**
+ * Parses for a stored kill that has none. Warcraft Logs ranks a fight some time after it's
+ * uploaded, so a raid saved while it was being logged can be stored without them. Asks again (two
+ * small requests), at most every 6 hours per fight, and stores them once they're there.
+ */
+async function backfillRanks(host: string, code: string, pack: FightPack): Promise<FightPack> {
+  if (!pack.fight.kill || hasRanks(pack.t.rankings) || (pack.ranksTriedAt && Date.now() - pack.ranksTriedAt < 6 * 3_600_000)) return pack;
+  const c = await getTables(host, code, pack.fight.id, 'rankings(fightIDs:$fid, playerMetric:dps) hps: rankings(fightIDs:$fid, playerMetric:hps)', 12_000).catch(() => null);
+  const next: FightPack = { ...pack, ranksTriedAt: Date.now() };
+  if (c && hasRanks(trimRankings(c.rankings))) next.t = { ...pack.t, rankings: trimRankings(c.rankings), hps: trimRankings(c.hps) };
+  await writePack(host, code, next, digestFromPack(host, next)).catch(() => undefined);
+  return next;
+}
+
 async function loadPack(host: string, code: string, given: FightRef, want: Stage, deadline: number): Promise<FightPack> {
-  const stored = await readPack(code, given.id);
+  const read = await readPack(code, given.id);
+  const stored = read ? await backfillRanks(host, code, read).catch(() => read) : null;
   if (stored && (stored.stage === 'full' || want === 'tables')) return stored;
   // A full read that just failed isn't tried again straight away (a player's analysis asks several times at once)
   if (stored?.fullTriedAt && Date.now() - stored.fullTriedAt < 2 * 60_000) return stored;
@@ -666,7 +685,7 @@ async function loadPack(host: string, code: string, given: FightRef, want: Stage
   const tables: Promise<FightPack> = stored
     ? Promise.resolve(stored)
     : readTables(host, code, ref.id).then(async (t) => {
-        const p: FightPack = { v: PACK_VERSION, stage: 'tables', fight: ref, t };
+        const p: FightPack = { v: PACK_VERSION, stage: 'tables', fight: ref, t, ...(hasRanks(t.rankings) ? {} : { ranksTriedAt: Date.now() }) };
         await writePack(host, code, p, digestFromPack(host, p)).catch(() => undefined);
         return p;
       });

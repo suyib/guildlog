@@ -326,6 +326,9 @@ export interface FightBreakdown {
     deaths: number;
     interrupts: number;
     dispels: number;
+    /** Their top 5 damage and healing spells, in percent of their own total (for the meter tooltips). */
+    topDamage?: { name: string; pct: number; icon?: string }[];
+    topHealing?: { name: string; pct: number; icon?: string }[];
   }[];
   deaths: (DeathRecap & { name: string; className: string })[];
   /** Debuffs the raid kept on the boss (missing for fights read before v0.25.0). */
