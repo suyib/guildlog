@@ -1,14 +1,14 @@
-// The home page around "Analyze a log", as a guild page like Warcraft Logs': who the guild is,
-// progress and ranks, best parses, the roster by role, the raid schedule and recent reports.
+// The home page around "Analyze a log": who the guild is, the latest raid's achievements, progress
+// and ranks, recent reports and highlights, best parses and recent analyses. The roster, raid
+// times and attendance are on the Guild page (Roster & attendance).
 import { useEffect, useState } from 'react';
 import type { GuildRankings, HomeData, SavedRaid, ZoneProgress } from '../../server/types';
 import { loadHome } from '../api';
 import { mmss, n0 } from '../format';
 import Glyph from './Glyph';
-import { BossIcon, classCss, ClassIcon, EmptyNote, parseCss, RoleIcon, TileIcon } from './icons';
+import { BossIcon, classCss, ClassIcon, EmptyNote, parseCss } from './icons';
 import { RaidCardBody } from './RaidCard';
 import Achievements from './Achievements';
-import PlayerTip from './PlayerTip';
 import { attendanceAchievement, raidAchievements } from '../achievements';
 
 export { RANK_CSS, mainZone, Schedule, ZonePicker, ZoneRanks };
@@ -88,12 +88,11 @@ export function HomeHero() {
   );
 }
 
-/** Below "Analyze a log", laid out like a Warcraft Logs guild page: progress beside the ranks,
- * schedule and recent reports, then best parses, the roster by role and recent analyses full width. */
+/** Below "Analyze a log": achievements, progress beside recent reports and highlights, then best
+ * parses and recent analyses full width. */
 export function HomeExtras() {
   const d = useHome();
   if (!d) return null;
-  const s = d.stats;
   // The latest raid's achievements, plus perfect attendance
   const last = d.latestRaids.find((r) => r.card && r.startTime && (r.card.summarized ?? r.card.kills) >= r.card.kills);
   const achievements = [
@@ -102,15 +101,6 @@ export function HomeExtras() {
   ];
   return (
     <>
-      {d.latestRaids.length > 0 && (
-        <div className="kpis">
-          <Kpi glyph="calendar" label="Raids" value={String(s.raids8w)} sub="last 8 weeks" />
-          <Kpi glyph="check" label="Full clears" value={s.raids8w ? `${s.fullClears8w} of ${s.raids8w}` : '–'} sub="every boss killed" />
-          <Kpi glyph="timer" label="Raid time" value={s.avgRaidSeconds ? hm(s.avgRaidSeconds) : '–'} sub="average, first pull to last kill" />
-          <Kpi glyph="users" label="Active raiders" value={String(s.activeRaiders4w)} sub="in a raid in the last 4 weeks" />
-        </div>
-      )}
-
       <Achievements list={achievements} title={last ? `${last.title ?? 'Last raid'}: achievements` : 'Achievements'} />
 
       <div className="grid-2-1">
@@ -124,7 +114,6 @@ export function HomeExtras() {
         </div>
 
         <aside className="home-col">
-          {d.schedule.length > 0 && <Schedule raids={d.schedule} />}
 
           <section className="panel">
             <div className="panel-head">
@@ -171,7 +160,6 @@ export function HomeExtras() {
       </div>
 
       {d.rankings.length > 0 && <Rankings list={d.rankings} />}
-      {d.roster.length > 0 && <Composition roster={d.roster} rankings={d.rankings} />}
       {d.recentAnalyses.length > 0 && <RecentAnalyses list={d.recentAnalyses} />}
     </>
   );
@@ -203,15 +191,6 @@ function RecentAnalyses({ list }: { list: HomeData['recentAnalyses'] }) {
   );
 }
 
-function Kpi({ glyph, label, value, sub }: { glyph: 'calendar' | 'check' | 'timer' | 'users'; label: string; value: string; sub: string }) {
-  return (
-    <div className="kpi">
-      <div className="kpi-head"><TileIcon glyph={glyph} />{label}</div>
-      <div className="kpi-value">{value}</div>
-      <div className="kpi-sub">{sub}</div>
-    </div>
-  );
-}
 
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 /** Warcraft Logs' rank colors, in the site's parse colors. */
@@ -319,56 +298,6 @@ function ZoneRanks({ ranks, wcl }: { ranks: ZoneProgress['ranks']; wcl: HomeData
         </span>
       ))}
     </span>
-  );
-}
-
-const ROLES = [['tank', 'Tanks'], ['healer', 'Healers'], ['dps', 'Damage']] as const;
-
-/** Who's been raiding in the last 8 weeks, by role, with item level and raids attended. */
-function Composition({ roster, rankings }: { roster: HomeData['roster']; rankings: GuildRankings[] }) {
-  const of = roster[0]?.of ?? 0;
-  // Each player's average parse in the main raid, for the tooltips
-  const main = rankings.length ? mainZone(rankings, (r) => r.bosses.length) : null;
-  const avgOf = (name: string) => main?.players.find((x) => x.name === name)?.avg ?? null;
-  return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2 className="panel-title">Composition ({roster.length})</h2>
-        <span className="muted small">Item level · raids attended in the last 8 weeks ({of})</span>
-      </div>
-      <div className="composition">
-        {ROLES.map(([role, label]) => {
-          const list = roster.filter((p) => (p.role ?? 'dps') === role);
-          return (
-            <div key={role}>
-              <div className="comp-label with-icon"><RoleIcon role={role} />{label} ({list.length})</div>
-              <ul className="roster">
-                {list.map((p) => (
-                  <li key={p.name}>
-                    <ClassIcon className={p.className} spec={p.specName} size={18} />
-                    <PlayerTip
-                      name={p.name}
-                      className={p.className}
-                      specName={p.specName}
-                      role={p.role}
-                      lines={[
-                        ...(main ? [{ label: `Average parse, ${main.zone}`, value: avgOf(p.name) === null ? '–' : String(avgOf(p.name)), cls: parseCss(avgOf(p.name)) }] : []),
-                        { label: 'Item level', value: p.itemLevel ? String(Math.round(p.itemLevel)) : '–' },
-                        { label: 'Raids (8 weeks)', value: `${p.raids} of ${p.of}` },
-                      ]}
-                    >
-                      <span className={`roster-name ${classCss(p.className)}`}>{p.name}</span>
-                    </PlayerTip>
-                    <span className="muted small r">{p.itemLevel ? Math.round(p.itemLevel) : ''}</span>
-                    <span className="muted small r" title={`${p.raids} of ${p.of} raids`}>{p.raids}/{p.of}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-      </div>
-    </section>
   );
 }
 

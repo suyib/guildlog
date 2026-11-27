@@ -66,9 +66,6 @@ export async function sessionCookie(secret: string, s: Omit<Session, 'exp'>): Pr
   return `${COOKIE_NAME}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${days * 86_400}`;
 }
 
-/** Kept for the password form: a password session. */
-export const createSessionCookie = (secret: string) => sessionCookie(secret, { kind: 'password', officer: false });
-
 export const clearSessionCookie = () => `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 
 export function readCookie(header: string | null, name: string): string | undefined {
@@ -102,10 +99,6 @@ export async function readSession(cookieHeader: string | null, secret: string): 
 
 /** A Discord session is for one server; it only opens the site of that server. */
 export const forThisGuild = (s: Session) => s.kind !== 'discord' || !process.env.DISCORD_GUILD_ID?.trim() || s.gid === process.env.DISCORD_GUILD_ID.trim();
-
-export async function isValidSession(cookieHeader: string | null, secret: string): Promise<boolean> {
-  return (await readSession(cookieHeader, secret)) !== null;
-}
 
 /** For API routes: null when signed in, else the error response to send. */
 export async function requireSession(req: Request): Promise<Response | null> {

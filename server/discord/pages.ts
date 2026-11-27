@@ -72,7 +72,11 @@ export function raidSummary(digest: RaidDigest, loggerId: string | null): Messag
       .map((id) => ({ boss: bosses.find((f) => f.encounterID === id)!.name, count: bosses.filter((f) => f.encounterID === id && !f.kill).length }))
       .filter((w) => w.count > 0),
   });
-  const points = (list: RaidPoint[]) => clip(list.slice(0, 4).map((p) => `• **${p.title}**: ${p.detail}`).join('\n'));
+  // Every point the site shows (up to 6, like the raid page); titles only if they would not fit
+  const points = (list: RaidPoint[]) => {
+    const full = list.slice(0, 6).map((p) => `• **${p.title}**: ${p.detail}`).join('\n');
+    return full.length <= 1024 ? full : clip(list.slice(0, 6).map((p) => `• **${p.title}**`).join('\n'));
+  };
   const feedbackFields = [
     ...(feedback.good.length ? [{ name: 'What went well', value: points(feedback.good) }] : []),
     ...(feedback.work.length ? [{ name: 'What to work on', value: points(feedback.work) }] : []),

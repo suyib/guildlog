@@ -122,6 +122,8 @@ h2, h3 { margin: 0; }
 .brand .logo { width: 36px; height: 36px; flex: none; }
 .brand:hover { text-decoration: none; }
 .side-nav { display: flex; flex-direction: column; gap: 2px; }
+.side-nav .side-label { padding: 14px 10px 4px; }
+.side-nav .side-label:first-child { padding-top: 0; }
 .side-label { padding: 0 10px 6px; font: 400 11px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
 .side-nav a, .side-nav button {
   display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; height: 38px; padding: 0 10px;
@@ -1097,6 +1099,8 @@ button.perf-person-head:hover:not(:disabled) { background: var(--hover); }
 .perf-note { color: var(--gold); }
 .perf-open { margin-top: 10px; }
 button.sort-button { font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; }
+.perf-who { display: flex; align-items: center; gap: 10px; }
+.perf-who > span { display: flex; flex-direction: column; line-height: 1.25; }
 .perf-table tr.on td { background: rgba(var(--primary-tint), 0.1); }
 
 /* ---------- Guild page ---------- */

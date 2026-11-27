@@ -17,10 +17,10 @@ export default function Footer() {
         <nav aria-label="Site">
           <div className="footer-label">Site</div>
           <a href="/">Analyze</a>
-          <a href="/#/guild">Guild</a>
+          <a href="/#/guild">Roster &amp; attendance</a>
           <a href="/#/raids">Past raids</a>
           <a href="/#/rankings">Rankings</a>
-          <a href="/#/history">History</a>
+          <a href="/#/history">Saved analyses</a>
         </nav>
         <nav aria-label="About">
           <div className="footer-label">About</div>

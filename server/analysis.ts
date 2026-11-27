@@ -1,5 +1,5 @@
 import { ADVICE, LIMITS, say } from './coach.js';
-import { GAP_SECONDS, IGNORE_FOR_GAPS, cooldownFor } from './cooldowns.js';
+import { GAP_SECONDS, IGNORE_FOR_GAPS, cooldownFor, expectedCooldowns } from './cooldowns.js';
 import { isGeneralBuff } from './buffs.js';
 import { DEFENSE_CAP_NOTE, tankCanBeCritCapped } from './gameData.js';
 import { recapLine } from './insights.js';
@@ -131,6 +131,9 @@ export function buildSnapshot(input: SnapshotInput): PlayerSnapshot {
 
   const cooldowns: CooldownUse[] = [];
   const byName = new Map<string, number[]>();
+  // The class's and spec's own big cooldowns count even when never pressed ("0 of 3")
+  const [who, whoSpec] = String(input.fightRow?.icon ?? '').split('-');
+  for (const name of expectedCooldowns(input.rankingRow?.class ?? who ?? actor.subType ?? '', input.rankingRow?.spec ?? whoSpec ?? '')) byName.set(name, []);
   for (const e of timeline) {
     if (cooldownFor(e.name) === undefined) continue;
     if (!byName.has(e.name)) byName.set(e.name, []);

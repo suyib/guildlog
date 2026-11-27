@@ -37,12 +37,16 @@ export default function Sidebar({ page }: { page: 'analyze' | 'guild' | 'perform
       {/* Guests (a shared link, not signed in) only see the analysis they were sent */}
       {me?.signedIn && (
         <nav className="side-nav side-menu" id="side-menu" aria-label="Pages" onClick={() => setOpen(false)}>
-          <a href="/" className={page === 'analyze' || page === 'saved' ? 'on' : ''}><Glyph name="compass" />Analyze</a>
-          <a href="/#/guild" className={page === 'guild' ? 'on' : ''}><Glyph name="users" />Guild</a>
-          {canLookup(me?.rank) && <a href="/#/performance" className={page === 'performance' ? 'on' : ''}><Glyph name="pulse" />Performance</a>}
-          <a href="/#/raids" className={page === 'raids' ? 'on' : ''}><Glyph name="calendar" />Past raids</a>
+          {/* Grouped by what you're doing: looking at fights, looking at raids, looking after the guild */}
+          <div className="side-label">Fights</div>
+          <a href="/" className={page === 'analyze' || page === 'saved' ? 'on' : ''}><Glyph name="compass" />Analyze a log</a>
+          <a href="/#/history" className={page === 'history' ? 'on' : ''}><Glyph name="clock" />Saved analyses</a>
+          <div className="side-label">Raids</div>
+          <a href="/#/raids" className={page === 'raids' || page === 'myraid' ? 'on' : ''}><Glyph name="calendar" />Past raids</a>
           <a href="/#/rankings" className={page === 'rankings' ? 'on' : ''}><Glyph name="bars" />Rankings</a>
-          <a href="/#/history" className={page === 'history' ? 'on' : ''}><Glyph name="clock" />History</a>
+          <div className="side-label">Guild</div>
+          <a href="/#/guild" className={page === 'guild' ? 'on' : ''}><Glyph name="users" />Roster &amp; attendance</a>
+          {canLookup(me?.rank) && <a href="/#/performance" className={page === 'performance' ? 'on' : ''}><Glyph name="pulse" />Performance</a>}
           {me?.officer && <a href="/#/admin" className={page === 'admin' ? 'on' : ''}><Glyph name="shield" />Admin</a>}
         </nav>
       )}

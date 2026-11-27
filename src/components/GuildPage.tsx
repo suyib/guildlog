@@ -1,15 +1,16 @@
 // The guild at a glance: who it is, its numbers, the raid team by role (like Warcraft Logs'
 // Composition), a small calendar of recent raids, the usual raid nights and attendance.
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { GuildRankings, HomeData, SavedRaid } from '../../server/types';
 import { type Me, loadHome, loadMe, loadRaids } from '../api';
 import { n0 } from '../format';
 import Glyph from './Glyph';
 import { Schedule, mainZone } from './Home';
 import PlayerTip from './PlayerTip';
-import { Attendance, RANGES, type RangeId, outcome } from './RaidsPage';
+import { outcome } from './RaidsPage';
 import { classCss, ClassIcon, EmptyNote, parseCss, RoleIcon, TileIcon } from './icons';
 
+const shortDate = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 const hm = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : `${Math.round(s / 60)}m`);
 
 /** The shortest period with at least one raid in it, so the page isn't empty after a break. */
@@ -200,5 +201,115 @@ function MiniCalendar({ raids }: { raids: SavedRaid[] }) {
         <span className="raid-dot full" /> full clear <span className="raid-dot partial" /> some killed <span className="raid-dot none" /> no kills
       </p>
     </section>
+  );
+}
+
+const RANGES = [
+  { id: '4w', label: 'Last 4 weeks', days: 28 },
+  { id: '8w', label: 'Last 8 weeks', days: 56 },
+  { id: '6m', label: 'Last 6 months', days: 183 },
+  { id: 'all', label: 'All raids', days: Infinity },
+] as const;
+type RangeId = (typeof RANGES)[number]['id'];
+
+// ---------- Attendance ----------
+
+function Attendance({ raids, range, onRange, onSelect, officer }: { raids: SavedRaid[]; range: RangeId; onRange: (r: RangeId) => void; onSelect: (code: string) => void; officer: boolean }) {
+  const days = RANGES.find((r) => r.id === range)!.days;
+  const inRange = raids
+    .filter((r) => r.card && Date.now() - new Date(r.startTime!).getTime() <= days * 86_400_000)
+    .sort((a, b) => a.startTime!.localeCompare(b.startTime!));
+  const people = useMemo(() => {
+    const m = new Map<string, { name: string; className: string; nights: Set<string>; last: string }>();
+    for (const r of inRange) for (const p of r.card!.raiders) {
+      const x = m.get(p.name) ?? { name: p.name, className: p.className, nights: new Set<string>(), last: r.startTime! };
+      x.nights.add(r.code);
+      if (r.startTime! > x.last) x.last = r.startTime!;
+      m.set(p.name, x);
+    }
+    return [...m.values()].sort((a, b) => b.nights.size - a.nights.size || b.last.localeCompare(a.last) || a.name.localeCompare(b.name));
+  }, [inRange]);
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2 className="panel-title">Attendance</h2>
+        <select value={range} onChange={(e) => onRange(e.target.value as RangeId)} aria-label="Period">
+          {RANGES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+        </select>
+      </div>
+      {officer && inRange.length >= 3 && <BenchHelper people={people} raids={inRange.length} />}
+      {inRange.length === 0 ? <p className="muted">No raids in this period. Pick a longer one above.</p> : (
+        <div className="scroll">
+          <table className="grid attendance">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th className="r">Raids</th>
+                <th className="att-bar-col">Attended</th>
+                <th>Last raid</th>
+                <th className="att-nights-col">Each raid (oldest to newest)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {people.map((p) => (
+                <tr key={p.name}>
+                  <td>
+                    <span className={`with-icon ${classCss(p.className)}`}><ClassIcon className={p.className} size={16} />{p.name}</span>
+                    {inRange.length >= 3 && p.nights.size === inRange.length && <span className="perfect-att" title="Perfect attendance in this period">Perfect attendance</span>}
+                  </td>
+                  <td className="r">{p.nights.size} / {inRange.length}</td>
+                  <td className="att-bar-col"><progress className={`bar ${classCss(p.className)}-bar`} max={inRange.length} value={p.nights.size} aria-label={`${p.name} attended ${p.nights.size} of ${inRange.length}`} /></td>
+                  <td className="muted">{shortDate(new Date(p.last))}</td>
+                  <td className="att-nights-col">
+                    <span className="att-nights">
+                      {inRange.map((r) => (
+                        <button
+                          key={r.code}
+                          type="button"
+                          className={`att-dot${p.nights.has(r.code) ? ' on' : ''}`}
+                          title={`${shortDate(new Date(r.startTime!))}: ${r.title ?? r.code}${p.nights.has(r.code) ? '' : ' (not there)'}`}
+                          aria-label={`${shortDate(new Date(r.startTime!))} ${p.nights.has(r.code) ? 'attended' : 'not there'}`}
+                          onClick={() => onSelect(r.code)}
+                        />
+                      ))}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Officers only: who it's fairest to sit next, when the raid's full. Regulars (in at least half the
+ * raids) who've missed the fewest, so the bench goes round instead of landing on the same people.
+ */
+function BenchHelper({ people, raids }: { people: { name: string; className: string; nights: Set<string> }[]; raids: number }) {
+  const regulars = people.filter((p) => p.nights.size * 2 >= raids);
+  if (regulars.length < 3) return null;
+  const next = [...regulars].sort((a, b) => b.nights.size - a.nights.size || a.name.localeCompare(b.name)).slice(0, 5);
+  const due = [...regulars].sort((a, b) => a.nights.size - b.nights.size || a.name.localeCompare(b.name)).filter((p) => p.nights.size < raids).slice(0, 5);
+  return (
+    <details className="accordion bench-helper">
+      <summary>Bench rotation <span className="muted small">(officers)</span></summary>
+      <div className="grid-2">
+        <div>
+          <div className="comp-label">Fairest to sit next</div>
+          <p className="muted small">Regulars who haven&rsquo;t missed a raid (or missed the fewest).</p>
+          <ul className="bench-list">{next.map((p) => <li key={p.name}><span className={classCss(p.className)}>{p.name}</span> <span className="muted small">{raids - p.nights.size} missed</span></li>)}</ul>
+        </div>
+        <div>
+          <div className="comp-label">Due a spot</div>
+          <p className="muted small">Regulars who&rsquo;ve sat out or missed the most.</p>
+          {due.length ? <ul className="bench-list">{due.map((p) => <li key={p.name}><span className={classCss(p.className)}>{p.name}</span> <span className="muted small">{raids - p.nights.size} missed</span></li>)}</ul> : <p className="muted small">Nobody: every regular has been in every raid.</p>}
+        </div>
+      </div>
+      <p className="muted small">From the logs only: it can&rsquo;t tell sitting out from being away, so use it as a starting point.</p>
+    </details>
   );
 }

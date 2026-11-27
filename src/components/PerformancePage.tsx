@@ -175,7 +175,12 @@ export default function PerformancePage() {
                 <tbody>
                   {rows.map((p) => (
                     <tr key={p.name} className={`clickable${open === p.name ? ' on' : ''}`} onClick={() => toggle(p.name)}>
-                      <td><span className={`with-icon ${classCss(p.className)}`}><ClassIcon className={p.className} size={16} />{p.name}</span> <span className="muted small">{p.spec}</span></td>
+                      <td>
+                        <span className="perf-who">
+                          <ClassIcon className={p.className} size={22} />
+                          <span><strong className={classCss(p.className)}>{p.name}</strong><span className="muted small">{p.spec}</span></span>
+                        </span>
+                      </td>
                       <td className="r">{p.kills}</td>
                       <td className={`r strong ${parseCss(p.parse)}`}>{p.parse ?? (p.role === 'tank' ? 'tank' : '–')}</td>
                       <td className={`r ${parseCss(p.best)}`}>{p.best ?? '–'}</td>

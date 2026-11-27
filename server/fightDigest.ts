@@ -2,7 +2,7 @@
 // (no Warcraft Logs requests). It's what the Discord bot, the raid cards, Whole night, Home and
 // profiles read, so the site and Discord always tell the same story.
 import { possibleUses } from './analysis.js';
-import { IGNORE_FOR_GAPS, cooldownFor } from './cooldowns.js';
+import { IGNORE_FOR_GAPS, cooldownFor, expectedCooldowns } from './cooldowns.js';
 import { gearFrom, statsFrom, survivalFrom } from './dashboard.js';
 import type { FightPack } from './pack.js';
 import { detailRows, num, rankingRows } from './tables.js';
@@ -49,7 +49,7 @@ export interface PlayerDigest {
 }
 
 /** Bump when what's in a digest changes; stored digests are then worked out again from the stored fight. */
-export const DIGEST_VERSION = 8; // 8: flasks, elixirs and food; 7: potions, DoTs, mitigation, death recaps, boss debuffs; 6: from stored fights; 5: healing; 4: pet damage as "<pet> (pet)"; 3: roles
+export const DIGEST_VERSION = 9; // 9: unused class cooldowns count as 0 uses; 8: flasks, elixirs and food; 7: potions, DoTs, mitigation, death recaps, boss debuffs; 6: from stored fights; 5: healing; 4: pet damage as "<pet> (pet)"; 3: roles
 
 export interface FightDigest {
   v?: number;
@@ -65,6 +65,15 @@ export interface FightDigest {
   players: PlayerDigest[];
   /** Debuffs the raid kept on the boss (once read in full). */
   debuffs?: RaidDebuff[];
+}
+
+/** Big cooldowns: every one they used, plus their class's and spec's own that they never pressed (0 uses). */
+function cooldownsOf(casts: { name: string; count: number }[], className: string, specName: string, seconds: number) {
+  const used = casts.filter((c) => cooldownFor(c.name) !== undefined).map((c) => ({ name: c.name, uses: c.count, possible: possibleUses(seconds, cooldownFor(c.name)!) }));
+  const missing = expectedCooldowns(className, specName)
+    .filter((n) => !used.some((u) => u.name.toLowerCase() === n.toLowerCase()))
+    .map((n) => ({ name: n, uses: 0, possible: possibleUses(seconds, cooldownFor(n)!) }));
+  return [...used, ...missing];
 }
 
 /** A healer on this fight: healing well above their damage. Their DM pages are about healing. */
@@ -174,9 +183,7 @@ export function digestFromPack(host: string, pack: FightPack): FightDigest {
       activePct: typeof e.activeTime === 'number' && seconds > 0 ? Math.round((e.activeTime / (seconds * 1000)) * 1000) / 10 : null,
       abilities: withPets(e).sort((a, b) => b.total - a.total).slice(0, 10),
       casts: castList.slice(0, 12),
-      cooldowns: castList
-        .filter((c) => cooldownFor(c.name) !== undefined)
-        .map((c) => ({ name: c.name, uses: c.count, possible: possibleUses(seconds, cooldownFor(c.name)!) })),
+      cooldowns: cooldownsOf(castList, rank?.class ?? iconClass ?? e.type ?? '', rank?.spec ?? det?.specs?.[0]?.spec ?? iconSpec ?? '', seconds),
       deaths: recaps.get(e.id) ?? deathEntries
         .filter((x) => x.name === e.name)
         .map((x) => ({ seconds: Math.round((num(x.deathTime ?? x.timestamp) - fight.startTime) / 1000), by: x.killingBlow?.name ?? x.ability?.name ?? 'Unknown' })),

@@ -5,7 +5,7 @@ import { ADVICE, LIMITS, asLine, say } from '../server/coach';
 import type { Fight, PlayerTables } from '../server/wcl';
 import { healingFrom, seriesFrom, seriesFromSeconds, survivalFrom } from '../server/dashboard';
 import { statTooltip } from '../src/statInfo';
-import { cooldownFor } from '../server/cooldowns';
+import { cooldownFor, expectedCooldowns } from '../server/cooldowns';
 
 const fight: Fight = { id: 11, encounterID: 651, name: 'Magtheridon', startTime: 0, endTime: 177_000, kill: true, size: 25, difficulty: 3 };
 const abilities = new Map<number, string>([[1, 'Steady Shot'], [2, 'Bestial Wrath'], [3, 'Blood Fury'], [4, 'Auto Shot'], [5, 'Arcane Shot']]);
@@ -170,6 +170,11 @@ const takenLine = seriesFrom([
 ], 0, 30, 400, true);
 assert.equal(takenLine[10].note, 'Mostly Shatter');
 assert.equal(takenLine.length, 30);
+
+// Cooldowns never pressed still count: a Beast Mastery hunter is expected to use Rapid Fire and Bestial Wrath
+assert.deepEqual(expectedCooldowns('Hunter', 'BeastMastery').sort(), ['Bestial Wrath', 'Rapid Fire']);
+assert.deepEqual(expectedCooldowns('Warrior', 'Protection'), [], 'tanks aren\u2019t expected to use damage cooldowns');
+assert.deepEqual(expectedCooldowns('Warlock', 'Destruction'), []);
 
 // One source of wording: the site's analysis says what the bot and the officers' lists say
 {

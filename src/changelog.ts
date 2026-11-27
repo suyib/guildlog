@@ -9,6 +9,24 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.49.1',
+    date: '2026-11-27',
+    changes: [
+      'Cooldowns you never pressed now count: your class\u2019s and spec\u2019s own big cooldowns show as \u201c0 of 3\u201d instead of being left out, so \u201c1 of 1\u201d can\u2019t hide one you forgot. Site and Discord both, for raids read from now on and older ones as they\u2019re reopened.',
+      'Discord\u2019s raid summary lists the same points as the raid page (up to six), instead of only the first four.',
+    ],
+  },
+  {
+    version: '0.49.0',
+    date: '2026-11-27',
+    changes: [
+      'The menu is grouped: Fights (Analyze a log, Saved analyses), Raids (Past raids, Rankings) and Guild (Roster & attendance, Performance, Admin). Your night lights up Past raids.',
+      'Each thing now lives in one place: the roster by role, raid times and attendance (with the officers\u2019 bench rotation) are on Roster & attendance, so Home and Past raids are shorter. Home keeps the guild, achievements, progress, recent reports, highlights and best parses.',
+      'Performance: each player\u2019s name and spec sit on two lines in the Everyone table, so they line up.',
+      'Tidying: unused sign-in helpers removed.',
+    ],
+  },
+  {
     version: '0.48.0',
     date: '2026-11-27',
     changes: [

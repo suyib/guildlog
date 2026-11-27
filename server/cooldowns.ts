@@ -39,6 +39,35 @@ const key = (name: string) => name.toLowerCase().replace(/[\u2018\u2019]/g, "'")
 const index = (table: Record<string, number>) => new Map(Object.entries(table).map(([n, s]) => [key(n), s]));
 const BY_NAME = index(TBC);
 
+/**
+ * The big cooldowns every player of a class (or spec) has, so one that's never pressed still
+ * counts as "0 of N" rather than going unnoticed. Only baseline and core spec spells: talents
+ * outside the spec's own tree, racials and trinkets vary by player, so they're only counted when
+ * used. Keys are "class" or "class-spec" as Warcraft Logs names them (lower case, no spaces).
+ * GAME CONTENT (Burning Crusade for now).
+ */
+const EXPECTED: Record<string, string[]> = {
+  hunter: ['Rapid Fire'],
+  'hunter-beastmastery': ['Bestial Wrath'],
+  'mage-arcane': ['Arcane Power', 'Presence of Mind'],
+  'mage-fire': ['Combustion'],
+  'mage-frost': ['Icy Veins'],
+  'warrior-arms': ['Death Wish', 'Recklessness'],
+  'warrior-fury': ['Death Wish', 'Recklessness'],
+  'rogue-combat': ['Adrenaline Rush', 'Blade Flurry'],
+  paladin: ['Avenging Wrath'],
+  'paladin-holy': ['Divine Favor', 'Divine Illumination'],
+  'shaman-elemental': ['Elemental Mastery'],
+  'priest-discipline': ['Inner Focus', 'Power Infusion'],
+};
+
+/** The cooldowns this class and spec are expected to use (see EXPECTED). */
+export function expectedCooldowns(className: string, specName: string): string[] {
+  const c = className.toLowerCase().replace(/\s+/g, '');
+  const s = specName.toLowerCase().replace(/\s+/g, '');
+  return [...new Set([...(EXPECTED[c] ?? []), ...(s ? EXPECTED[`${c}-${s}`] ?? [] : [])])].filter((n) => cooldownFor(n) !== undefined);
+}
+
 /** Cooldown in seconds for a cast, or undefined if it isn't a tracked cooldown. */
 export function cooldownFor(name: string): number | undefined {
   return BY_NAME.get(key(name));
