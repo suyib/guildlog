@@ -117,8 +117,6 @@ export default function Sidebar({ page }: { page: 'analyze' | 'raids' | 'ranking
 
       <div className="side-version side-menu">
         v{__APP_VERSION__} <a href="/#/changelog" className="changelog-link">Changelog</a>
-        <a href="/terms" className="changelog-link">Terms</a>
-        <a href="/privacy" className="changelog-link">Privacy</a>
       </div>
     </aside>
   );

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import AdminPage from './components/AdminPage';
 import AnalyzePage from './components/AnalyzePage';
 import ChangelogPage from './components/ChangelogPage';
+import Footer from './components/Footer';
 import HistoryPage from './components/HistoryPage';
 import LegalPage from './components/LegalPage';
 import ProfilePage from './components/ProfilePage';
@@ -63,6 +64,7 @@ export default function App() {
           {route.page === 'history' && <HistoryPage />}
           {route.page === 'changelog' && <ChangelogPage />}
           {route.page === 'saved' && <SavedPage key={route.key} id={route.id} />}
+          <Footer />
         </main>
       </div>
     </NavProvider>

@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.40.0',
+    date: '2026-11-27',
+    changes: [
+      'A footer on every page, including Terms and Privacy: links to the main pages, What\u2019s new, Terms, Privacy and Buy me a coffee, plus a disclaimer that Guild Logs is an independent fan project, not affiliated with Blizzard, Warcraft Logs or Discord, and that their trademarks are theirs.',
+      'Terms of Service: a Trademarks and game content section, with how to ask for something to be taken down. Privacy Policy: mentions that boss and raid pictures load from Warcraft Logs.',
+      'The sidebar keeps just the version and Changelog link; Terms and Privacy moved to the footer.',
+    ],
+  },
+  {
     version: '0.39.0',
     date: '2026-11-27',
     changes: [

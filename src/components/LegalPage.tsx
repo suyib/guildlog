@@ -1,7 +1,9 @@
 // Terms of Service and Privacy Policy. Public pages (no guild password), so Discord and anyone
 // asked to use the bot can read them. Keep the "Last updated" date current when editing.
 
-const UPDATED = 'October 21, 2026';
+import Footer from './Footer';
+
+const UPDATED = 'November 27, 2026';
 const CONTACT = 'message Suyin on the guild Discord server';
 
 export default function LegalPage({ doc }: { doc: 'terms' | 'privacy' }) {
@@ -18,6 +20,7 @@ export default function LegalPage({ doc }: { doc: 'terms' | 'privacy' }) {
         </nav>
       </header>
       <article className="panel legal-body">{doc === 'terms' ? <Terms /> : <Privacy />}</article>
+      <Footer />
     </div>
   );
 }
@@ -67,8 +70,15 @@ function Terms() {
 
       <h2>Third-party services</h2>
       <p>
-        The service relies on Warcraft Logs, Blizzard, Discord, Vercel and the database host (Supabase or Neon), each under their own terms. Guild Logs isn&rsquo;t affiliated with
-        or endorsed by Blizzard Entertainment, Warcraft Logs or Discord. World of Warcraft is a trademark of Blizzard Entertainment.
+        The service relies on Warcraft Logs, Blizzard, Discord, Wowhead, Vercel and the database host (Supabase or Neon), each under their own terms.
+      </p>
+
+      <h2>Trademarks and game content</h2>
+      <p>
+        Guild Logs is an independent, non-commercial fan project. It isn&rsquo;t affiliated with, endorsed or sponsored by Blizzard Entertainment,
+        Warcraft Logs, Wowhead or Discord. World of Warcraft, Warcraft and Blizzard Entertainment are trademarks or registered trademarks of Blizzard
+        Entertainment, Inc. in the U.S. and/or other countries. Game names, images, icons and data belong to their owners and are shown only to describe
+        the guild&rsquo;s own raids. If you own something shown here and want it removed, {CONTACT} and it will be taken down.
       </p>
 
       <h2>Ending access</h2>
@@ -144,8 +154,8 @@ function Privacy() {
           Warcraft Logs (combat data), Blizzard (character portraits) and Discord (the bot and direct messages).
         </li>
         <li>
-          Your browser loads fonts from Google Fonts and game icons from Wowhead&rsquo;s image server, so those services see your IP address when the
-          page loads.
+          Your browser loads fonts from Google Fonts, game icons from Wowhead&rsquo;s image server and boss and raid pictures from Warcraft Logs&rsquo;
+          image server, so those services see your IP address when the page loads.
         </li>
       </ul>
       <p>We don&rsquo;t sell data or use it for advertising.</p>
