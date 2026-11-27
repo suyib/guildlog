@@ -58,6 +58,10 @@ Every Discord sign-in records which server it's for, and a session only opens th
 - **A copy per guild** (no extra cost, data fully separate): its own Vercel project, Neon database, Warcraft Logs client and Discord app, from this same repo. Step by step: `docs/new-guild.md`.
 - **One hosted site for many guilds**, which guilds add themselves like a raid planner bot. The roadmap is at the end of `docs/new-guild.md`.
 
+**Robots.** `public/robots.txt` asks every crawler (search engines, AI scrapers) to stay away, and every page and response carries `noindex` (a meta tag, plus an `X-Robots-Tag` header in `vercel.json`). Well-behaved crawlers respect it; everything except shared analyses is behind sign-in anyway.
+
+**Raid art.** Raid cards use `public/zones/<raid-name>.jpg` when it exists (the raid's name in lowercase with dashes, e.g. `onyxias-lair.jpg`; wide images, about 1200×400, look best). Without one, Warcraft Logs' small zone picture is blurred behind the card. Use art you have the rights to. Raid sizes are in `server/game.ts` (GAME CONTENT).
+
 ## Local development
 
 ```bash

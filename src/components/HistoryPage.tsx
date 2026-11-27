@@ -26,7 +26,7 @@ export default function HistoryPage() {
       </div>
       {error && <p className="error">{error}</p>}
       {!rows && !error && <p className="muted">Loading…</p>}
-      {rows && shown.length === 0 && <p className="muted">Nothing saved yet.</p>}
+      {rows && shown.length === 0 && <p className="muted empty-note">{rows.length ? 'Nothing matches that filter.' : <>Nothing saved yet. Every analysis you run on <a href="/">Analyze</a> is saved here, so you can open it again or share its link.</>}</p>}
       {shown.length > 0 && (
         <div className="scroll">
           <table className="grid">

@@ -1,0 +1,3 @@
+# Guild Logs is private to its guild: no crawling, indexing or AI training.
+User-agent: *
+Disallow: /

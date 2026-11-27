@@ -1,11 +1,38 @@
 {
   "functions": {
-    "api/*.ts": { "maxDuration": 60 }
+    "api/*.ts": {
+      "maxDuration": 60
+    }
   },
-  "crons": [{ "path": "/api/discord", "schedule": "0 17 * * *" }],
+  "crons": [
+    {
+      "path": "/api/discord",
+      "schedule": "0 17 * * *"
+    }
+  ],
   "rewrites": [
-    { "source": "/a/:id", "destination": "/index.html" },
-    { "source": "/terms", "destination": "/index.html" },
-    { "source": "/privacy", "destination": "/index.html" }
+    {
+      "source": "/a/:id",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
+      ]
+    }
   ]
 }

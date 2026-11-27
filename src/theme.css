@@ -742,7 +742,7 @@ label.check input { width: auto; height: auto; }
 /* ---------- Past raids ---------- */
 .grid-raids { display: grid; gap: var(--space); }
 button.ghost.icon-only { width: 34px; padding: 0; font-size: 18px; }
-.menu-toggle { display: none; }
+.sidebar button.menu-toggle { display: none; }
 
 .cal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
@@ -804,7 +804,6 @@ a.boss-pill:hover { text-decoration: none; border-color: var(--primary-light); b
 .boss-list .boss-name:hover:not(:disabled) { color: var(--primary-light); text-decoration: none; }
 .boss-list li.wipe .boss-icon { filter: grayscale(1); opacity: 0.7; }
 .boss-list li.wipe strong { color: var(--ink-3); }
-.zone-image { flex: none; width: 56px; height: 56px; border-radius: 14px; object-fit: cover; }
 .accordion { border-radius: 12px; background: var(--raised); }
 .accordion > summary { display: flex; align-items: center; gap: 6px; padding: 10px 14px; cursor: pointer; list-style: none; font-weight: 700; font-size: 14px; }
 .accordion > summary::-webkit-details-marker { display: none; }
@@ -819,6 +818,49 @@ a.boss-pill:hover { text-decoration: none; border-color: var(--primary-light); b
 .zone-acc .zone-table { border-radius: 0; }
 .zone-acc .zone-table th:first-child, .zone-acc .zone-table td:first-child { padding-left: 14px; }
 .zone-acc .zone-table th:last-child, .zone-acc .zone-table td:last-child { padding-right: 14px; }
+
+/* ---------- Raid cards: the raid's art behind its size, name and a line under it ---------- */
+.raid-card {
+  position: relative; isolation: isolate; overflow: hidden;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto 1fr auto; column-gap: 12px;
+  min-height: 116px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px;
+  background: linear-gradient(135deg, rgba(0, 124, 173, 0.28), var(--surface-solid) 70%);
+}
+.raid-card::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.25) 75%); }
+.raid-art { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+.raid-art.blurred { inset: -24px; width: calc(100% + 48px); height: calc(100% + 48px); filter: blur(14px) saturate(1.3); opacity: 0.8; }
+.raid-size {
+  grid-column: 1; grid-row: 1; justify-self: start;
+  display: inline-grid; place-items: center; min-width: 38px; height: 38px; padding: 0 6px; border: 1px solid var(--line); border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6); color: var(--ink); font: 700 16px var(--font-mono);
+}
+.raid-card-text { grid-column: 1; grid-row: 3; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.raid-card-name { margin: 0; font-size: 18px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.raid-card-sub { color: var(--ink-2); font-size: 13px; }
+.raid-card-sub:empty { display: none; }
+.raid-card-sub .zone-ranks { margin-left: 0; }
+.raid-card > .zone-count { grid-column: 2; grid-row: 3; align-self: end; }
+.raid-card.hero { min-height: 150px; }
+.raid-card.hero .raid-card-name { font-size: 26px; }
+.panel > .raid-card { margin: 12px 0; }
+/* As an accordion's header: the card is the button, the chevron sits top right */
+.accordion > summary.raid-card { display: grid; padding: 14px 16px; font-size: inherit; }
+.accordion > summary.raid-card::after { grid-column: 2; grid-row: 1; justify-self: end; align-self: start; margin: 6px 4px 0 0; border-color: var(--ink); }
+.accordion > summary.raid-card:has(.zone-count)::after { margin-left: 0; }
+.zone-acc[open] > summary.raid-card { border-radius: 12px 12px 0 0; border-width: 0 0 1px; }
+.zone-acc > summary.raid-card { border-width: 0; }
+.empty-note { max-width: 70ch; line-height: 1.5; }
+
+/* ---------- Admin: setup checklist ---------- */
+.setup > summary { font-size: 16px; }
+.setup .setup-count { margin-left: auto; font-weight: 400; }
+.setup > summary:has(.setup-count)::after { margin-left: 12px; }
+.setup-steps { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.setup-steps li { display: flex; gap: 12px; align-items: flex-start; }
+.setup-steps p { margin: 2px 0 0; line-height: 1.5; }
+.setup-steps li.done strong { color: var(--ink-3); text-decoration: line-through; }
+.setup-mark { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; margin-top: 1px; border: 2px solid var(--line); border-radius: 50%; color: var(--bg); }
+.setup-steps li.done .setup-mark { border-color: var(--win); background: var(--win); }
 .raid-attendance { display: grid; gap: 10px; }
 .comp-chip.static { cursor: default; }
 .comp-chip.static:hover { background: var(--raised); }
@@ -891,7 +933,7 @@ table.attendance td { vertical-align: middle; white-space: nowrap; }
   }
   .brand { font-size: 18px; padding: 0; margin-right: auto; }
   .brand .logo { width: 30px; height: 30px; }
-  .menu-toggle { display: inline-flex; justify-content: center; }
+  .sidebar button.menu-toggle { display: inline-flex; justify-content: center; }
   .side-menu { display: none; }
   .sidebar.menu-open .side-menu { display: flex; width: 100%; margin: 0; order: 2; }
   .sidebar.menu-open .side-nav.side-menu { flex-direction: column; gap: 2px; padding-top: 4px; border-top: 1px solid var(--line); }

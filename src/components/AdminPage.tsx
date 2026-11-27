@@ -4,6 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { AdminEdit, AdminOverview, AdminPerson, AdminSignIn, BugReport, GuildSettings, Rank } from '../../server/types';
 import { RANK_LABEL, loadAdmin, saveAdminEdit } from '../api';
 import Glyph from './Glyph';
+import { useHome } from './Home';
 
 const when = (iso: string) => new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { dateStyle: 'medium' });
@@ -65,6 +66,8 @@ export default function AdminPage() {
         <Kpi glyph="users" label="Raiders" value={String(count('raider') + count('raid_assist') + count('loot_council'))} sub={`${count('raid_assist')} raid assist, ${count('loot_council')} loot council, ${data.people.filter((p) => p.blocked).length} access off`} />
         <Kpi glyph="alert" label="Problems" value={String(problems)} sub={`failed sign-ins, last ${data.signInLogDays} days`} />
       </div>
+
+      {(data.me.rank === 'admin' || data.me.rank === 'guild_master') && <SetupChecklist data={data} />}
 
       {(data.me.rank === 'admin' || data.me.rank === 'guild_master') && data.guild && <GuildDetails guild={data.guild} onSaved={refresh} />}
 
@@ -439,5 +442,65 @@ function BugCard({ bug: b, canDelete, onSaved }: { bug: BugReport; canDelete: bo
       </div>
       {message && <p className={message.ok ? 'muted small' : 'error'}>{message.text}</p>}
     </article>
+  );
+}
+
+/**
+ * Getting the site going, step by step, for the guild master and admins. Each step ticks itself once
+ * it's done (worked out from what the site can see), and the list goes away when all are done.
+ */
+function SetupChecklist({ data }: { data: AdminOverview }) {
+  const home = useHome();
+  if (home === undefined) return null;
+  const leaders: Rank[] = ['guild_master', 'officer', 'raid_leader'];
+  const steps: { done: boolean; title: string; how: React.ReactNode }[] = [
+    {
+      done: !!data.guild?.discord,
+      title: 'Connect your Discord server',
+      how: <>Set <code>DISCORD_GUILD_ID</code> and <code>DISCORD_BOT_TOKEN</code> in Vercel and invite the bot. The guild&rsquo;s name and picture then come from Discord.</>,
+    },
+    {
+      done: !!home?.wcl,
+      title: 'Link the guild on Warcraft Logs',
+      how: <>Set <code>WCL_GUILD_ID</code> in Vercel (the number in the guild&rsquo;s Warcraft Logs address) to show its ranks on Home and Rankings.</>,
+    },
+    {
+      done: data.people.some((p) => leaders.includes(p.rank) && p.id !== data.me.id),
+      title: 'Give your officers their ranks',
+      how: <>Once they&rsquo;ve signed in or used the bot, click them under People below and pick Officer, Raid leader or Loot council.</>,
+    },
+    {
+      done: data.people.some((p) => p.characters.length > 0),
+      title: 'Have raiders claim their characters',
+      how: <>Raiders use <strong>/claim</strong> in Discord and an officer approves it here. Then <strong>/check</strong> and Your characters work for them.</>,
+    },
+    {
+      done: (home?.latestRaids.length ?? 0) > 0,
+      title: 'Log your first raid',
+      how: <>Use <strong>/raidend</strong> in Discord after a raid, or add a Warcraft Logs link on <a href="/#/raids">Past raids</a>. Progress, rankings and feedback fill in from there.</>,
+    },
+  ];
+  const done = steps.filter((x) => x.done).length;
+  if (done === steps.length) return null;
+  return (
+    <section className="panel">
+      <details className="accordion setup" open>
+        <summary>
+          Set up Guild Logs
+          <span className="muted small setup-count">{done} of {steps.length} done</span>
+        </summary>
+        <ol className="setup-steps">
+          {steps.map((x) => (
+            <li key={x.title} className={x.done ? 'done' : ''}>
+              <span className="setup-mark" aria-hidden="true">{x.done ? <Glyph name="check" size={14} /> : null}</span>
+              <div>
+                <strong>{x.title}</strong>
+                {x.done ? <span className="sr-only"> (done)</span> : <p className="muted small">{x.how}</p>}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </details>
+    </section>
   );
 }

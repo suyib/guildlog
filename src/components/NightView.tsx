@@ -4,7 +4,8 @@
 import type { RaidOverview } from '../../server/types';
 import { compact, mmss, n0 } from '../format';
 import Glyph from './Glyph';
-import { BossIcon, ClassIcon, SeverityDot, ZoneImage, classCss, parseCss } from './icons';
+import { BossIcon, ClassIcon, SeverityDot, classCss, parseCss } from './icons';
+import { RaidCardBody } from './RaidCard';
 
 const hm = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : `${Math.round(s / 60)}m`);
 const spaced = (s: string) => s.replace(/([a-z])([A-Z])/g, '$1 $2');
@@ -26,18 +27,16 @@ export default function NightView({ data, onBoss, onPlayer, onRefresh, refreshin
 
   return (
     <div className="result">
-      <header className="fight-head">
-        <div className="fight-id">
-          <ZoneImage id={data.zone?.id} fallback={<span className="kpi-icon big"><Glyph name="calendar" size={22} /></span>} />
-          <div>
-            <div className="eyebrow">
-              {new Date(data.startTime).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · {c.kills} of {c.bosses.length} bosses killed · {c.raiders.length} raiders
-            </div>
-            <h1>{data.title}</h1>
-          </div>
-        </div>
-        <span className="muted small">Click a boss for its breakdown, or anyone to analyze their best boss.</span>
+      <header className="raid-card hero">
+        <RaidCardBody
+          id={data.zone?.id}
+          name={data.zone?.name ?? data.title}
+          title={data.title}
+          heading="h1"
+          sub={`${new Date(data.startTime).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · ${c.kills} of ${c.bosses.length} bosses killed · ${c.raiders.length} raiders`}
+        />
       </header>
+      <p className="muted small">Click a boss for its breakdown, or anyone to analyze their best boss.</p>
 
       {partial && (
         <p className="warning">

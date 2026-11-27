@@ -9,6 +9,24 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.39.0',
+    date: '2026-11-27',
+    changes: [
+      'Raid cards: each raid on Home\u2019s Progress, the Rankings page and the top of a raid\u2019s breakdown is a card with the raid\u2019s art, its size (10, 20 or 40) and its progress or ranks. Add your own art as `public/zones/<raid-name>.jpg` (e.g. `barrow-deeps.jpg`); otherwise Warcraft Logs\u2019 zone picture is blurred behind it.',
+      'Empty pages now say what will show there and how to get it going, instead of just \u201cnothing yet\u201d.',
+      'Admin: a setup checklist for the guild master and admins (Discord, Warcraft Logs, officer ranks, claimed characters, first raid). Each step ticks itself once done, and the list goes away when everything is.',
+      'Testing: logs from fresh.warcraftlogs.com are accepted again alongside Forever. Remove it from `server/game.ts` when testing is done and run `supabase/cleanup.sql`.',
+    ],
+  },
+  {
+    version: '0.38.1',
+    date: '2026-11-27',
+    changes: [
+      'Search engines and AI crawlers are asked to stay away: the site has a robots.txt that blocks them all, and every page says not to index it.',
+      'The menu button no longer shows on desktop.',
+    ],
+  },
+  {
     version: '0.38.0',
     date: '2026-11-04',
     changes: [

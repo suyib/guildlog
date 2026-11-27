@@ -132,7 +132,7 @@ export default function RaidsPage() {
 
       {raids && raids.length === 0 && (
         <section className="panel">
-          <p className="muted">No raids yet. Use <strong>/raidend</strong> after a raid, or add a log above.</p>
+          <p className="muted empty-note">No raids yet. When there are, each one shows on the calendar with its bosses, wipes, deaths and who was there, plus what went well and what to work on. Use <strong>/raidend</strong> in Discord after a raid, or add a Warcraft Logs link above.</p>
         </section>
       )}
 
@@ -461,7 +461,7 @@ function Attendance({ raids, range, onRange, onSelect }: { raids: SavedRaid[]; r
           {RANGES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
         </select>
       </div>
-      {inRange.length === 0 ? <p className="muted">No raids in this period.</p> : (
+      {inRange.length === 0 ? <p className="muted">No raids in this period. Pick a longer one above.</p> : (
         <div className="scroll">
           <table className="grid attendance">
             <thead>

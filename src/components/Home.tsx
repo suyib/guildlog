@@ -6,6 +6,7 @@ import { loadHome } from '../api';
 import { mmss, n0 } from '../format';
 import Glyph from './Glyph';
 import { ClassIcon, classCss, parseCss } from './icons';
+import { RaidCardBody } from './RaidCard';
 
 export { RANK_CSS, mainZone, ZonePicker, ZoneRanks };
 
@@ -103,7 +104,12 @@ export function HomeExtras() {
 
       <div className="grid-2-1">
         <div className="home-col">
-          {d.zones.length > 0 && <Progress zones={d.zones} wcl={d.wcl} />}
+          {d.zones.length > 0 ? <Progress zones={d.zones} wcl={d.wcl} /> : (
+            <section className="panel">
+              <h2 className="panel-title">Progress</h2>
+              <p className="muted empty-note">Each raid shows here with every boss, its first kill and fastest kill, once the guild&rsquo;s first log is on Past raids. Use <strong>/raidend</strong> in Discord after a raid, or add a log on <a href="/#/raids">Past raids</a>.</p>
+            </section>
+          )}
         </div>
 
         <aside className="home-col">
@@ -215,10 +221,10 @@ function Progress({ zones, wcl }: { zones: ZoneProgress[]; wcl: HomeData['wcl'] 
       <div className="raid-feedback">
         {zones.map((z) => (
           <details key={z.id} className="accordion zone-acc" open={z.id === main}>
-            <summary>
-              {z.name}
-              <ZoneRanks ranks={z.ranks} wcl={wcl} />
-              <span className={`zone-count${z.killed === z.total ? ' full' : ''}`}>{z.killed}/{z.total}</span>
+            <summary className="raid-card">
+              <RaidCardBody id={z.id} name={z.name} sub={<ZoneRanks ranks={z.ranks} wcl={wcl} />}>
+                <span className={`zone-count${z.killed === z.total ? ' full' : ''}`}>{z.killed}/{z.total}</span>
+              </RaidCardBody>
             </summary>
             <div className="scroll">
               <table className="grid zone-table">

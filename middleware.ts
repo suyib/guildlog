@@ -3,7 +3,7 @@
 // Unauthenticated page requests get a login form; API requests get 401.
 
 export const config = {
-  matcher: ['/((?!api/login|favicon.ico|logo.png).*)'],
+  matcher: ['/((?!api/login|favicon.ico|logo.png|robots.txt).*)'],
 };
 
 // Open without signing in: the Terms and Privacy pages (Discord links to them), shared analysis
@@ -73,7 +73,7 @@ async function hasValidSession(request: Request, secret: string | undefined): Pr
 const escapeAttr = (v: string) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
 const loginPage = (error: boolean, next: string, discord: boolean, password: boolean) => `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex, nofollow, noarchive">
 <title>Guild Logs</title>
 <style>
 :root{--bg:#302b27;--panel:#1d1a17;--ink:#f5f3f5;--muted:rgba(245,243,245,.62);--line:rgba(245,243,245,.1);--primary:#007cad;--discord:#5865f2}

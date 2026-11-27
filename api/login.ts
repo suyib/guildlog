@@ -147,7 +147,7 @@ function page(title: string, message: string, retry = false, setCookie?: string,
   const headers: Record<string, string> = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' };
   if (setCookie) headers['Set-Cookie'] = setCookie;
   return new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Guild Logs</title>
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex, nofollow, noarchive"><title>Guild Logs</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#302b27;color:#f5f3f5;font:15px/1.5 system-ui,sans-serif;padding:16px}
 main{background:#1d1a17;border-radius:18px;padding:28px;max-width:380px;width:100%;box-sizing:border-box}h1{font-size:18px;margin:0 0 8px}p{color:rgba(245,243,245,.7);margin:0 0 18px}
 a{display:inline-block;padding:10px 18px;border-radius:50px;background:#007cad;color:#fff;font-weight:700;text-decoration:none}</style></head>

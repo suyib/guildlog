@@ -6,6 +6,7 @@ import { loadBossRanks, loadRaids } from '../api';
 import { mmss, n0 } from '../format';
 import { RANK_CSS, ZonePicker, mainZone, useHome } from './Home';
 import { BossIcon } from './icons';
+import { RaidCardBody } from './RaidCard';
 import { go, hashParam } from '../url';
 
 /** Raid and boss from the address (#/rankings?zone=&boss=), when there is one. */
@@ -34,7 +35,7 @@ export default function RankingsPage() {
     return (
       <section className="panel">
         <h1>Rankings</h1>
-        <p className="muted">Rankings show here once the guild has raids on Past raids.</p>
+        <p className="muted empty-note">Once the guild&rsquo;s first log is on Past raids, each raid shows here with the guild&rsquo;s world, region and realm ranks, every boss&rsquo;s top guilds by first kill or fastest kill, and the raids you&rsquo;ve logged there. Use <strong>/raidend</strong> in Discord after a raid, or add a log on <a href="/#/raids">Past raids</a>.</p>
       </section>
     );
   }
@@ -63,6 +64,9 @@ export default function RankingsPage() {
               {zone.bosses.map((b) => <option key={b.encounterId} value={b.encounterId}>{b.name}</option>)}
             </select>
           </div>
+        </div>
+        <div className="raid-card">
+          <RaidCardBody id={zone.id} name={zone.name} heading="h2" sub={`${zone.killed} of ${zone.total} bosses killed`} />
         </div>
         <p className="help">The guild&rsquo;s ranks from Warcraft Logs{d.wcl ? '' : ' (set WCL_GUILD_ID to see your own)'}: the whole raid, or one boss&rsquo;s top guilds by first kill or fastest kill.</p>
       </section>
@@ -105,7 +109,7 @@ function ZoneRaids({ zone, boss, raids }: { zone: ZoneProgress; boss: { id: numb
       {!raids ? (
         <p className="muted small"><span className="spinner small" aria-hidden="true" /> Loading raids&hellip;</p>
       ) : !list.length ? (
-        <p className="muted small">No uploaded raids {boss ? 'with this boss' : 'in this zone'} yet.</p>
+        <p className="muted small">No raids {boss ? 'with this boss' : 'here'} on Past raids yet. They list here after <strong>/raidend</strong>, each opening its breakdown.</p>
       ) : (
         <ul className="home-raids">
           {list.map((r) => {
@@ -221,7 +225,7 @@ function RankCard({ zone, url }: { zone: ZoneProgress; url: string | null }) {
   return (
     <section className="panel">
       <div className="panel-head">
-        <h2 className="panel-title">{zone.name} <span className="muted">{zone.killed}/{zone.total}</span></h2>
+        <h2 className="panel-title">Raid ranks</h2>
         <div className="seg" role="group" aria-label="Rank">
           <button type="button" className={kind === 'progress' ? 'on' : ''} aria-pressed={kind === 'progress'} onClick={() => setKind('progress')}>Progress</button>
           <button type="button" className={kind === 'speed' ? 'on' : ''} aria-pressed={kind === 'speed'} onClick={() => setKind('speed')}>Speed</button>
