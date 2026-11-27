@@ -13,12 +13,14 @@
 //   GET ?view=performance&range=raid|4w|8w[&host=&raid=]  officers, raid leaders and loot council: the /performance report
 //   GET ?view=perfchar&…&character=        the same for one character, with who claimed them and the officer note
 //   POST { perfDm: { range, host?, raid?, character? } }  …and sent to them as a DM
+//   GET ?view=myperf&range=…&character=     anyone signed in with Discord: the same for a character they've claimed, worded for them
 import { waitUntil } from '@vercel/functions';
 import { archiveNow, checkRaid, deleteRaid, forgetFights, isListed, listRaids, registerRaid, rereadRaid } from '../server/archive.js';
 import { rest } from '../server/db.js';
 import { json, readSession, requireSession } from '../server/auth.js';
 import { bossRanks } from '../server/bossRanks.js';
 import { addGoal, removeGoal } from '../server/goals.js';
+import { approvedClaimsFor } from '../server/discord/store.js';
 import { homeData, profileData } from '../server/home.js';
 import { auditTask } from '../server/discord/audit.js';
 import { liveRank, requireAbility, requireOfficer, requireRank } from '../server/officers.js';
@@ -46,6 +48,18 @@ export async function GET(req: Request): Promise<Response> {
       const { rank } = await liveRank(session);
       try {
         return json(await yourRaid(session.uid, can(rank, 'lookup'), { host: params.get('host') ?? '', code: params.get('raid') ?? '', character: params.get('character') }));
+      } catch (e) {
+        return json({ error: (e as Error).message }, 400);
+      }
+    }
+    if (view === 'myperf') {
+      const session = await readSession(req.headers.get('cookie'), process.env.SESSION_SECRET!);
+      if (!session?.uid) return json({ error: 'Sign in with Discord to see your performance.' }, 403);
+      const character = params.get('character') ?? '';
+      const mine = (await approvedClaimsFor(session.uid)).some((c) => c.character.toLowerCase() === character.toLowerCase());
+      if (!mine) return json({ error: 'You can only see characters you\u2019ve claimed (and an officer has approved).' }, 403);
+      try {
+        return json(await performanceCharacter({ ...perfRequest(params.get('range'), params.get('host'), params.get('raid')), character, you: true }));
       } catch (e) {
         return json({ error: (e as Error).message }, 400);
       }

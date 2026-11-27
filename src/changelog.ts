@@ -9,6 +9,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.50.0',
+    date: '2026-11-27',
+    changes: [
+      'Your profile shows your own performance: the same report officers see for you (going well, what to work on, room to improve), worded for you, for the last raid, 4 weeks or 8 weeks. The officer note stays with officers.',
+      'Performance: each person shows a \u201cDetails\u201d arrow and their name underlines on hover, so it\u2019s clear you can open them.',
+      'The menu\u2019s groups (Fights, Raids, Guild) are split by a line and more space.',
+    ],
+  },
+  {
     version: '0.49.1',
     date: '2026-11-27',
     changes: [

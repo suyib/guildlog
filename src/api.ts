@@ -88,6 +88,8 @@ export const loadYourRaid = (host: string, raid: string, character?: string | nu
   call<YourRaid>(`/api/raids?view=myraid&host=${encodeURIComponent(host)}&raid=${encodeURIComponent(raid)}${character ? `&character=${encodeURIComponent(character)}` : ''}`);
 export const loadPerformance = (c: PerfChoice) => call<PerformancePage>(`/api/raids?view=performance&${perfQuery(c)}`);
 export const loadPerfCharacter = (c: PerfChoice, character: string) => call<PerformanceCharacter>(`/api/raids?view=perfchar&${perfQuery(c)}&character=${encodeURIComponent(character)}`);
+/** Your own character's performance (a character you've claimed), worded for you. */
+export const loadMyPerformance = (c: PerfChoice, character: string) => call<PerformanceCharacter>(`/api/raids?view=myperf&${perfQuery(c)}&character=${encodeURIComponent(character)}`);
 export const sendPerfDm = (c: PerfChoice, character?: string | null) => post<{ ok: true }>('/api/raids', { perfDm: { range: c.range, host: c.host ?? undefined, raid: c.raid ?? undefined, character: character ?? undefined } });
 /** Officers, raid leaders and loot council: /check anyone, /performance, and their pages on the site. */
 export const canLookup = (rank: Rank | null | undefined) => !!rank && ['admin', 'guild_master', 'officer', 'raid_leader', 'loot_council'].includes(rank);

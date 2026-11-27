@@ -1,11 +1,13 @@
-// Your profile (opened from your name at the bottom of the menu): your Discord account and a card
-// for each character you've claimed with the bot.
+// Your profile (opened from your name at the bottom of the menu): your Discord account, a card for
+// each character you've claimed with the bot, and your performance: the report officers see for
+// you on the Performance page, worded for you.
 import { useEffect, useState } from 'react';
-import type { PlayerGoal, ProfileCharacter, ProfileData } from '../../server/types';
-import { RANK_LABEL, addGoal, loadPortrait, loadProfile, removeGoal } from '../api';
+import type { PerformanceCharacter, PlayerGoal, ProfileCharacter, ProfileData } from '../../server/types';
+import { type PerfChoice, RANK_LABEL, addGoal, loadMyPerformance, loadPortrait, loadProfile, removeGoal } from '../api';
 import { n0 } from '../format';
+import { EmbedView } from './Embed';
 import Glyph from './Glyph';
-import { ClassIcon, classCss, parseCss } from './icons';
+import { ClassIcon, EmptyNote, classCss, parseCss } from './icons';
 
 const spaced = (s: string) => s.replace(/([a-z])([A-Z])/g, '$1 $2');
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { dateStyle: 'medium' });
@@ -22,6 +24,7 @@ export default function ProfilePage() {
 
   if (error) return <section className="panel"><h1>Your profile</h1><p className="error">{error}</p></section>;
   if (!data) return <section className="panel"><h1>Your profile</h1><p className="muted">Loading…</p></section>;
+  const approved = data.characters.filter((c) => c.status === 'approved' && c.lastRaid).map((c) => c.name);
 
   return (
     <>
@@ -45,7 +48,48 @@ export default function ProfilePage() {
           </div>
         )}
       </section>
+      {approved.length > 0 && <YourPerformance names={approved} />}
     </>
+  );
+}
+
+const PERIODS: [PerfChoice['range'], string][] = [['raid', 'Last raid'], ['4w', '4 weeks'], ['8w', '8 weeks']];
+
+/** The report officers see for you on the Performance page, worded for you. */
+function YourPerformance({ names }: { names: string[] }) {
+  const [character, setCharacter] = useState(names[0]);
+  const [range, setRange] = useState<PerfChoice['range']>('4w');
+  const [data, setData] = useState<PerformanceCharacter | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    setData(null);
+    setError(null);
+    loadMyPerformance({ range }, character).then((d) => live && setData(d)).catch((e) => live && setError((e as Error).message));
+    return () => { live = false; };
+  }, [character, range]);
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2 className="panel-title">Your performance</h2>
+          <p className="help">What officers see for you on their Performance page: what&rsquo;s going well, what to work on and where there&rsquo;s room to improve.</p>
+        </div>
+      </div>
+      <div className="row wrap-center perf-filters">
+        {names.length > 1 && (
+          <select value={character} onChange={(e) => setCharacter(e.target.value)} aria-label="Character">
+            {names.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        )}
+        <div className="seg" role="group" aria-label="Period">
+          {PERIODS.map(([id, label]) => <button key={id} type="button" className={range === id ? 'on' : ''} aria-pressed={range === id} onClick={() => setRange(id)}>{label}</button>)}
+        </div>
+      </div>
+      {error && <EmptyNote icon="inv_misc_note_01">{error}</EmptyNote>}
+      {!data && !error && <p className="muted small"><span className="spinner small" aria-hidden="true" /> Reading your raids&hellip;</p>}
+      {data && data.embeds.map((e, i) => <EmbedView key={i} embed={e} />)}
+    </section>
   );
 }
 

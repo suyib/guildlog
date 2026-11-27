@@ -12,6 +12,8 @@ export interface PerfRequest {
   raid?: { host: string; code: string; fight?: string } | null;
   /** One character instead of everyone. */
   character?: string | null;
+  /** Worded for the player themselves (their profile), not for officers. */
+  you?: boolean;
 }
 
 export interface PerfReport {
@@ -27,7 +29,7 @@ export interface PerfReport {
 }
 
 export async function perfReport(req: PerfRequest): Promise<PerfReport> {
-  const { range, raid, character } = req;
+  const { range, raid, character, you } = req;
   const site = env.site();
   if (character) {
     // One character: the raid's kills (stored, or read now), or the range's
@@ -54,7 +56,7 @@ export async function perfReport(req: PerfRequest): Promise<PerfReport> {
       fights = (await Promise.all(codes.map((c) => storedDigests(c).catch(() => [])))).flat();
     }
     const scope = { label, oneNight, minKills: 1 };
-    return { scope, body: characterMessage(scope, rows, character, site, fights), data: null, rows, fights, pending: 0 };
+    return { scope, body: characterMessage(scope, rows, character, site, fights, you), data: null, rows, fights, pending: 0 };
   }
   if (raid) {
     // A pasted raid (or one fight of it): read from the stored fights, or Warcraft Logs

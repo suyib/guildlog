@@ -178,7 +178,8 @@ export default function PerformancePage() {
                       <td>
                         <span className="perf-who">
                           <ClassIcon className={p.className} size={22} />
-                          <span><strong className={classCss(p.className)}>{p.name}</strong><span className="muted small">{p.spec}</span></span>
+                          <span><strong className={`perf-link ${classCss(p.className)}`}>{p.name}</strong><span className="muted small">{p.spec}</span></span>
+                          <span className="chev" aria-hidden="true" />
                         </span>
                       </td>
                       <td className="r">{p.kills}</td>
@@ -196,7 +197,7 @@ export default function PerformancePage() {
             {open && !data.high.includes(open) && !data.low.some((x) => x.name === open) && byName.has(open) && (
               <div className="perf-open"><PersonRow p={byName.get(open)!} open onClick={() => toggle(open)}><Drawer choice={choice} name={open} /></PersonRow></div>
             )}
-            <p className="muted small">Active time and consumables come from the fights read in full. Click anyone for their details.</p>
+            <p className="muted small">Active time and consumables come from the fights read in full. Click anyone to open their details.</p>
           </section>
         </>
       )}
@@ -220,10 +221,11 @@ function PersonRow({ p, why, open, onClick, children }: { p: Perf['players'][num
       <button type="button" className="perf-person-head" aria-expanded={open} onClick={onClick}>
         <ClassIcon className={p.className} size={22} />
         <span className="perf-person-name">
-          <strong className={classCss(p.className)}>{p.name}</strong>
+          <strong className={`perf-link ${classCss(p.className)}`}>{p.name}</strong>
           <span className="muted small">{p.spec} · {p.kills} kill{p.kills === 1 ? '' : 's'}{p.deaths ? ` · died ${p.deaths === 1 ? 'once' : `${p.deaths} times`}` : ''}{why?.length ? ` · ${why.join('; ')}` : ''}</span>
         </span>
         <strong className={`perf-parse ${parseCss(p.parse)}`}>{p.parse ?? (p.role === 'tank' ? 'tank' : '–')}</strong>
+        <span className="perf-more">{open ? 'Close' : 'Details'}<span className="chev" aria-hidden="true" /></span>
       </button>
       {children}
     </div>

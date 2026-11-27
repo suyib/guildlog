@@ -554,6 +554,12 @@ delete process.env.SITE_ADMIN_IDS;
   assert.match(top.embeds![1].description!, /Parsing 99\+/);
   assert.match(JSON.stringify(m), /Just an overview/);
   assert.match(characterMessage({ label: 'ID 10', oneNight: true, minKills: 1 }, rows as any, 'Nobody', '').embeds![0].description!, /isn\u2019t in any boss kill/);
+  // Worded for the player on their own profile: "you", no officer-only lines
+  const mineText = JSON.stringify(characterMessage({ label: 'ID 10', oneNight: true, minKills: 1 }, rows as any, 'aerdre', 'https://guildlog.uk', [], true));
+  assert.match(mineText, /was your lowest/);
+  assert.match(mineText, /they averaged a parse of 94, you 59/);
+  assert.match(mineText, /What to work on/);
+  assert.doesNotMatch(mineText, /For officers only|Agree one clear goal with them|Could use a hand/);
   process.env.SUPABASE_URL = 'https://db.example';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
   const realFetch = globalThis.fetch;

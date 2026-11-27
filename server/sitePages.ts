@@ -143,10 +143,14 @@ export async function performancePage(req: PerfRequest): Promise<PerformancePage
   };
 }
 
-/** One character on the Performance page: the same message /performance character: sends, plus who claimed them. */
+/**
+ * One character on the Performance page: the same message /performance character: sends, plus who
+ * claimed them and the officer note. With `you` (their own profile), worded for the player and
+ * without the claim or the officer note.
+ */
 export async function performanceCharacter(req: PerfRequest & { character: string }): Promise<PerformanceCharacter> {
   const report = await perfReport(req);
-  const owner = await claimOnCharacter(req.character, null).catch(() => null);
+  const owner = req.you ? null : await claimOnCharacter(req.character, null).catch(() => null);
   const note: string | null = owner ? (await rest(`site_users?discord_id=eq.${q(owner.discord_id)}&select=note`).catch(() => null))?.[0]?.note ?? null : null;
   const mine = report.rows.filter((r) => r.name.toLowerCase() === req.character.toLowerCase());
   const last = mine.at(-1)?.report_code ?? null;
