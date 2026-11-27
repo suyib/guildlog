@@ -11,6 +11,8 @@ import Feedback, { FeedbackPanels } from './Feedback';
 import BossRankLine from './BossRankLine';
 import Glyph from './Glyph';
 import { ClassIcon, GameIcon, classCss, compareLabel, parseCss } from './icons';
+import Takeaway from './Takeaway';
+import { castsTakeaway, cooldownTakeaway, damageTakeaway, healingTakeaway, rotationTakeaway, survivalTakeaway } from '../takeaways';
 import Timeline from './Timeline';
 import { DeathList, DotsPanel, GuildPanel, MitigationFacts, PotionsAndDebuffs } from './Insights';
 import { tankCanBeCritCapped } from '../../server/gameData';
@@ -325,6 +327,7 @@ function HealingView({ result, h }: { result: AnalysisResult; h: Healing }) {
     <>
       <section className="panel donut-wide">
         <h2 className="panel-title">Share of healing</h2>
+        <Takeaway lines={healingTakeaway(h)} />
         <DamageDonut abilities={h.abilities} total={h.total} noun="healing" />
       </section>
       <section className="panel">
@@ -370,6 +373,7 @@ function HealingView({ result, h }: { result: AnalysisResult; h: Healing }) {
 
 function Rotation({ result, all }: { result: AnalysisResult; all: Row[] }) {
   const me = result.player;
+  const ref = result.comparisons[0]?.snapshot ?? null;
   const same = all.filter((p) => p.sameClass);
   const icons = iconMap(all);
   // Everything cast (healing spells and totems too, not only damage), most cast first; auto attacks left out
@@ -382,6 +386,7 @@ function Rotation({ result, all }: { result: AnalysisResult; all: Row[] }) {
     <>
       <section className="panel">
         <h2 className="panel-title">Cast timeline</h2>
+        <Takeaway lines={rotationTakeaway(me, ref)} />
         <p className="muted small">Each bar is a cast, colored by ability; short red bars are auto attacks. Red bands are gaps over 4 seconds without a cast, and yellow dots are major cooldowns. Hover a row to see what was cast and when Bloodlust (orange band) and your cooldowns (yellow bars) were up.</p>
         <Timeline players={all.map((p) => ({ label: p.me ? 'You' : p.s.name, snapshot: p.s }))} />
       </section>
@@ -389,6 +394,7 @@ function Rotation({ result, all }: { result: AnalysisResult; all: Row[] }) {
       <div className="grid-2">
         <section className="panel">
           <h2 className="panel-title">Cooldowns</h2>
+          <Takeaway lines={cooldownTakeaway(me)} />
           {same.length > 1 ? (
             <PlayerTable players={same}>
               {cdNames.map((name) => (
@@ -404,6 +410,7 @@ function Rotation({ result, all }: { result: AnalysisResult; all: Row[] }) {
         </section>
         <section className="panel">
           <h2 className="panel-title">Casts per minute</h2>
+          <Takeaway lines={castsTakeaway(me, result.comparisons[0]?.sameClass ? ref : null)} />
           <PlayerTable players={same}>
             {castNames.map((name) => (
               <TRow key={name} label={name} icon={icons.get(name)} cells={same.map((p) => (p.s.castsPerMinute[name] ? p.s.castsPerMinute[name].toFixed(1) : '–'))} />
@@ -424,6 +431,7 @@ function DamageView({ result }: { result: AnalysisResult }) {
     <>
     <section className="panel donut-wide">
       <h2 className="panel-title">Share of damage</h2>
+      <Takeaway lines={damageTakeaway(me, result.comparisons[0]?.sameClass ? result.comparisons[0].snapshot : null)} />
       <DamageDonut abilities={me.abilities} total={me.total} />
     </section>
     <section className="panel">
@@ -586,6 +594,7 @@ function Survival({ result }: { result: AnalysisResult }) {
 
       <section className="panel">
         <h2 className="panel-title">Damage taken over the fight</h2>
+        <Takeaway lines={survivalTakeaway(me, sv)} />
         {result.dashboard?.takenSeries && result.dashboard.takenSeries.length > 1 ? (
           <>
             <p className="muted small">Hover the line to see what hit you hardest at each moment. Spikes are usually boss abilities; marks show when you died.</p>

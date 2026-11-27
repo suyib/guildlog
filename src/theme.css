@@ -976,7 +976,15 @@ progress.pull-bar { width: 100%; height: 8px; color: var(--medium); }
 .goal-form select { flex: 1 1 140px; }
 .goal-form input { width: 80px; }
 
+/* ---------- "What this means" under a chart or table ---------- */
+.takeaway { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border-radius: 10px; border-left: 3px solid var(--gold); background: linear-gradient(90deg, rgba(255, 209, 0, 0.07), transparent 70%); }
+.takeaway p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink); }
+.takeaway-label { font: 700 11px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-deep); }
+
 /* ---------- Guild page ---------- */
+.guild-hero { position: relative; }
+.guild-range { position: absolute; top: var(--card-pad); right: var(--card-pad); width: auto; min-width: 170px; }
+@media (max-width: 640px) { .guild-range { position: static; align-self: flex-start; order: -1; } }
 .guild-comp { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr); gap: 20px; padding: 14px 16px; border-radius: 12px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--line); }
 .guild-comp-head { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 16px; font-weight: 700; }
 .count-badge { padding: 0 7px; border-radius: 5px; background: var(--raised); border: 1px solid var(--line); font: 700 13px var(--font-mono); color: var(--ink-2); }

@@ -485,6 +485,8 @@ export interface HomeData {
   roster: { name: string; className: string; specName: string; role: 'tank' | 'healer' | 'dps' | null; raids: number; of: number; itemLevel: number | null }[];
   /** Everyone's best parse on each boss of each raid, last 8 weeks (healers by healing), in the order of zones. */
   rankings: GuildRankings[];
+  /** The period the numbers, roster, best parses and schedule cover, in days (56 unless asked for another). */
+  days?: number;
 }
 
 /** One boss's guild rankings on Warcraft Logs: by first kill (progress) or fastest kill (speed). */

@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.43.0',
+    date: '2026-11-27',
+    changes: [
+      'Guild page: a period at the top (last 4 weeks, 8 weeks, 6 months or all raids) for the numbers, composition, raid times and attendance. It starts on the shortest period that has raids in it, so it isn\u2019t empty after a break.',
+      'Analyses: a short \u201cWhat this means\u201d under the cast timeline, cooldowns, casts per minute, share of damage or healing, and damage taken, worked out from your numbers (gaps and how long they cost, missed cooldown uses, your main spells, misses, overhealing, avoidable damage), and against whoever you compared with.',
+    ],
+  },
+  {
     version: '0.42.0',
     date: '2026-11-27',
     changes: [

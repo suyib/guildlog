@@ -8,7 +8,6 @@ import { guildSettings } from './guildSettings.js';
 
 const q = encodeURIComponent;
 const HOUR = 3_600_000;
-const WEEK = 7 * 86_400_000;
 
 type Guild = NonNullable<HomeData['wcl']>;
 let cached: { at: number; key: string; guild: Guild | null; ranks: Map<number, ZoneProgress['ranks']> } | null = null;
@@ -114,8 +113,8 @@ export async function zoneProgress(raids: SavedRaid[]): Promise<ZoneProgress[]> 
 }
 
 /** Everyone in a raid in the last 8 weeks, with how many of those raids they were in. */
-export function roster(raids: SavedRaid[]): HomeData['roster'] {
-  const recent = raids.filter((r) => r.startTime && r.card && Date.now() - new Date(r.startTime).getTime() <= 8 * WEEK);
+export function roster(raids: SavedRaid[], days = 56): HomeData['roster'] {
+  const recent = raids.filter((r) => r.startTime && r.card && Date.now() - new Date(r.startTime).getTime() <= days * 86_400_000);
   const people = new Map<string, HomeData['roster'][number]>();
   for (const r of recent) {
     for (const p of r.card!.raiders) {
@@ -133,10 +132,10 @@ export function roster(raids: SavedRaid[]): HomeData['roster'] {
  * Everyone's best parse on each boss of each raid in the last 8 weeks (healers by healing), from
  * kill_stats in one read, plus each raider's latest item level for the roster.
  */
-export async function rankings(zones: ZoneProgress[], people: HomeData['roster']): Promise<GuildRankings[]> {
+export async function rankings(zones: ZoneProgress[], people: HomeData['roster'], days = 56): Promise<GuildRankings[]> {
   const want = zones.filter((z) => z.bosses.length).slice(0, 4);
   if (!dbEnabled() || !want.length) return [];
-  const since = new Date(Date.now() - 8 * WEEK).toISOString();
+  const since = new Date(Date.now() - Math.min(days, 3650) * 86_400_000).toISOString();
   const ids = want.flatMap((z) => z.bosses.map((b) => Math.trunc(b.encounterId))).join(',');
   const rows: { name: string; class_name: string; role: string | null; healer: boolean; encounter_id: number; parse: number | null; hps_parse: number | null; item_level: number | null }[] =
     (await rest(`kill_stats?encounter_id=in.(${ids})&start_time=gte.${q(since)}&select=name,class_name,role,healer,encounter_id,parse,hps_parse,item_level&order=start_time.asc&limit=10000`).catch(() => [])) ?? [];

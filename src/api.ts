@@ -66,7 +66,7 @@ export const saveAdminEdit = (edit: AdminEdit) => post<{ ok: true; done: string 
 export const RANK_LABEL: Record<Rank, string> = {
   admin: 'Admin', guild_master: 'Guild master', officer: 'Officer', raid_leader: 'Raid leader', raid_assist: 'Raid assist', loot_council: 'Loot council', raider: 'Raider',
 };
-export const loadHome = () => call<HomeData>('/api/raids?view=home');
+export const loadHome = (days?: number) => call<HomeData>(`/api/raids?view=home${days ? `&days=${days}` : ''}`);
 export const loadBossRanks = (host: string, encounter: number, metric: BossRanks['metric'], scope: BossRanks['scope']) =>
   call<BossRanks>(`/api/raids?view=boss&host=${encodeURIComponent(host)}&encounter=${encounter}&metric=${metric}&scope=${scope}`);
 export const loadProfile = () => call<ProfileData>('/api/raids?view=profile');

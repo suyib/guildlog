@@ -1,6 +1,6 @@
 // Past raids.
 //   GET              every saved raid with its card (calendar, attendance, progress)
-//   GET ?view=home     the home page: guild, next raid, latest raids, highlights, recent analyses
+//   GET ?view=home[&days=N]  the home page (and Guild page): guild, next raid, latest raids, highlights, recent analyses; N days for the numbers (default 56)
 //   GET ?view=profile  the signed-in person's profile and claimed characters
 // (One function for all three, to stay within the free Vercel plan's function limit.)
 //   POST { url }     officers: add a raid from a Warcraft Logs link; it's read over the next runs
@@ -38,7 +38,10 @@ export async function GET(req: Request): Promise<Response> {
     }
     if (view === 'home' || view === 'profile') {
       const session = await readSession(req.headers.get('cookie'), process.env.SESSION_SECRET!);
-      if (view === 'home') return json(await homeData(session));
+      if (view === 'home') {
+        const days = Math.min(Math.max(Number(params.get('days')) || 56, 1), 36_500);
+        return json(await homeData(session, days));
+      }
       if (!session?.uid) return json({ error: 'Sign in with Discord to see your profile.' }, 403);
       return json(await profileData(session));
     }

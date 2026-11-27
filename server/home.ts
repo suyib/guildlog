@@ -36,7 +36,11 @@ async function nextRaid(): Promise<HomeData['nextRaid']> {
   return p?.gatherAt ? { message: p.message ?? 'Raid', place: p.place ?? null, gatherAt: p.gatherAt } : null;
 }
 
-export async function homeData(session: Session | null): Promise<HomeData> {
+/**
+ * The home page's data (and the Guild page's). `days`: the period for the numbers, roster, best
+ * parses and schedule (8 weeks unless the Guild page picks another).
+ */
+export async function homeData(session: Session | null, days = 56): Promise<HomeData> {
   const [guild, next, list, recent, claims] = await Promise.all([
     guildInfo(),
     dbEnabled() ? nextRaid() : Promise.resolve(null),
@@ -45,8 +49,10 @@ export async function homeData(session: Session | null): Promise<HomeData> {
     session?.uid && dbEnabled() ? claimsFor(session.uid).catch(() => []) : Promise.resolve([]),
   ]);
   const dated = list.raids.filter((r) => r.startTime && r.card);
-  const last8 = dated.filter((r) => Date.now() - new Date(r.startTime!).getTime() <= 8 * WEEK);
-  const last4 = dated.filter((r) => Date.now() - new Date(r.startTime!).getTime() <= 4 * WEEK);
+  const within = (d: number) => dated.filter((r) => Date.now() - new Date(r.startTime!).getTime() <= d * 86_400_000);
+  const last8 = within(days);
+  // Active raiders: the last 4 weeks on the usual 8-week view, otherwise the whole period
+  const last4 = within(days === 56 ? 28 : days);
   const raiders = new Set(last4.flatMap((r) => r.card!.raiders.map((p) => p.name)));
   // Highlights from the latest raid that's been read in full
   const latest = dated.find((r) => (r.card!.summarized ?? r.card!.kills) >= r.card!.kills) ?? null;
@@ -54,8 +60,8 @@ export async function homeData(session: Session | null): Promise<HomeData> {
   const zones = await zoneProgress(list.raids).catch(() => []);
   const { guild: wcl, ranks } = await wclGuild(zones.map((z) => z.id)).catch(() => ({ guild: null, ranks: new Map() }));
   for (const z of zones) z.ranks = ranks.get(z.id) ?? null;
-  const people = roster(list.raids);
-  const ranked = await rankings(zones, people).catch(() => []);
+  const people = roster(list.raids, days);
+  const ranked = await rankings(zones, people, days).catch(() => []);
   return {
     guild,
     nextRaid: next,
@@ -75,6 +81,7 @@ export async function homeData(session: Session | null): Promise<HomeData> {
     roster: people,
     rankings: ranked,
     schedule: last8.filter((r) => r.card!.raidSeconds > 0).map((r) => ({ start: r.startTime!, seconds: r.card!.raidSeconds })),
+    days,
   };
 }
 
