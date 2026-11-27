@@ -166,6 +166,25 @@ create index if not exists kill_stats_spec on public.kill_stats (encounter_id, c
 create index if not exists kill_stats_player on public.kill_stats (name_key, start_time);
 alter table public.kill_stats enable row level security;
 
+-- ---------- Personal goals (v0.41.0) ----------
+
+-- A parse someone wants to reach on one boss (or any boss) with one of their characters.
+create table if not exists public.player_goals (
+  id uuid primary key default gen_random_uuid(),
+  discord_id text not null,
+  character text not null,
+  encounter_id int,                     -- null: any boss
+  encounter_name text,
+  target int not null check (target between 1 and 100),
+  created_at timestamptz not null default now(),
+  achieved_at timestamptz,
+  achieved_parse numeric,
+  achieved_code text
+);
+create index if not exists player_goals_owner on public.player_goals (discord_id);
+create index if not exists player_goals_open on public.player_goals (achieved_at) where achieved_at is null;
+alter table public.player_goals enable row level security;
+
 -- ---------- Site sign-ins (Admin page) ----------
 
 -- Everyone who has signed in with Discord: which server, officer or not, first and last sign-in.

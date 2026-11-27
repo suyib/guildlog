@@ -166,7 +166,11 @@ export function parseReportUrl(input: string): ParsedUrl {
 // ---------- Queries ----------
 
 export interface Actor { id: number; name: string; type: string; subType: string; petOwner: number | null; server?: string | null }
-export interface Fight { id: number; encounterID: number; name: string; startTime: number; endTime: number; kill: boolean | null; size: number | null; difficulty: number | null; friendlyPlayers?: number[] | null }
+export interface Fight {
+  id: number; encounterID: number; name: string; startTime: number; endTime: number; kill: boolean | null; size: number | null; difficulty: number | null; friendlyPlayers?: number[] | null;
+  /** Boss health left when the fight ended (0–100), and the phase reached: for wipe analysis. */
+  fightPercentage?: number | null; lastPhase?: number | null;
+}
 export interface ReportMeta {
   code: string;
   title: string;
@@ -179,15 +183,15 @@ export interface ReportMeta {
 }
 
 export async function getReportMeta(host: string, code: string, timeoutMs?: number): Promise<ReportMeta> {
-  const q = (withRegion: boolean) => `query($code:String!){reportData{report(code:$code){
-    code title startTime zone{id name} ${withRegion ? 'region{slug}' : ''}
-    fights{id encounterID name startTime endTime kill size difficulty friendlyPlayers}
+  const q = (extras: boolean) => `query($code:String!){reportData{report(code:$code){
+    code title startTime zone{id name} ${extras ? 'region{slug}' : ''}
+    fights{id encounterID name startTime endTime kill size difficulty friendlyPlayers ${extras ? 'fightPercentage lastPhase' : ''}}
     masterData{actors{id name type subType petOwner server}}
   }}}`;
   type Raw = Omit<ReportMeta, 'region'> & { region?: { slug?: string } | null };
-  // The region is a nice-to-have: if asking for it fails, read the report without it
+  // The region and how far wipes got are nice-to-haves: if asking for them fails, read the report without them
   const d = await gql<{ reportData: { report: Raw | null } }>(host, q(true), { code }, timeoutMs).catch((e) => {
-    if (/region/i.test((e as Error).message)) return gql<{ reportData: { report: Raw | null } }>(host, q(false), { code }, timeoutMs);
+    if (/region|fightPercentage|lastPhase/i.test((e as Error).message)) return gql<{ reportData: { report: Raw | null } }>(host, q(false), { code }, timeoutMs);
     throw e;
   });
   const r = d.reportData.report;

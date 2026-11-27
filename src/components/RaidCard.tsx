@@ -12,11 +12,11 @@ function RaidArt({ id, name }: { id: number | null | undefined; name: string }) 
   const [tried, setTried] = useState(0);
   if (tried >= srcs.length) return null;
   // Warcraft Logs' picture is small, so it's blurred into a backdrop rather than shown sharp
-  return <img key={srcs[tried]} className={`raid-art${tried > 0 ? ' blurred' : ''}`} src={srcs[tried]} alt="" loading="lazy" onError={() => setTried((t) => t + 1)} />;
+  return <img key={srcs[tried]} className={`zone-art${tried > 0 ? ' blurred' : ''}`} src={srcs[tried]} alt="" loading="lazy" onError={() => setTried((t) => t + 1)} />;
 }
 
 /**
- * What goes inside a raid card. The caller gives the outer element the "raid-card" class (a
+ * What goes inside a raid card. The caller gives the outer element the "zone-card" class (a
  * summary, a header or a div), so the card can open an accordion or head a page.
  */
 export function RaidCardBody({ id, name, title, sub, heading = 'strong', children }: {
@@ -34,10 +34,10 @@ export function RaidCardBody({ id, name, title, sub, heading = 'strong', childre
   return (
     <>
       <RaidArt id={id} name={name} />
-      {size && <span className="raid-size" title={`${size}-player raid`}>{size}</span>}
-      <span className="raid-card-text">
-        <Title className="raid-card-name">{title ?? name}</Title>
-        {sub && <span className="raid-card-sub">{sub}</span>}
+      {size && <span className="zone-size" title={`${size}-player raid`}>{size}</span>}
+      <span className="zone-card-text">
+        <Title className="zone-card-name">{title ?? name}</Title>
+        {sub && <span className="zone-card-sub">{sub}</span>}
       </span>
       {children}
     </>

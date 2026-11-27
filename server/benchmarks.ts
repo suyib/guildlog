@@ -3,7 +3,7 @@
 // read for "against the guild" on analyses and in Discord, and for trends on profiles.
 import { dbEnabled, rest } from './db.js';
 import { type FightDigest, healsMost } from './fightDigest.js';
-import type { GuildContext, GuildKill, TrendWeek } from './types.js';
+import type { BossTrend, GuildContext, GuildKill, TrendWeek } from './types.js';
 import type { ReportMeta } from './wcl.js';
 
 const q = encodeURIComponent;
@@ -134,4 +134,21 @@ export async function trendFor(name: string, weeks = 8): Promise<TrendWeek[]> {
     perSecond: avg(list.map((r) => (healer ? r.hps : r.dps))),
     kills: list.length,
   }));
+}
+
+/** A character's bosses over the last `weeks` weeks: first and latest parse, best, and kills, most kills first. */
+export async function bossTrendsFor(name: string, weeks = 12): Promise<BossTrend[]> {
+  if (!dbEnabled()) return [];
+  const since = new Date(Date.now() - weeks * 7 * 86_400_000).toISOString();
+  const rows: Pick<KillRow, 'encounter_id' | 'encounter_name' | 'healer' | 'parse' | 'hps_parse'>[] =
+    (await rest(`kill_stats?name_key=eq.${q(key(name))}&start_time=gte.${q(since)}&select=encounter_id,encounter_name,healer,parse,hps_parse&order=start_time.asc&limit=500`).catch(() => null)) ?? [];
+  if (!rows.length) return [];
+  const healer = rows.filter((r) => r.healer).length * 2 > rows.length;
+  const byBoss = new Map<number, typeof rows>();
+  for (const r of rows) byBoss.set(r.encounter_id, [...(byBoss.get(r.encounter_id) ?? []), r]);
+  return [...byBoss].map(([id, list]) => {
+    const vals = list.map((r) => (healer ? r.hps_parse : r.parse)).map((v) => (v === null ? null : Math.round(Number(v))));
+    const known = vals.filter((v): v is number => v !== null);
+    return { encounterId: id, name: list[0].encounter_name, first: known[0] ?? null, latest: known.at(-1) ?? null, best: known.length ? Math.max(...known) : null, kills: list.length };
+  }).sort((a, b) => b.kills - a.kills || a.name.localeCompare(b.name));
 }

@@ -110,6 +110,12 @@ The bot runs on the same Vercel project (no extra server) as a single function, 
 
 **Guild details.** The home page shows the Discord server's name and picture. Guild masters and admins can replace either (and add an About line) under **Guild details** on the Admin page; clearing a field goes back to Discord's. Kept in `site_settings`. Needs `supabase/migrate-0.31.sql` run once.
 
+**Warcraft Logs guild.** Guild masters can paste the guild's Warcraft Logs link under Guild details; it's used for ranks on Home and Rankings ahead of `WCL_GUILD_ID` in Vercel. A first step toward guilds setting themselves up.
+
+**Personal goals.** Each raider can set up to 5 goals on their profile: a parse to reach on a boss (or any boss) with one of their own characters. When a saved raid reaches one, the bot DMs them. Needs `supabase/migrate-0.41.sql` run once.
+
+**Raid-night prep.** Reminders from `/remind` add a "Tonight, focus on" field: the last raid's raid-wide points to work on and the bosses that took wipes (never names).
+
 **Activity log (optional).** Set `DISCORD_LOG_CHANNEL_ID` to a private channel and the bot posts one line per command or button press: who, what (command and which options were used, never what was typed), where, when, and whether it worked or the error if not. Failed reminders and command registration are logged too. Mentions in the log don't ping anyone. To check it's set up, open `https://guildlog.uk/api/discord?task=logtest&key=YOUR_CRON_SECRET`: it posts a test line, or says what's wrong.
 
 The bot reads the same stored fights as the site (see **Stored fights** below), so its DMs and raid summary always match what the site shows, and button presses are instant.

@@ -1,10 +1,10 @@
 // Potions, damage-over-time uptime, tank mitigation, boss debuffs and death recaps, worked out
 // from a stored fight (no Warcraft Logs requests). Shared by the site's analysis, the whole-raid
 // breakdown and the Discord DMs, so they all say the same thing.
-import { MAINTENANCE, NOT_A_DOT, isPotion } from './gameData.js';
+import { MAINTENANCE, NOT_A_DOT, isElixir, isFlask, isFood, isPotion } from './gameData.js';
 import type { FightPack } from './pack.js';
 import { num } from './tables.js';
-import type { DeathRecap, DotUptime, Mitigation, PotionUse, RaidDebuff } from './types.js';
+import type { Consumes, DeathRecap, DotUptime, Mitigation, PotionUse, RaidDebuff } from './types.js';
 
 const nameOf = (pack: FightPack, id: number) => pack.full?.names[id]?.[0] ?? `Spell ${id}`;
 
@@ -16,6 +16,15 @@ export function potionsFor(pack: FightPack, id: number): PotionUse | undefined {
   // A potion's buff already up in the first 1.5 seconds was drunk before the pull
   const prePot = p.buffs.auras.some(([a, , , bands]) => isPotion(a, nameOf(pack, a)) && (bands ?? []).some(([s]) => s <= 1_500) && !used.some((u) => u.seconds <= 2));
   return { used, prePot };
+}
+
+/** Flask, elixirs and food buff that were up for at least half the fight. Undefined until the fight has been read in full. */
+export function consumesFor(pack: FightPack, id: number): Consumes | undefined {
+  const p = pack.full?.players[id];
+  if (!p) return undefined;
+  const half = (p.buffs.total || 1) / 2;
+  const up = p.buffs.auras.filter(([, ms]) => ms >= half).map(([a]) => nameOf(pack, a));
+  return { flask: up.some(isFlask), elixirs: up.filter(isElixir).length, food: up.some(isFood) };
 }
 
 /** Damage-over-time spells that are at least 3% of the player's damage, with their uptime. */

@@ -58,7 +58,9 @@ assert.equal((await store.dueReminders()).length, 0);
 const { applyGuildEdit, guildSettings } = await import('../server/guildSettings.js');
 await applyGuildEdit({ action: 'guild', name: 'Vita Nova', icon: null, about: 'Hi' }, { name: 'suy', rank: 'admin' });
 await applyGuildEdit({ action: 'guild', name: 'Vita Nova', icon: null, about: 'Hello' }, { name: 'suy', rank: 'admin' });
-assert.deepEqual(await guildSettings(), { name: 'Vita Nova', icon: null, about: 'Hello' });
+assert.deepEqual(await guildSettings(), { name: 'Vita Nova', icon: null, about: 'Hello', wclGuildId: null });
+await applyGuildEdit({ action: 'guild', name: 'Vita Nova', icon: null, about: 'Hello', wclGuildId: 654321 }, { name: 'suy', rank: 'admin' });
+assert.equal((await guildSettings()).wclGuildId, 654321, 'the Warcraft Logs guild is saved from the Admin page');
 
 // Bug reports
 const bugs = await import('../server/bugs.js');
@@ -94,5 +96,16 @@ assert.equal((await listRaids()).raids[0].code, 'R1');
 await deleteRaid('R1');
 assert.equal((await listRaids()).raids.length, 0, 'deleting a raid removes it');
 assert.equal((await rest('kill_stats?report_code=eq.R1')).length, 0, 'and its kills');
+
+// Personal goals: only for your own characters, and removable
+const goals = await import('../server/goals.js');
+await store.createClaim({ discord_id: '7', discord_name: 'suy', character: 'Suy', realm: 'Nightslayer' }).catch(() => undefined);
+const g = await goals.addGoal('7', { character: 'suy', encounterId: 652, encounter: 'Attumen', target: 90 });
+assert.equal(g.character, 'Suy', 'named like the claim');
+assert.equal((await goals.goalsFor('7')).length, 1);
+await assert.rejects(goals.addGoal('8', { character: 'Suy', target: 90 }), /your own characters/);
+await assert.rejects(goals.addGoal('7', { character: 'Suy', target: 150 }), /between 1 and 100/);
+await goals.removeGoal('7', g.id);
+assert.equal((await goals.goalsFor('7')).length, 0, 'removing a goal');
 
 console.log('All database checks passed.');

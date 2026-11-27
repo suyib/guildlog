@@ -262,7 +262,7 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
     code: 'ABC', title: 'Gruul + Maggy', startTime: Date.UTC(2026, 9, 15, 19), zone: null,
     fights: [
       { id: 1, encounterID: 1, name: 'High King Maulgar', startTime: 0, endTime: 180000, kill: true, friendlyPlayers: [1, 2] },
-      { id: 2, encounterID: 2, name: 'Gruul', startTime: 200000, endTime: 300000, kill: false, friendlyPlayers: [1, 2, 3] },
+      { id: 2, encounterID: 2, name: 'Gruul', startTime: 200000, endTime: 300000, kill: false, friendlyPlayers: [1, 2, 3], fightPercentage: 4523, lastPhase: 2 },
       { id: 3, encounterID: 2, name: 'Gruul', startTime: 400000, endTime: 700000, kill: true, friendlyPlayers: [1, 2] },
       { id: 4, encounterID: 3, name: 'Magtheridon', startTime: 800000, endTime: 900000, kill: false, friendlyPlayers: [1, 2] },
     ],
@@ -276,6 +276,9 @@ assert.ok(auditLine({ ...typed, guild_id: undefined }, 'failed', 500, 'boom').in
   assert.equal(card.kills, 2);
   assert.deepEqual(card.bosses.map((b) => [b.name, b.kill, b.seconds, b.wipes]), [['High King Maulgar', true, 180, 0], ['Gruul', true, 300, 1], ['Magtheridon', false, null, 1]]);
   assert.equal(card.wipes, 2);
+  assert.deepEqual(card.bosses[1].pulls, [{ fightId: 2, seconds: 100, pct: 45.2, phase: 2 }], 'each wipe with how far it got (hundredths of a percent read as a percent)');
+  assert.deepEqual(card.bosses[2].pulls, [{ fightId: 4, seconds: 100, pct: null, phase: null }]);
+  assert.equal(card.bosses[0].deaths, 0, 'deaths on each kill, for "deathless" achievements');
   assert.equal(card.raidSeconds, 900);
   assert.deepEqual(card.raiders.map((r) => [r.name, r.bosses, r.role]), [['Alt', 0, null], ['Luke', 2, 'tank'], ['Suy', 2, 'dps']], 'only people in boss fights, with kills attended');
   assert.ok(card.feedback.work.some((p) => p.title.includes('wipe')));

@@ -4,17 +4,20 @@ import { dbEnabled, rest } from './db.js';
 import { GAME } from './game.js';
 import type { GuildRankings, HomeData, RankSet, SavedRaid, ZoneProgress } from './types.js';
 import { gql } from './wcl.js';
+import { guildSettings } from './guildSettings.js';
 
 const q = encodeURIComponent;
 const HOUR = 3_600_000;
 const WEEK = 7 * 86_400_000;
 
 type Guild = NonNullable<HomeData['wcl']>;
-let cached: { at: number; guild: Guild | null; ranks: Map<number, ZoneProgress['ranks']> } | null = null;
+let cached: { at: number; key: string; guild: Guild | null; ranks: Map<number, ZoneProgress['ranks']> } | null = null;
 
 /** Which guild to show: WCL_GUILD_ID, or GUILD_NAME + GUILD_REALM + GUILD_REGION (also used to pick up raids). */
-function guildArgs(): { decl: string; args: string; vars: Record<string, unknown> } | null {
-  const id = Number(process.env.WCL_GUILD_ID?.trim());
+async function guildArgs(): Promise<{ decl: string; args: string; vars: Record<string, unknown> } | null> {
+  // The Admin page's setting first, then Vercel's environment variables
+  const saved = (await guildSettings().catch(() => null))?.wclGuildId;
+  const id = saved && saved > 0 ? saved : Number(process.env.WCL_GUILD_ID?.trim());
   if (id > 0) return { decl: '$id:Int', args: 'id:$id', vars: { id } };
   const name = process.env.GUILD_NAME?.trim();
   const realm = process.env.GUILD_REALM?.trim();
@@ -34,15 +37,16 @@ const rankSet = (r: any): RankSet | null =>
  */
 export async function wclGuild(zoneIds: number[]): Promise<{ guild: Guild | null; ranks: Map<number, ZoneProgress['ranks']> }> {
   const want = zoneIds.slice(0, 4);
-  if (cached && Date.now() - cached.at < HOUR && want.every((z) => cached!.ranks.has(z))) return cached;
-  const g = guildArgs();
+  const g = await guildArgs();
+  const key = JSON.stringify(g?.vars ?? null);
+  if (cached && cached.key === key && Date.now() - cached.at < HOUR && want.every((z) => cached!.ranks.has(z))) return cached;
   const host = GAME.hosts[0];
   const empty = { guild: null, ranks: new Map<number, ZoneProgress['ranks']>() };
   if (!g) return empty;
   const base = await gql<any>(host, `query(${g.decl}){guildData{guild(${g.args}){id name faction{name} server{name slug region{slug}}}}}`, g.vars, 10_000).catch(() => null);
   const info = base?.guildData?.guild;
   if (!info?.id) {
-    cached = { at: Date.now(), ...empty };
+    cached = { at: Date.now(), key, ...empty };
     return empty;
   }
   const guild: Guild = {
@@ -67,7 +71,7 @@ export async function wclGuild(zoneIds: number[]): Promise<{ guild: Guild | null
       ranks.set(z, zr ? { progress: rankSet(zr.progress), speed: rankSet(zr.speed) } : null);
     }
   }
-  cached = { at: Date.now(), guild, ranks };
+  cached = { at: Date.now(), key, guild, ranks };
   return cached;
 }
 

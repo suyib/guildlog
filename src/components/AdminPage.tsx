@@ -346,6 +346,18 @@ function GuildDetails({ guild, onSaved }: { guild: AdminOverview['guild']; onSav
             About
             <textarea value={form.about ?? ''} maxLength={600} rows={3} placeholder="A line or two about the guild, shown under its name on the home page" onChange={(e) => setForm((f) => ({ ...f, about: e.target.value || null }))} />
           </label>
+          <label>
+            Warcraft Logs guild
+            <input
+              value={form.wclGuildId ? String(form.wclGuildId) : ''}
+              placeholder="Paste the guild's Warcraft Logs link, or its ID"
+              onChange={(e) => {
+                const m = e.target.value.match(/guild\/id\/(\d+)|^\s*(\d+)\s*$/);
+                setForm((f) => ({ ...f, wclGuildId: m ? Number(m[1] ?? m[2]) : null }));
+              }}
+            />
+            <span className="muted small">{form.wclGuildId ? `Guild ${form.wclGuildId}: ranks on Home and Rankings come from it.` : 'Not set here (WCL_GUILD_ID in Vercel is used if it\u2019s there). The link looks like …/guild/id/123456.'}</span>
+          </label>
           <div className="row wrap-center">
             <button type="button" disabled={busy || !changed} onClick={save}>{busy ? 'Saving\u2026' : 'Save'}</button>
             {changed && <button type="button" className="ghost" disabled={busy} onClick={() => setForm(guild.settings)}>Undo changes</button>}
@@ -462,7 +474,7 @@ function SetupChecklist({ data }: { data: AdminOverview }) {
     {
       done: !!home?.wcl,
       title: 'Link the guild on Warcraft Logs',
-      how: <>Set <code>WCL_GUILD_ID</code> in Vercel (the number in the guild&rsquo;s Warcraft Logs address) to show its ranks on Home and Rankings.</>,
+      how: <>Paste the guild&rsquo;s Warcraft Logs link under Guild details below (or set <code>WCL_GUILD_ID</code> in Vercel) to show its ranks on Home and Rankings.</>,
     },
     {
       done: data.people.some((p) => leaders.includes(p.rank) && p.id !== data.me.id),

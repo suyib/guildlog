@@ -9,6 +9,7 @@ import type {
   FightPlayerRow,
   FightRef,
   HistoryRow,
+  PlayerGoal,
   PlayerSnapshot,
   AdminEdit,
   AdminOverview,
@@ -74,6 +75,8 @@ export const addRaid = (url: string) => post<SavedRaid>('/api/raids', { url });
 export const deleteRaid = (code: string) => post<{ ok: true }>('/api/raids', { delete: code });
 export const checkRaid = (code: string) => call<RaidCheck>(`/api/raids?view=check&code=${encodeURIComponent(code)}`);
 export const readRaidNow = (code: string, fresh = false) => post<RaidCheck>('/api/raids', { read: code, fresh });
+export const addGoal = (goal: { character: string; encounterId: number | null; encounter: string | null; target: number }) => post<PlayerGoal>('/api/raids', { goal });
+export const removeGoal = (id: string) => post<{ ok: true }>('/api/raids', { removeGoal: id });
 export const loadSaved = (id: string) => call<AnalysisResult>(`/api/history?id=${encodeURIComponent(id)}`);
 
 export interface Progress { label: string; state: 'loading' | 'done' | 'failed'; seconds?: number }

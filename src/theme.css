@@ -37,6 +37,9 @@
   --warn-bg: rgba(255, 179, 71, 0.08);
   --warn-line: rgba(255, 179, 71, 0.45);
   --cooldown: #ffd100;
+  --gold: #ffd100;                        /* WoW's interface gold, used sparingly */
+  --gold-dim: rgba(255, 209, 0, 0.35);
+  --gold-deep: #c9a24a;
   --win: #5fd38d;
 
   /* Chart slices (validated for color-blind separation and contrast on --surface-solid) */
@@ -121,8 +124,8 @@ h2, h3 { margin: 0; }
   color: var(--ink-2); font: 600 14px var(--font-sans); letter-spacing: 0.02em; text-align: left; cursor: pointer;
 }
 .side-nav a:hover, .side-nav button:hover:not(:disabled) { background: var(--hover); color: var(--ink); text-decoration: none; }
-.side-nav .on, .side-nav .on:hover:not(:disabled) { background: rgba(0, 124, 173, 0.22); color: var(--ink); }
-.side-nav .on .glyph { stroke: var(--primary-light); }
+.side-nav .on, .side-nav .on:hover:not(:disabled) { background: linear-gradient(90deg, rgba(255, 209, 0, 0.12), transparent); color: var(--gold); box-shadow: inset 3px 0 0 var(--gold), inset 0 0 0 1px var(--gold-dim); }
+.side-nav .on .glyph { stroke: var(--gold); }
 .side-card {
   margin-top: auto; display: flex; flex-direction: column; gap: 10px;
   padding: 16px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); font-size: 13px;
@@ -191,7 +194,7 @@ h2, h3 { margin: 0; }
 }
 .panel > * { margin-top: 0; margin-bottom: 0; }
 .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
-.panel-title { font-size: 15px; font-weight: 700; letter-spacing: 0.03em; margin: 0; }
+.panel-title { font-size: 15px; font-weight: 700; letter-spacing: 0.03em; margin: 0; color: var(--gold); }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space); }
 .grid-2-1 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space); }
 
@@ -836,37 +839,139 @@ a.boss-pill:hover { text-decoration: none; border-color: var(--primary-light); b
 .zone-acc .zone-table th:first-child, .zone-acc .zone-table td:first-child { padding-left: 14px; }
 .zone-acc .zone-table th:last-child, .zone-acc .zone-table td:last-child { padding-right: 14px; }
 
-/* ---------- Raid cards: the raid's art behind its size, name and a line under it ---------- */
-.raid-card {
+/* ---------- Zone cards (a raid's art behind its name): the raid's art behind its size, name and a line under it ---------- */
+.zone-card {
   position: relative; isolation: isolate; overflow: hidden;
   display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto 1fr auto; column-gap: 12px;
   min-height: 116px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px;
   background: linear-gradient(135deg, rgba(0, 124, 173, 0.28), var(--surface-solid) 70%);
 }
-.raid-card::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.25) 75%); }
-.raid-art { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
-.raid-art.blurred { inset: -24px; width: calc(100% + 48px); height: calc(100% + 48px); filter: blur(14px) saturate(1.3); opacity: 0.8; }
-.raid-size {
+.zone-card::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.25) 75%); }
+.zone-art { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+.zone-art.blurred { inset: -24px; width: calc(100% + 48px); height: calc(100% + 48px); filter: blur(14px) saturate(1.3); opacity: 0.8; }
+.zone-size {
   grid-column: 1; grid-row: 1; justify-self: start;
   display: inline-grid; place-items: center; min-width: 38px; height: 38px; padding: 0 6px; border: 1px solid var(--line); border-radius: 8px;
   background: rgba(0, 0, 0, 0.6); color: var(--ink); font: 700 16px var(--font-mono);
 }
-.raid-card-text { grid-column: 1; grid-row: 3; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.raid-card-name { margin: 0; font-size: 18px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
-.raid-card-sub { color: var(--ink-2); font-size: 13px; }
-.raid-card-sub:empty { display: none; }
-.raid-card-sub .zone-ranks { margin-left: 0; }
-.raid-card > .zone-count { grid-column: 2; grid-row: 3; align-self: end; }
-.raid-card.hero { min-height: 150px; }
-.raid-card.hero .raid-card-name { font-size: 26px; }
-.panel > .raid-card { margin: 12px 0; }
+.zone-card-text { grid-column: 1; grid-row: 3; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.zone-card-name { margin: 0; font-size: 18px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.zone-card-sub { color: var(--ink-2); font-size: 13px; }
+.zone-card-sub:empty { display: none; }
+.zone-card-sub .zone-ranks { margin-left: 0; }
+.zone-card > .zone-count { grid-column: 2; grid-row: 3; align-self: end; }
+.zone-card.hero { min-height: 150px; }
+.zone-card.hero .zone-card-name { font-size: 26px; }
+.panel > .zone-card { margin: 12px 0; }
 /* As an accordion's header: the card is the button, the chevron sits top right */
-.accordion > summary.raid-card { display: grid; padding: 14px 16px; font-size: inherit; }
-.accordion > summary.raid-card::after { grid-column: 2; grid-row: 1; justify-self: end; align-self: start; margin: 6px 4px 0 0; border-color: var(--ink); }
-.accordion > summary.raid-card:has(.zone-count)::after { margin-left: 0; }
-.zone-acc[open] > summary.raid-card { border-radius: 12px 12px 0 0; border-width: 0 0 1px; }
-.zone-acc > summary.raid-card { border-width: 0; }
+.accordion > summary.zone-card { display: grid; padding: 14px 16px; font-size: inherit; }
+.accordion > summary.zone-card::after { grid-column: 2; grid-row: 1; justify-self: end; align-self: start; margin: 6px 4px 0 0; border-color: var(--ink); }
+.accordion > summary.zone-card:has(.zone-count)::after { margin-left: 0; }
+.zone-acc[open] > summary.zone-card { border-radius: 12px 12px 0 0; border-width: 0 0 1px; }
+.zone-acc > summary.zone-card { border-width: 0; }
 .empty-note { max-width: 70ch; line-height: 1.5; }
+
+/* ---------- Game-style player tooltips ---------- */
+.ptip { position: relative; }
+.ptip:focus-visible { outline: 2px solid var(--primary-light); outline-offset: 2px; border-radius: 4px; }
+.ptip-box {
+  position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 40; display: none; flex-direction: column; gap: 1px;
+  width: max-content; min-width: 200px; max-width: min(280px, 80vw); padding: 9px 11px; border-radius: 6px; text-align: left; white-space: normal;
+  background: linear-gradient(180deg, rgba(16, 24, 48, 0.97), rgba(8, 10, 22, 0.97)); border: 1px solid #5a6a86;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.8), 0 8px 24px rgba(0, 0, 0, 0.6);
+  font: 400 13px/1.4 var(--font-sans); color: #fff; letter-spacing: 0; pointer-events: none;
+}
+.ptip:hover > .ptip-box, .ptip:focus-visible > .ptip-box, .ptip:focus-within > .ptip-box { display: flex; }
+.ptip-name { font-size: 15px; font-weight: 700; }
+.ptip-line { color: #fff; }
+.ptip-grey { color: #9d9d9d; }
+.ptip-rule { display: block; height: 1px; margin: 5px 0; background: rgba(255, 255, 255, 0.12); }
+.ptip-row { display: flex; justify-content: space-between; gap: 14px; }
+.ptip-label { color: var(--gold); }
+.ptip-value { color: #fff; font-variant-numeric: tabular-nums; }
+.ptip-row > span:last-child { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ptip-note { color: #1eff00; }
+
+/* ---------- Damage meter rows, like a meter addon: the bar fills the row in the class color ---------- */
+.meter { gap: 3px; }
+.meter-row {
+  position: relative; isolation: isolate; grid-template-columns: 20px 18px minmax(0, 1fr) auto 34px; gap: 8px;
+  min-height: 34px; padding: 4px 8px 4px 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.45);
+  text-shadow: 0 1px 2px #000, 0 0 2px #000;
+}
+.meter-row:hover:not(:disabled) { background: rgba(0, 0, 0, 0.6); }
+.meter-row:hover:not(:disabled) progress.bar { opacity: 1; }
+.meter-row progress.bar { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; border-radius: 4px; opacity: 0.8; }
+.meter-row progress.bar::-webkit-progress-bar { background: transparent; border-radius: 4px; }
+.meter-row progress.bar::-webkit-progress-value { background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.18)), currentColor; border-radius: 4px; }
+.meter-row progress.bar::-moz-progress-bar { background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.18)), currentColor; border-radius: 4px; }
+/* The palest class colors get a darker fill so the white names stay readable */
+.meter-row progress.bar.cls-rogue-bar, .meter-row progress.bar.cls-priest-bar, .meter-row progress.bar.cls-hunter-bar { filter: brightness(0.62); }
+.meter-rank { color: #fff; opacity: 0.8; }
+.meter-name, .meter-name > span:first-child { color: #fff; }
+.meter-name .muted { color: rgba(255, 255, 255, 0.78); }
+.meter-value { color: #fff; }
+.meter-parse { justify-self: end; min-width: 30px; padding: 1px 5px; border-radius: 4px; background: rgba(0, 0, 0, 0.6); text-align: center; text-shadow: none; }
+.meter-parse:empty { visibility: hidden; }
+.meter-row .icon { border-radius: 3px; }
+
+/* ---------- Achievement banners ---------- */
+.achievements { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; align-items: stretch; }
+.achievements > .link-button { justify-self: start; }
+.ach {
+  display: flex; align-items: center; gap: 14px; padding: 10px 16px 10px 10px; border-radius: 10px; min-width: 0;
+  background: radial-gradient(120% 140% at 0% 50%, rgba(255, 209, 0, 0.16), transparent 55%), linear-gradient(180deg, #2b2418, #120f0b);
+  border: 2px solid #8c6f2a; box-shadow: inset 0 0 0 1px #000, inset 0 1px 0 rgba(255, 230, 150, 0.3), 0 0 22px rgba(255, 209, 0, 0.12);
+}
+.ach-badge {
+  flex: none; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; overflow: hidden; color: var(--gold);
+  background: radial-gradient(circle, #6b5320, #2a200d); border: 2px solid var(--gold-deep); box-shadow: 0 0 0 2px #000;
+}
+.ach-badge .boss-icon.big { width: 52px; height: 52px; border-radius: 50%; }
+.ach-text { min-width: 0; }
+.ach-kind { font: 700 11px var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold-deep); }
+.ach-name { font-size: 18px; font-weight: 800; color: var(--gold); text-shadow: 0 1px 0 #000; line-height: 1.2; }
+.ach-sub { color: var(--ink-2); font-size: 13px; }
+.ach-points { flex: none; margin-left: auto; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--gold-deep); background: #1a150e; font: 700 15px var(--font-mono); color: #fff; }
+@media (max-width: 640px) { .achievements { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- Gold accents ---------- */
+.zone-card { border-color: rgba(201, 162, 74, 0.35); }
+summary.zone-card:hover { box-shadow: inset 0 0 0 1px var(--gold-dim); }
+
+/* ---------- Wipes, pull by pull ---------- */
+.wipe-pulls { margin-top: 12px; }
+.wipe-boss { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; }
+.wipe-boss + .wipe-boss { border-top: 1px solid var(--line); margin-top: 10px; }
+.wipe-boss-head { flex-wrap: wrap; gap: 8px; }
+.pull-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.pull-list li { display: grid; grid-template-columns: 52px minmax(60px, 1fr) auto; gap: 10px; align-items: center; }
+.pull-list li.best a { color: var(--gold); font-weight: 700; }
+progress.pull-bar { width: 100%; height: 8px; color: var(--medium); }
+.pull-list li.best progress.pull-bar { color: var(--gold); }
+
+/* ---------- Comparing raids, bench, attendance ---------- */
+.delta-good { color: var(--win); font-weight: 700; }
+.delta-bad { color: var(--high); font-weight: 700; }
+.compare-raids td.with-icon { display: flex; gap: 8px; align-items: center; }
+.perfect-att { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: var(--radius-pill); border: 1px solid var(--gold-dim); color: var(--gold); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.bench-helper { margin-bottom: 12px; }
+.bench-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; font-weight: 600; }
+
+/* ---------- Profile: trends and goals ---------- */
+.trend-head { margin: 2px 0 6px; }
+.trend-head.up, .trend-delta.up { color: var(--win); }
+.trend-head.down, .trend-delta.down { color: var(--medium); }
+.trend-delta { margin-left: 6px; font-size: 11px; font-weight: 700; }
+.boss-trend { font-size: 13px; }
+.goals { display: flex; flex-direction: column; gap: 6px; }
+.goal-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.goal-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.goal-list.done li { color: var(--ink-3); }
+.goal-list.done .glyph { stroke: var(--win); vertical-align: -2px; }
+.goal-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.goal-form select { flex: 1 1 140px; }
+.goal-form input { width: 80px; }
 
 /* ---------- Admin: setup checklist ---------- */
 .setup > summary { font-size: 16px; }

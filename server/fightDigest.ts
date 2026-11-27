@@ -6,8 +6,8 @@ import { IGNORE_FOR_GAPS, cooldownFor } from './cooldowns.js';
 import { gearFrom, statsFrom, survivalFrom } from './dashboard.js';
 import type { FightPack } from './pack.js';
 import { detailRows, num, rankingRows } from './tables.js';
-import { deathRecaps, dotsFor, mitigationFor, potionsFor, raidDebuffs } from './insights.js';
-import type { DeathRecap, DotUptime, GearItem, Mitigation, PotionUse, RaidDebuff } from './types.js';
+import { consumesFor, deathRecaps, dotsFor, mitigationFor, potionsFor, raidDebuffs } from './insights.js';
+import type { Consumes, DeathRecap, DotUptime, GearItem, Mitigation, PotionUse, RaidDebuff } from './types.js';
 
 export interface PlayerDigest {
   id: number;
@@ -44,10 +44,12 @@ export interface PlayerDigest {
   potions?: PotionUse;
   dots?: DotUptime[];
   mitigation?: Mitigation;
+  /** Flask, elixirs and food (from v0.41.0). */
+  consumes?: Consumes;
 }
 
 /** Bump when what's in a digest changes; stored digests are then worked out again from the stored fight. */
-export const DIGEST_VERSION = 7; // 7: potions, DoTs, mitigation, death recaps, boss debuffs; 6: from stored fights; 5: healing; 4: pet damage as "<pet> (pet)"; 3: roles
+export const DIGEST_VERSION = 8; // 8: flasks, elixirs and food; 7: potions, DoTs, mitigation, death recaps, boss debuffs; 6: from stored fights; 5: healing; 4: pet damage as "<pet> (pet)"; 3: roles
 
 export interface FightDigest {
   v?: number;
@@ -202,5 +204,7 @@ function extras(pack: FightPack, id: number): Partial<PlayerDigest> {
   if (dots?.length) out.dots = dots;
   const mitigation = mitigationFor(pack, id);
   if (mitigation) out.mitigation = mitigation;
+  const consumes = consumesFor(pack, id);
+  if (consumes) out.consumes = consumes;
   return out;
 }

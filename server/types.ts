@@ -247,7 +247,13 @@ export interface Offline { savedAt: string }
 
 /** One raid night at a glance, for the Past raids calendar (built from the saved raid). */
 export interface RaidCard {
-  bosses: { name: string; encounterId: number; fightId: number | null; kill: boolean; seconds: number | null; wipes: number }[];
+  bosses: {
+    name: string; encounterId: number; fightId: number | null; kill: boolean; seconds: number | null; wipes: number;
+    /** Deaths on the kill, once it's been read (missing on older cards). */
+    deaths?: number | null;
+    /** Each wipe in order: how long it lasted, boss health left (0–100) and the phase reached, when Warcraft Logs says. */
+    pulls?: { fightId: number; seconds: number; pct: number | null; phase: number | null }[];
+  }[];
   /** From the first pull to the end of the last boss fight. */
   raidSeconds: number;
   wipes: number;
@@ -444,13 +450,15 @@ export type AdminEdit =
   | { action: 'bug'; id: string; status?: 'open' | 'resolved'; note?: string | null; tell?: boolean }
   | { action: 'bugDelete'; id: string }
   /** The guild's details (guild masters and admins). Empty name or picture: use Discord's. */
-  | { action: 'guild'; name: string | null; icon: string | null; about: string | null };
+  | { action: 'guild'; name: string | null; icon: string | null; about: string | null; wclGuildId?: number | null };
 
 /** Guild details set on the Admin page; each overrides Discord's when set. icon: a small data: image. */
 export interface GuildSettings {
   name: string | null;
   icon: string | null;
   about: string | null;
+  /** The guild on Warcraft Logs (its ID); WCL_GUILD_ID in Vercel is the fallback. */
+  wclGuildId?: number | null;
 }
 
 // ---------- Home page and profiles ----------
@@ -542,6 +550,24 @@ export interface ProfileCharacter {
   } | null;
   /** Week by week over the last 8 weeks of guild raids (missing before v0.25.0). */
   trend?: TrendWeek[];
+  /** Each boss over the last 12 weeks: first and latest parse, best, and kills (v0.41.0). */
+  bosses?: BossTrend[];
+  /** Their goals for this character (only ever sent to its owner). */
+  goals?: PlayerGoal[];
+}
+
+export interface BossTrend { encounterId: number; name: string; first: number | null; latest: number | null; best: number | null; kills: number }
+
+/** A personal goal: reach this parse on a boss (or any boss). */
+export interface PlayerGoal {
+  id: string;
+  character: string;
+  encounterId: number | null;
+  encounter: string | null;
+  target: number;
+  createdAt: string;
+  achievedAt: string | null;
+  achievedParse: number | null;
 }
 
 export interface ProfileData {
@@ -631,6 +657,9 @@ export interface PotionUse {
 }
 
 export interface DotUptime { name: string; uptimePct: number; sharePct: number }
+
+/** Flask, elixirs and food on a boss: up for at least half of the fight. */
+export interface Consumes { flask: boolean; elixirs: number; food: boolean }
 
 
 export interface Mitigation {

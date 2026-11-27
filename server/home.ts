@@ -7,7 +7,8 @@ import { dbEnabled, listHistory, rest } from './db.js';
 import { type FightDigest, type PlayerDigest, healsMost } from './discord/digest.js';
 import { claimsFor, recentRaids } from './discord/store.js';
 import { reportRegion, storedDigests } from './pack.js';
-import { trendFor } from './benchmarks.js';
+import { bossTrendsFor, trendFor } from './benchmarks.js';
+import { goalsFor } from './goals.js';
 import { rankings, roster, wclGuild, zoneProgress } from './guildPage.js';
 import { discordGuild, guildSettings } from './guildSettings.js';
 import type { Session } from './auth.js';
@@ -90,12 +91,13 @@ async function raidCodes(): Promise<{ host: string; code: string; title: string;
 
 export async function profileData(session: Session): Promise<ProfileData> {
   if (!session.uid) throw new Error('Sign in with Discord to see your profile.');
-  const [claims, raids, me, users, list] = await Promise.all([
+  const [claims, raids, me, users, list, goals] = await Promise.all([
     claimsFor(session.uid).catch(() => []),
     raidCodes(),
     membership(session.uid, session.gid).catch(() => null),
     rest(`site_users?discord_id=eq.${encodeURIComponent(session.uid)}&select=first_seen,sign_ins,rank,display_name`).catch(() => []),
     listRaids().catch(() => ({ raids: [] as SavedRaid[] })),
+    goalsFor(session.uid).catch(() => []),
   ]);
   // Each raid's stored summaries, read once and shared by all of this person's characters
   const fightsByCode = new Map<string, Promise<FightDigest[]>>();
@@ -118,6 +120,8 @@ export async function profileData(session: Session): Promise<ProfileData> {
       raidsAttended: cards.filter(inCard).length,
       lastRaid: null, stats: [],
       trend: await trendFor(c.character).catch(() => []),
+      bosses: await bossTrendsFor(c.character).catch(() => []),
+      goals: goals.filter((g) => g.character.toLowerCase() === key),
     };
     // The most recent raid this character was in, from the bot's summaries
     for (const r of raids) {

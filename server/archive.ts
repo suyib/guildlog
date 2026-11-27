@@ -5,6 +5,7 @@
 // stores it whole (see pack.ts); every analysis, breakdown and Discord DM is worked out from that.
 // One run does what fits in its time limit and the next carries on.
 import { forgetKills, recordKills } from './benchmarks.js';
+import { checkGoals } from './goals.js';
 import { dbEnabled, rest } from './db.js';
 import type { FightDigest } from './discord/digest.js';
 import { GAME } from './game.js';
@@ -85,6 +86,9 @@ export async function listRaids(): Promise<RaidsList> {
 // ---------- The raid card ----------
 
 /** One raid night at a glance: bosses, wipes, deaths, who was there, and what went well. */
+/** Boss health left at the end of a fight, 0–100 (Warcraft Logs may send hundredths of a percent). */
+const bossLeft = (v: number | null | undefined) => (typeof v === 'number' && v >= 0 ? Math.round((v > 100 ? v / 100 : v) * 10) / 10 : null);
+
 export function buildCard(meta: ReportMeta, digests: FightDigest[]): RaidCard {
   const bossFights = meta.fights.filter((f) => f.encounterID > 0);
   const encounterIds = [...new Set(bossFights.map((f) => f.encounterID))];
@@ -98,6 +102,8 @@ export function buildCard(meta: ReportMeta, digests: FightDigest[]): RaidCard {
       kill: !!kill,
       seconds: kill ? Math.round((kill.endTime - kill.startTime) / 1000) : null,
       wipes: tries.filter((f) => !f.kill).length,
+      deaths: kill ? (digests.find((d) => d.id === kill.id)?.players.reduce((t, p) => t + p.deaths.length, 0) ?? null) : null,
+      pulls: tries.filter((f) => !f.kill).map((f) => ({ fightId: f.id, seconds: Math.round((f.endTime - f.startTime) / 1000), pct: bossLeft(f.fightPercentage), phase: f.lastPhase ?? null })),
     };
   });
   const kills = bossFights.filter((f) => f.kill);
@@ -227,7 +233,11 @@ export async function archiveTick(deadline: number): Promise<{ saved: number; fi
     const r = await saveRaid(raid, deadline);
     saved += r.done;
     const after: RaidRow | undefined = (await rest(`guild_raids?report_code=eq.${q(raid.report_code)}&select=status,title`).catch(() => null))?.[0];
-    if (after?.status === 'saved') finished.push(after.title ?? raid.report_code);
+    if (after?.status === 'saved') {
+      finished.push(after.title ?? raid.report_code);
+      // Anyone whose goal this raid reached gets a DM
+      await checkGoals(raid.report_code).catch((e) => console.error('goal check failed', e));
+    }
     if (r.stop) break; // Warcraft Logs is down: try again next run
   }
   return { saved, finished };

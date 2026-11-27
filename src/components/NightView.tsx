@@ -6,6 +6,11 @@ import { compact, mmss, n0 } from '../format';
 import Glyph from './Glyph';
 import { BossIcon, ClassIcon, SeverityDot, classCss, parseCss } from './icons';
 import { RaidCardBody } from './RaidCard';
+import WipePulls from './WipePulls';
+import { PlayerTipBox } from './PlayerTip';
+import Achievements from './Achievements';
+import { useHome } from './Home';
+import { raidAchievements } from '../achievements';
 
 const hm = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : `${Math.round(s / 60)}m`);
 const spaced = (s: string) => s.replace(/([a-z])([A-Z])/g, '$1 $2');
@@ -24,10 +29,12 @@ export default function NightView({ data, onBoss, onPlayer, onRefresh, refreshin
   const others = data.players.filter((p) => !p.healer);
   const topDps = Math.max(...others.map((p) => p.perSecond), 1);
   const topHps = Math.max(...healers.map((p) => p.perSecond), 1);
+  const home = useHome();
+  const achievements = partial ? [] : raidAchievements(c, { code: data.code, start: data.startTime, zones: home?.zones });
 
   return (
     <div className="result">
-      <header className="raid-card hero">
+      <header className="zone-card hero">
         <RaidCardBody
           id={data.zone?.id}
           name={data.zone?.name ?? data.title}
@@ -52,6 +59,8 @@ export default function NightView({ data, onBoss, onPlayer, onRefresh, refreshin
         <Kpi glyph="shield" label="Item level" value={c.avgItemLevel ? String(c.avgItemLevel) : '–'} sub="raid average" />
       </div>
 
+      <Achievements list={achievements} />
+
       <div className="grid-2-1">
         <section className="panel">
           <h2 className="panel-title">Bosses</h2>
@@ -64,6 +73,7 @@ export default function NightView({ data, onBoss, onPlayer, onRefresh, refreshin
               </li>
             ))}
           </ul>
+          <WipePulls bosses={c.bosses} link={(id) => `/?log=${encodeURIComponent(`https://${data.host}/reports/${data.code}?fight=${id}`)}`} />
         </section>
         <section className="panel">
           <h2 className="panel-title">Who was there ({c.raiders.length})</h2>
@@ -75,7 +85,7 @@ export default function NightView({ data, onBoss, onPlayer, onRefresh, refreshin
                 <div className="comp-label">{role === 'tank' ? 'Tanks' : role === 'healer' ? 'Healers' : 'Damage'} ({list.length})</div>
                 <div className="comp-list">
                   {list.map((p) => (
-                    <span key={p.name} className="comp-chip static"><ClassIcon className={p.className} size={16} /><span className={classCss(p.className)}>{p.name}</span>{c.kills > 0 && p.bosses < c.kills && <span className="muted small">{p.bosses}/{c.kills}</span>}</span>
+                    <span key={p.name} className="comp-chip static ptip" tabIndex={0}><PlayerTipBox name={p.name} className={p.className} specName={p.specName} role={p.role} lines={[{ label: 'Kills tonight', value: `${p.bosses} of ${c.kills}` }]} /><ClassIcon className={p.className} size={16} /><span className={classCss(p.className)}>{p.name}</span>{c.kills > 0 && p.bosses < c.kills && <span className="muted small">{p.bosses}/{c.kills}</span>}</span>
                   ))}
                 </div>
               </div>
@@ -130,7 +140,21 @@ function PlayerTable({ title, unit, players, top, onPlayer }: {
         <ol className="meter">
           {players.map((p, i) => (
             <li key={p.name}>
-              <button type="button" className="meter-row" onClick={() => onPlayer(p.best.fightId, p.best.playerId)} aria-label={`Analyze ${p.name} on ${p.best.boss}`} title={`Best: ${p.best.boss}${p.best.parse !== null ? ` (${Math.round(p.best.parse)})` : ''}`}>
+              <button type="button" className="meter-row ptip" onClick={() => onPlayer(p.best.fightId, p.best.playerId)} aria-label={`Analyze ${p.name} on ${p.best.boss}`}>
+                <PlayerTipBox
+                  name={p.name}
+                  className={p.className}
+                  specName={p.specName}
+                  role={p.role}
+                  lines={[
+                    { label: unit === 'HPS' ? 'Average healing parse' : 'Average parse', value: p.avgParse === null ? '–' : String(p.avgParse), cls: parseCss(p.avgParse) },
+                    { label: 'Best', value: `${p.best.parse !== null ? Math.round(p.best.parse) : '–'} on ${p.best.boss}`, cls: parseCss(p.best.parse) },
+                    { label: unit, value: n0(p.perSecond) },
+                    { label: 'Bosses', value: String(p.bosses) },
+                    ...(p.itemLevel ? [{ label: 'Item level', value: String(Math.round(p.itemLevel)) }] : []),
+                  ]}
+                  note={`Click to analyze ${p.best.boss}`}
+                />
                 <span className="meter-rank">{i + 1}</span>
                 <ClassIcon className={p.className} size={18} />
                 <span className="meter-name">

@@ -8,11 +8,13 @@
 //   GET ?view=boss&host=&encounter=&metric=progress|speed&scope=world|region|realm  a boss's guild rankings
 //   GET ?view=check&code=  officers: what's stored for a raid, kill by kill, and why something might be missing
 //   POST { read, fresh? }  officers: read a raid now (fresh, guild masters and admins: from the start again)
+//   POST { goal } / { removeGoal }  anyone signed in with Discord: add or remove a personal goal for their own character
 import { waitUntil } from '@vercel/functions';
 import { archiveNow, checkRaid, deleteRaid, forgetFights, isListed, listRaids, registerRaid, rereadRaid } from '../server/archive.js';
 import { rest } from '../server/db.js';
 import { json, readSession, requireSession } from '../server/auth.js';
 import { bossRanks } from '../server/bossRanks.js';
+import { addGoal, removeGoal } from '../server/goals.js';
 import { homeData, profileData } from '../server/home.js';
 import { auditTask } from '../server/discord/audit.js';
 import { requireOfficer, requireRank } from '../server/officers.js';
@@ -50,7 +52,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function POST(req: Request): Promise<Response> {
   const started = Date.now();
-  const body = (await req.json().catch(() => ({}))) as { url?: string; delete?: string; read?: string; fresh?: boolean };
+  const body = (await req.json().catch(() => ({}))) as { url?: string; delete?: string; read?: string; fresh?: boolean; goal?: Parameters<typeof addGoal>[1]; removeGoal?: string };
+  if (body.goal || body.removeGoal) return goal(req, body);
   if (body.delete) return remove(req, body.delete);
   if (body.read) return readNow(req, body.read, !!body.fresh, started);
   const check = await requireOfficer(req);
@@ -65,6 +68,23 @@ export async function POST(req: Request): Promise<Response> {
     // Make a start now (the report and first kills), then the 5-minute job carries on
     waitUntil(archiveNow(code, started + 55_000).catch((e) => console.error('saving raid failed', e)));
     return json(raid);
+  } catch (e) {
+    return json({ error: (e as Error).message }, 400);
+  }
+}
+
+/** Personal goals: add or remove one for your own character (Discord sign-in only). */
+async function goal(req: Request, body: { goal?: Parameters<typeof addGoal>[1]; removeGoal?: string }): Promise<Response> {
+  const denied = await requireSession(req);
+  if (denied) return denied;
+  const session = await readSession(req.headers.get('cookie'), process.env.SESSION_SECRET!);
+  if (!session?.uid) return json({ error: 'Sign in with Discord to set goals.' }, 403);
+  try {
+    if (body.removeGoal) {
+      await removeGoal(session.uid, body.removeGoal);
+      return json({ ok: true });
+    }
+    return json(await addGoal(session.uid, body.goal!));
   } catch (e) {
     return json({ error: (e as Error).message }, 400);
   }

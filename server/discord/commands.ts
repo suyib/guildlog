@@ -6,6 +6,7 @@ import { characterLevel } from '../blizzard.js';
 import { registerRaid } from '../archive.js';
 import { type Ability, can, siteAdminIds, storedPerson } from '../ranks.js';
 import { rest } from '../db.js';
+import type { RaidCard } from '../types.js';
 import { getReportMeta, parseReportUrl } from '../wcl.js';
 import { reportRegion, storedDigests } from '../pack.js';
 import { guildContext, trendFor } from '../benchmarks.js';
@@ -271,10 +272,30 @@ function announcementMessage(p: { message: string; place: string | null; consume
   };
 }
 
+/**
+ * Raid-night prep for the reminder: from the last saved raid, the raid-wide things to work on and
+ * the bosses that took wipes. Never names anyone (it's posted in a channel). Null when there's nothing.
+ */
+export async function raidPrep(): Promise<string | null> {
+  const rows: { title: string | null; card: RaidCard | null }[] =
+    (await rest('guild_raids?status=in.(saved,partial)&select=title,card&order=start_time.desc&limit=1').catch(() => [])) ?? [];
+  const c = rows[0]?.card;
+  if (!c) return null;
+  const lines = c.feedback.work.slice(0, 3).map((w) => `• ${w.title}`);
+  const hard = c.bosses.filter((b) => b.wipes > 0).map((b) => {
+    const best = (b.pulls ?? []).map((x) => x.pct).filter((v): v is number => v !== null).sort((x, y) => x - y)[0];
+    return `${b.name}: ${b.wipes} wipe${b.wipes > 1 ? 's' : ''}${b.kill ? ' before the kill' : best !== undefined ? `, best pull to ${best}%` : ''}`;
+  });
+  if (hard.length) lines.push(`• Wipes last time: ${hard.join('; ')}`);
+  if (!lines.length) return `Last raid (${rows[0].title ?? 'last time'}) went cleanly. Same again!`;
+  return `From ${rows[0].title ?? 'the last raid'}:\n${lines.join('\n')}`.slice(0, 1000);
+}
+
 /** The message posted when a reminder is due (used by GET /api/discord?task=reminders). */
-export function reminderMessage(p: { message: string; place: string | null; consumes: boolean; gatherAt: string; roleId: string | null }): MessageBody {
+export function reminderMessage(p: { message: string; place: string | null; consumes: boolean; gatherAt: string; roleId: string | null }, prep?: string | null): MessageBody {
   const unix = Math.floor(new Date(p.gatherAt).getTime() / 1000);
   const fields = [{ name: 'Gather', value: `<t:${unix}:t> (<t:${unix}:R>)${p.place ? `\n${p.place}` : ''}` }];
+  if (prep) fields.push({ name: 'Tonight, focus on', value: prep });
   if (p.consumes) fields.push({ name: 'Bring', value: RAID_CHECKLIST.map((x) => `• ${x}`).join('\n') + '\nNeed a list? Use `/info consumables`.' });
   return {
     content: p.roleId ? `<@&${p.roleId}>` : undefined,
@@ -779,7 +800,7 @@ export function helpMessage(): MessageBody {
           value: [
             line('/raidstart', 'post the live log for tonight\u2019s raid (raid assists too).'),
             line('/raidend', 'end the raid you started and post its summary, with what went well and what to work on.'),
-            line('/remind', 'schedule a raid reminder (optional place, consumables checklist, role ping and Discord event; raid assists too).'),
+            line('/remind', 'schedule a raid reminder (optional place, consumables checklist, role ping and Discord event; raid assists too). It adds what to focus on from the last raid.'),
             line('/check <character>', 'look up any character (not just your own), sent to you by DM (loot council too).'),
             line('/performance', 'who\u2019s doing well and who could use a hand, with tips and what to track; pick a raid and a character for one person\u2019s breakdown (by DM; loot council too).'),
           ].join('\n'),

@@ -6,6 +6,8 @@ import type { RaidCard, RaidCheck, SavedRaid } from '../../server/types';
 import { type Me, addRaid, checkRaid, deleteRaid, loadMe, loadRaids, readRaidNow } from '../api';
 import { mmss } from '../format';
 import Glyph from './Glyph';
+import WipePulls from './WipePulls';
+import { PlayerTipBox } from './PlayerTip';
 import { ZoneRanks, useHome } from './Home';
 import { ShareButton } from './ResultView';
 import { go, hashParam } from '../url';
@@ -141,9 +143,9 @@ export default function RaidsPage() {
           <Overview raids={dated} />
           <div className="grid-raids">
             <Calendar raids={dated} month={month} onMonth={setMonth} selected={selected} onSelect={pick} />
-            {current ? <RaidCardView raid={current} archiveDays={archiveDays} canDelete={me?.rank === 'admin' || me?.rank === 'guild_master'} officer={!!me?.officer} onDeleted={() => { setSelected(null); refresh(); }} onChanged={refresh} /> : <section className="panel"><p className="muted">Pick a raid on the calendar.</p></section>}
+            {current ? <RaidCardView raid={current} raids={dated} archiveDays={archiveDays} canDelete={me?.rank === 'admin' || me?.rank === 'guild_master'} officer={!!me?.officer} onDeleted={() => { setSelected(null); refresh(); }} onChanged={refresh} /> : <section className="panel"><p className="muted">Pick a raid on the calendar.</p></section>}
           </div>
-          <Attendance raids={dated} range={range} onRange={setRange} onSelect={pick} />
+          <Attendance raids={dated} range={range} onRange={setRange} onSelect={pick} officer={!!me?.officer} />
           <Progress raids={dated} />
         </>
       )}
@@ -292,7 +294,7 @@ function RaidChip({ raid, on, onClick, wide = false }: { raid: SavedRaid; on: bo
 
 // ---------- The raid card ----------
 
-function RaidCardView({ raid, archiveDays, canDelete, officer, onDeleted, onChanged }: { raid: SavedRaid; archiveDays: number; canDelete: boolean; officer: boolean; onDeleted: () => void; onChanged: () => void }) {
+function RaidCardView({ raid, raids, archiveDays, canDelete, officer, onDeleted, onChanged }: { raid: SavedRaid; raids: SavedRaid[]; archiveDays: number; canDelete: boolean; officer: boolean; onDeleted: () => void; onChanged: () => void }) {
   const c = raid.card;
   // Deleting asks once more on the same button row before anything is removed
   const [confirming, setConfirming] = useState(false);
@@ -383,6 +385,9 @@ function RaidCardView({ raid, archiveDays, canDelete, officer, onDeleted, onChan
             </ul>
           </div>
 
+          <WipePulls bosses={c.bosses} link={(id) => siteLink(raid, id)} />
+          {!partial && <CompareRaids raid={raid} raids={raids} />}
+
           {partial && (
             <p className="muted small">Still reading the boss kills: {c.summarized ?? 0} of {c.kills} done. Deaths, item level, roles and the summary below fill in as each one is read.</p>
           )}
@@ -419,7 +424,8 @@ function RaidCardView({ raid, archiveDays, canDelete, officer, onDeleted, onChan
                 <div className="muted small">{ROLE_LABEL[g.role]} ({g.list.length})</div>
                 <div className="comp-list">
                   {g.list.map((p) => (
-                    <span key={p.name} className="comp-chip static" title={`${p.specName ? `${p.specName.replace(/([a-z])([A-Z])/g, '$1 $2')} ` : ''}${p.className}: in ${p.bosses} of ${c.kills} kills`}>
+                    <span key={p.name} className="comp-chip static ptip" tabIndex={0}>
+                      <PlayerTipBox name={p.name} className={p.className} specName={p.specName} role={p.role} lines={[{ label: 'Kills tonight', value: `${p.bosses} of ${c.kills}` }]} />
                       <ClassIcon className={p.className} size={16} />
                       <span className={classCss(p.className)}>{p.name}</span>
                       {c.kills > 0 && p.bosses < c.kills && <span className="muted small">{p.bosses}/{c.kills}</span>}
@@ -435,9 +441,65 @@ function RaidCardView({ raid, archiveDays, canDelete, officer, onDeleted, onChan
   );
 }
 
+// ---------- Comparing two raids ----------
+
+/** This raid against another with the same bosses: kill times, wipes and deaths, side by side. */
+function CompareRaids({ raid, raids }: { raid: SavedRaid; raids: SavedRaid[] }) {
+  const c = raid.card!;
+  const ids = new Set(c.bosses.map((b) => b.encounterId));
+  const others = raids
+    .filter((r) => r.code !== raid.code && r.card && (r.card.summarized ?? r.card.kills) >= r.card.kills && r.card.bosses.some((b) => ids.has(b.encounterId)))
+    .sort((a, b) => b.startTime!.localeCompare(a.startTime!));
+  // The raid before this one, by default
+  const before = others.find((r) => r.startTime! < raid.startTime!) ?? others[0];
+  const [code, setCode] = useState<string>(before?.code ?? '');
+  useEffect(() => setCode(before?.code ?? ''), [raid.code]);
+  if (!others.length) return null;
+  const o = others.find((r) => r.code === code)?.card ?? null;
+  // Lower is better for every row here
+  const delta = (a: number | null | undefined, b: number | null | undefined, fmt: (v: number) => string) => {
+    if (a === null || a === undefined || b === null || b === undefined) return <span className="muted">–</span>;
+    const d = a - b;
+    if (!d) return <span className="muted">same</span>;
+    return <span className={d < 0 ? 'delta-good' : 'delta-bad'}>{d < 0 ? '−' : '+'}{fmt(Math.abs(d))}</span>;
+  };
+  const rows = o ? c.bosses.map((b) => ({ b, x: o.bosses.find((y) => y.encounterId === b.encounterId) ?? null })) : [];
+  return (
+    <details className="accordion">
+      <summary>Compare with another raid</summary>
+      <div className="row wrap-center">
+        <select value={code} onChange={(e) => setCode(e.target.value)} aria-label="Raid to compare with">
+          {others.map((r) => <option key={r.code} value={r.code}>{shortDate(new Date(r.startTime!))}: {r.title ?? r.code}</option>)}
+        </select>
+      </div>
+      {o && (
+        <div className="scroll">
+          <table className="grid compare-raids">
+            <thead><tr><th></th><th className="r">This raid</th><th className="r">That raid</th><th className="r">Change</th></tr></thead>
+            <tbody>
+              <tr><td>Raid time</td><td className="r">{c.raidSeconds ? hm(c.raidSeconds) : '–'}</td><td className="r">{o.raidSeconds ? hm(o.raidSeconds) : '–'}</td><td className="r">{delta(c.raidSeconds || null, o.raidSeconds || null, hm)}</td></tr>
+              <tr><td>Wipes</td><td className="r">{c.wipes}</td><td className="r">{o.wipes}</td><td className="r">{delta(c.wipes, o.wipes, String)}</td></tr>
+              <tr><td>Deaths on kills</td><td className="r">{c.deaths}</td><td className="r">{o.deaths}</td><td className="r">{delta(c.deaths, o.deaths, String)}</td></tr>
+              {rows.map(({ b, x }) => (
+                <tr key={b.encounterId}>
+                  <td className="with-icon"><BossIcon id={b.encounterId} size="small" />{b.name}</td>
+                  <td className="r">{b.seconds !== null ? mmss(b.seconds) : 'Not killed'}</td>
+                  <td className="r">{x ? (x.seconds !== null ? mmss(x.seconds) : 'Not killed') : <span className="muted">Not fought</span>}</td>
+                  <td className="r">{delta(b.seconds, x?.seconds, mmss)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="muted small">Green is better: faster kills, fewer wipes and deaths.</p>
+    </details>
+  );
+}
+
 // ---------- Attendance ----------
 
-function Attendance({ raids, range, onRange, onSelect }: { raids: SavedRaid[]; range: RangeId; onRange: (r: RangeId) => void; onSelect: (code: string) => void }) {
+function Attendance({ raids, range, onRange, onSelect, officer }: { raids: SavedRaid[]; range: RangeId; onRange: (r: RangeId) => void; onSelect: (code: string) => void; officer: boolean }) {
   const days = RANGES.find((r) => r.id === range)!.days;
   const inRange = raids
     .filter((r) => r.card && Date.now() - new Date(r.startTime!).getTime() <= days * 86_400_000)
@@ -461,6 +523,7 @@ function Attendance({ raids, range, onRange, onSelect }: { raids: SavedRaid[]; r
           {RANGES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
         </select>
       </div>
+      {officer && inRange.length >= 3 && <BenchHelper people={people} raids={inRange.length} />}
       {inRange.length === 0 ? <p className="muted">No raids in this period. Pick a longer one above.</p> : (
         <div className="scroll">
           <table className="grid attendance">
@@ -476,7 +539,10 @@ function Attendance({ raids, range, onRange, onSelect }: { raids: SavedRaid[]; r
             <tbody>
               {people.map((p) => (
                 <tr key={p.name}>
-                  <td><span className={`with-icon ${classCss(p.className)}`}><ClassIcon className={p.className} size={16} />{p.name}</span></td>
+                  <td>
+                    <span className={`with-icon ${classCss(p.className)}`}><ClassIcon className={p.className} size={16} />{p.name}</span>
+                    {inRange.length >= 3 && p.nights.size === inRange.length && <span className="perfect-att" title="Perfect attendance in this period">Perfect attendance</span>}
+                  </td>
                   <td className="r">{p.nights.size} / {inRange.length}</td>
                   <td className="att-bar-col"><progress className={`bar ${classCss(p.className)}-bar`} max={inRange.length} value={p.nights.size} aria-label={`${p.name} attended ${p.nights.size} of ${inRange.length}`} /></td>
                   <td className="muted">{shortDate(new Date(p.last))}</td>
@@ -501,6 +567,35 @@ function Attendance({ raids, range, onRange, onSelect }: { raids: SavedRaid[]; r
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Officers only: who it's fairest to sit next, when the raid's full. Regulars (in at least half the
+ * raids) who've missed the fewest, so the bench goes round instead of landing on the same people.
+ */
+function BenchHelper({ people, raids }: { people: { name: string; className: string; nights: Set<string> }[]; raids: number }) {
+  const regulars = people.filter((p) => p.nights.size * 2 >= raids);
+  if (regulars.length < 3) return null;
+  const next = [...regulars].sort((a, b) => b.nights.size - a.nights.size || a.name.localeCompare(b.name)).slice(0, 5);
+  const due = [...regulars].sort((a, b) => a.nights.size - b.nights.size || a.name.localeCompare(b.name)).filter((p) => p.nights.size < raids).slice(0, 5);
+  return (
+    <details className="accordion bench-helper">
+      <summary>Bench rotation <span className="muted small">(officers)</span></summary>
+      <div className="grid-2">
+        <div>
+          <div className="comp-label">Fairest to sit next</div>
+          <p className="muted small">Regulars who haven&rsquo;t missed a raid (or missed the fewest).</p>
+          <ul className="bench-list">{next.map((p) => <li key={p.name}><span className={classCss(p.className)}>{p.name}</span> <span className="muted small">{raids - p.nights.size} missed</span></li>)}</ul>
+        </div>
+        <div>
+          <div className="comp-label">Due a spot</div>
+          <p className="muted small">Regulars who&rsquo;ve sat out or missed the most.</p>
+          {due.length ? <ul className="bench-list">{due.map((p) => <li key={p.name}><span className={classCss(p.className)}>{p.name}</span> <span className="muted small">{raids - p.nights.size} missed</span></li>)}</ul> : <p className="muted small">Nobody: every regular has been in every raid.</p>}
+        </div>
+      </div>
+      <p className="muted small">From the logs only: it can&rsquo;t tell sitting out from being away, so use it as a starting point.</p>
+    </details>
   );
 }
 

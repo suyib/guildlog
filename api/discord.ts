@@ -9,7 +9,7 @@ import { discord, env, postToChannel, verifyDiscordRequest } from '../server/dis
 import { archiveNow, archiveTick } from '../server/archive.js';
 import { pruneSignIns } from '../server/users.js';
 import { audit, auditTask } from '../server/discord/audit.js';
-import { COMMANDS, type Interaction, handle, reminderMessage } from '../server/discord/commands.js';
+import { COMMANDS, type Interaction, handle, raidPrep, reminderMessage } from '../server/discord/commands.js';
 import { dueReminders, markReminderSent } from '../server/discord/store.js';
 import { signInCheck } from '../server/wcl.js';
 
@@ -72,9 +72,11 @@ export async function GET(req: Request): Promise<Response> {
     const started = Date.now();
     const due = await dueReminders();
     let sent = 0;
+    // What to focus on, from the last raid (raid-wide only), added to each reminder
+    const prep = due.length ? await raidPrep().catch(() => null) : null;
     for (const r of due) {
       try {
-        await postToChannel(r.channel_id, reminderMessage(r.payload as Parameters<typeof reminderMessage>[0]));
+        await postToChannel(r.channel_id, reminderMessage(r.payload as Parameters<typeof reminderMessage>[0], prep));
         sent++;
       } catch (e) {
         console.error('reminder failed', r.id, e);

@@ -23,6 +23,11 @@ export const POTION_IDS = new Set([
 
 export const isPotion = (id: number, name?: string) => POTION_IDS.has(id) || /\bpotion\b|\brune\b/i.test(name ?? '');
 
+/** Flasks, battle and guardian elixirs, and food buffs, by buff name. GAME CONTENT (Classic-style names). */
+export const isFlask = (name: string) => /^flask\b|\bflask of\b|^supreme power$|^distilled wisdom$|^chromatic resistance$|^titans$/i.test(name.trim());
+export const isElixir = (name: string) => /\belixir\b|^greater arcane elixir$|^mongoose$|^giants$|^greater agility$|^arcane elixir$/i.test(name.trim());
+export const isFood = (name: string) => /^well fed$|^increased (stamina|agility|intellect|spirit|strength)$|^mana regeneration$/i.test(name.trim());
+
 /**
  * Debuffs the raid keeps on the boss, grouped by effect (any one of a group counts). Only groups
  * someone applied during the fight are judged, so a raid without that class isn't marked down.

@@ -9,6 +9,21 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.41.0',
+    date: '2026-11-27',
+    changes: [
+      'A more game-like look: player tooltips like the ones in game (hover a name in Composition, Who was there or the damage and healing lists), damage meter rows filled in each class\u2019s color, and gold for section titles and the page you\u2019re on.',
+      'Achievements: a raid\u2019s first kills, full clears, new fastest kills, deathless kills, wipe-free nights and perfect attendance show as achievement banners on Home and on the raid\u2019s page.',
+      'Your profile: whether your parse is going up or down, each boss from your first parse to your latest and best, and personal goals (a parse to reach on a boss). The bot DMs you when a raid gets you there. Run `supabase/migrate-0.41.sql` once.',
+      'Wipes, pull by pull: for each boss that took wipes, how far each pull got (boss health left and phase, for raids saved from now on) and how long it lasted.',
+      'Compare a raid with another one with the same bosses: raid time, wipes, deaths and each kill time side by side.',
+      'Consumables: flasks, elixirs and food are now picked up. The raid\u2019s feedback has one point for potions and flasks together, and /check and /performance tell officers who missed them.',
+      'Raid reminders add \u201cTonight, focus on\u201d: the last raid\u2019s raid-wide points to work on and the bosses that took wipes. No names.',
+      'Attendance: a perfect-attendance tag, and for officers a bench rotation helper (who it\u2019s fairest to sit next and who\u2019s due a spot).',
+      'Admin: the guild\u2019s Warcraft Logs link can be set under Guild details instead of WCL_GUILD_ID in Vercel.',
+    ],
+  },
+  {
     version: '0.40.0',
     date: '2026-11-27',
     changes: [

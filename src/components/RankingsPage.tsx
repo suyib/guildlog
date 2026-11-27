@@ -65,10 +65,10 @@ export default function RankingsPage() {
             </select>
           </div>
         </div>
-        <div className="raid-card">
+        <div className="zone-card">
           <RaidCardBody id={zone.id} name={zone.name} heading="h2" sub={`${zone.killed} of ${zone.total} bosses killed`} />
         </div>
-        <p className="help">The guild&rsquo;s ranks from Warcraft Logs{d.wcl ? '' : ' (set WCL_GUILD_ID to see your own)'}: the whole raid, or one boss&rsquo;s top guilds by first kill or fastest kill.</p>
+        <p className="help">The guild&rsquo;s ranks from Warcraft Logs{d.wcl ? '' : ' (link the guild on the Admin page to see your own)'}: the whole raid, or one boss&rsquo;s top guilds by first kill or fastest kill.</p>
       </section>
 
       {picked ? (
@@ -239,7 +239,7 @@ function RankCard({ zone, url }: { zone: ZoneProgress; url: string | null }) {
         </a>
       ) : (
         <p className="muted">
-          {url ? `No ${kind} rank on Warcraft Logs for this raid yet.` : 'Set WCL_GUILD_ID in Vercel to see the guild\u2019s ranks.'} Pick a boss above for its top guilds.
+          {url ? `No ${kind} rank on Warcraft Logs for this raid yet.` : 'Link the guild on Warcraft Logs on the Admin page to see its ranks.'} Pick a boss above for its top guilds.
         </p>
       )}
     </section>

@@ -116,14 +116,24 @@ export function raidFeedback(fights: FightDigest[], opts: RaidFeedbackOptions = 
     if (weak.length) work.push({ title: `${plural(weak.length, 'player')} well below their spec`, detail: 'Parsed under 25. A look at their own summary (or a chat about rotation and gear) will help most.' });
   }
 
-  // ---- Potions (kills of 90 seconds or more, once read in full) ----
-  // Only known for bosses read in full: judged once at least half of the long ones have been
+  // ---- Consumables: potions (kills of 90 seconds or more) and flasks or elixirs, once read in full ----
+  // Each is only judged once at least half of the kills it applies to have been read in full.
+  // One point for both, so the list stays short.
   const longFights = fights.filter((f) => f.seconds >= 90);
   const readFights = longFights.filter((f) => f.players.some((p) => p.potions));
-  if (readFights.length && readFights.length * 2 >= longFights.length) {
-    const without = people((p, f) => !!p.potions && f.seconds >= 90 && !p.potions.used.length && !p.potions.prePot);
-    if (!without.length) good.push({ title: 'Everyone used a potion', detail: `On every boss${where} long enough to need one.` });
-    else work.push({ title: `${plural(without.length, 'player')} skipped potions`, detail: 'A combat potion before the pull and another during the fight is free damage and healing.' });
+  const potsJudged = readFights.length > 0 && readFights.length * 2 >= longFights.length;
+  const withConsumes = fights.filter((f) => f.players.some((p) => p.consumes));
+  const flasksJudged = withConsumes.length > 0 && withConsumes.length * 2 >= fights.length;
+  const noPot = potsJudged ? people((p, f) => !!p.potions && f.seconds >= 90 && !p.potions.used.length && !p.potions.prePot) : [];
+  const noFlask = flasksJudged ? people((p) => !!p.consumes && !p.consumes.flask && !p.consumes.elixirs) : [];
+  if (potsJudged || flasksJudged) {
+    const missing = new Set([...noPot, ...noFlask]);
+    const what = [potsJudged ? 'a potion' : null, flasksJudged ? 'a flask or elixir' : null].filter(Boolean).join(' and ');
+    if (!missing.size) good.push({ title: potsJudged && flasksJudged ? 'Everyone used potions and flasks' : potsJudged ? 'Everyone used a potion' : 'Everyone flasked or used elixirs', detail: `On every boss${where}${potsJudged ? ' long enough to need one' : ''}. That's free damage, healing and survival.` });
+    else work.push({
+      title: `${plural(missing.size, 'player')} ${noPot.length && noFlask.length ? 'skipped consumables' : noPot.length ? 'skipped potions' : 'without a flask or elixir'}`,
+      detail: `Everyone should have ${what} on every boss: a combat potion before the pull and another during the fight, and a flask (or battle and guardian elixirs) that lasts all fight. \`/info consumables\` lists what fits each role.`,
+    });
   }
 
   // ---- Debuffs on the boss ----

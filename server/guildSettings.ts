@@ -5,7 +5,7 @@ import { discord, env } from './discord/api.js';
 import { level } from './ranks.js';
 import type { AdminEdit, GuildSettings, Rank } from './types.js';
 
-const EMPTY: GuildSettings = { name: null, icon: null, about: null };
+const EMPTY: GuildSettings = { name: null, icon: null, about: null, wclGuildId: null };
 /** Pictures are shrunk to 128px in the browser; this is a backstop. */
 const MAX_ICON = 150_000;
 const ICON = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
@@ -36,12 +36,13 @@ export async function applyGuildEdit(edit: Extract<AdminEdit, { action: 'guild' 
   const clean = (v: string | null | undefined, max: number) => (v?.trim() ? v.trim().slice(0, max) : null);
   const icon = edit.icon?.trim() || null;
   if (icon && (icon.length > MAX_ICON || !ICON.test(icon))) throw new Error('That picture can’t be used. Try a PNG, JPEG or WebP image.');
-  const value: GuildSettings = { name: clean(edit.name, 60), icon, about: clean(edit.about, 600) };
+  const wcl = Math.trunc(Number(edit.wclGuildId));
+  const value: GuildSettings = { name: clean(edit.name, 60), icon, about: clean(edit.about, 600), wclGuildId: wcl > 0 ? wcl : null };
   await rest('site_settings?on_conflict=key', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ key: 'guild', value, updated_at: new Date().toISOString(), updated_by: actor.name }),
   });
   const changed = [value.name ? `name “${value.name}”` : 'Discord’s name', value.icon ? 'a custom picture' : 'Discord’s picture'];
-  return `updated the guild details (${changed.join(', ')}${value.about ? ', about text' : ''})`;
+  return `updated the guild details (${changed.join(', ')}${value.about ? ', about text' : ''}${value.wclGuildId ? `, Warcraft Logs guild ${value.wclGuildId}` : ''})`;
 }

@@ -314,6 +314,11 @@ function roomToImprove(p: PerfPlayer, mine: Row[], fights: FightDigest[], raidIl
   // Potions on longer fights (GAME CONTENT: one combat potion per fight, plus one before the pull)
   const noPot = theirs.filter((t) => t.x.potions && !t.x.potions.used.length && !t.x.potions.prePot && t.seconds >= 90).map((t) => t.boss);
   if (noPot.length) out.push(`No potion on ${listed(noPot)}. One before the pull and one during the fight is free ${healer ? 'healing' : 'damage'}.`);
+  // Flask or elixirs, and food (once the fight's been read in full)
+  const noFlask = theirs.filter((t) => t.x.consumes && !t.x.consumes.flask && !t.x.consumes.elixirs).map((t) => t.boss);
+  if (noFlask.length) out.push(`No flask or elixir on ${listed(noFlask)}. They last the whole fight; \`/info consumables\` lists what fits the role.`);
+  const noFood = theirs.filter((t) => t.x.consumes && !t.x.consumes.food).map((t) => t.boss);
+  if (noFood.length && noFood.length >= Math.ceil(theirs.length / 2)) out.push(`No food buff on ${listed(noFood)}. It's the cheapest buff there is.`);
   // DoTs that matter, falling off
   const dots = theirs.flatMap((t) => (t.x.dots ?? []).filter((d) => d.sharePct >= 5 && d.uptimePct < 90).map((d) => `${d.name} ${d.uptimePct}% on ${t.boss}`));
   if (dots.length) out.push(`Damage over time not kept up: ${listed(dots.slice(0, 3))}. Aim for 90%+.`);
