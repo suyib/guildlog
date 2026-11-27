@@ -47,8 +47,8 @@ export interface PerfPlayer {
 }
 
 /** Thresholds, in one place so they're easy to tune. */
-const HIGH = 75;
-const LOW = 35;
+export const HIGH = 75;
+export const LOW = 35;
 const DEATHS_LOW = 0.5; // deaths per kill
 const SHOW = 6;
 
@@ -161,16 +161,13 @@ function concerns(p: PerfPlayer, raidIlvl: number | null): { why: string[]; help
 }
 
 /** "died 2 times in 3 kills" */
-const died = (p: PerfPlayer) => `died ${p.deaths === 1 ? 'once' : `${p.deaths} times`} in ${p.kills} kill${p.kills === 1 ? '' : 's'}`;
+export const died = (p: PerfPlayer) => `died ${p.deaths === 1 ? 'once' : `${p.deaths} times`} in ${p.kills} kill${p.kills === 1 ? '' : 's'}`;
 
 const clip = (s: string, max = 1024) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
-/** The DM for an officer. */
-export function performanceMessage(scope: PerfScope, data: PerfData, site: string): MessageBody {
-  const { players, kills, raids, bossDeaths, itemLevel, skipped } = data;
-  if (!players.length) {
-    return { embeds: [{ title: 'Raid performance', color: BRAND, description: `Not enough kills read in ${scope.label} yet${scope.minKills > 1 ? ` (each player needs at least ${scope.minKills})` : ''}. Raids are read after \`/raidend\`, or from Past raids on the site.` }] };
-  }
+/** Who's doing well and who could use a hand (with why and what would help): the DM's lists, and the site's. */
+export function perfHighlights(data: PerfData) {
+  const { players, itemLevel } = data;
   const ranked = players.filter((p) => p.parse !== null);
   const high = ranked.filter((p) => p.parse! >= HIGH && p.deathsPerKill < DEATHS_LOW).sort((a, b) => b.parse! - a.parse!).slice(0, SHOW);
   const low = players
@@ -178,11 +175,12 @@ export function performanceMessage(scope: PerfScope, data: PerfData, site: strin
     .filter((x) => x.why.length)
     .sort((a, b) => b.why.length - a.why.length || (a.p.parse ?? 100) - (b.p.parse ?? 100))
     .slice(0, SHOW);
-  // Doing well: their parses and any deaths. Could use a hand: the reasons say it all.
-  const parseText = (p: PerfPlayer) => (p.kills > 1 ? `average parse ${p.parse} (highest ${p.best})` : `parse ${p.parse}`);
-  const line = (p: PerfPlayer) => `**${p.name}** (${p.spec}) \u00b7 ${parseText(p)}${p.deaths ? ` \u00b7 ${died(p)}` : ''}`;
-  const lowLine = (p: PerfPlayer) => `**${p.name}** (${p.spec})${p.parse !== null && p.parse >= LOW ? ` \u00b7 ${parseText(p)}` : ''}`;
+  return { ranked, high, low };
+}
 
+/** "Things to watch for" across the raid. */
+export function perfWatch(scope: PerfScope, data: PerfData): string[] {
+  const { players, bossDeaths, skipped } = data;
   const watch: string[] = [];
   if (bossDeaths[0] && bossDeaths[0][1] >= 3) watch.push(`Most deaths on **${bossDeaths[0][0]}** (${bossDeaths[0][1]}${bossDeaths[1] ? `; then ${bossDeaths[1][0]}, ${bossDeaths[1][1]}` : ''}). Worth a quick talk about that fight’s mechanics.`);
   const tanks = players.filter((p) => p.role === 'tank' && p.deathsPerKill >= DEATHS_LOW);
@@ -190,7 +188,22 @@ export function performanceMessage(scope: PerfScope, data: PerfData, site: strin
   const healers = players.filter((p) => p.role === 'healer');
   if (healers.length && healers.every((h) => (h.parse ?? 100) < 50)) watch.push('All healers parsed low. That often just means the raid took little damage, not that they healed badly.');
   if (skipped) watch.push(`${skipped} player${skipped === 1 ? '' : 's'} with only one kill ${skipped === 1 ? 'was' : 'were'} left out: one fight isn’t enough to judge.`);
-  if (scope.oneNight) watch.push('This is one night. A single raid can be off for many reasons; `/performance range:4 weeks` gives a fairer picture.');
+  if (scope.oneNight) watch.push('This is one night. A single raid can be off for many reasons; the last 4 weeks give a fairer picture.');
+  return watch;
+}
+
+/** The DM for an officer. */
+export function performanceMessage(scope: PerfScope, data: PerfData, site: string): MessageBody {
+  const { players, kills, raids, itemLevel } = data;
+  if (!players.length) {
+    return { embeds: [{ title: 'Raid performance', color: BRAND, description: `Not enough kills read in ${scope.label} yet${scope.minKills > 1 ? ` (each player needs at least ${scope.minKills})` : ''}. Raids are read after \`/raidend\`, or from Past raids on the site.` }] };
+  }
+  const { ranked, high, low } = perfHighlights(data);
+  // Doing well: their parses and any deaths. Could use a hand: the reasons say it all.
+  const parseText = (p: PerfPlayer) => (p.kills > 1 ? `average parse ${p.parse} (highest ${p.best})` : `parse ${p.parse}`);
+  const line = (p: PerfPlayer) => `**${p.name}** (${p.spec}) \u00b7 ${parseText(p)}${p.deaths ? ` \u00b7 ${died(p)}` : ''}`;
+  const lowLine = (p: PerfPlayer) => `**${p.name}** (${p.spec})${p.parse !== null && p.parse >= LOW ? ` \u00b7 ${parseText(p)}` : ''}`;
+  const watch = perfWatch(scope, data);
 
   const embeds: Embed[] = [
     {
@@ -219,7 +232,7 @@ export function performanceMessage(scope: PerfScope, data: PerfData, site: strin
   return { embeds };
 }
 
-const CAVEAT = { text: 'Just an overview: the numbers can\u2019t see extra mechanics, assignments, kiting, interrupts, buffs or other utility someone was doing, so talk to them before drawing conclusions.' };
+export const CAVEAT = { text: 'Just an overview: the numbers can\u2019t see extra mechanics, assignments, kiting, interrupts, buffs or other utility someone was doing, so talk to them before drawing conclusions.' };
 
 /** One character's breakdown, in the same shape as the raid overview: boss by boss. */
 export function characterMessage(scope: PerfScope, rows: Row[], character: string, site: string, fights: FightDigest[] = []): MessageBody {

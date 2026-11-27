@@ -116,6 +116,8 @@ The bot runs on the same Vercel project (no extra server) as a single function, 
 
 **Raid-night prep.** Reminders from `/remind` add a "Tonight, focus on" field: the last raid's raid-wide points to work on and the bosses that took wipes (never names).
 
+**Your night and Performance.** `#/me/raid` shows one character's raid with the bot's five DM pages (built by the same code, `personalPages` in `server/discord/pages.ts`). `#/performance` is the officers' /performance report (`server/discord/perfReport.ts`, shared with the bot). Both follow the bot's ranks: your own characters, or anyone for officers, raid leaders and loot council.
+
 **Activity log (optional).** Set `DISCORD_LOG_CHANNEL_ID` to a private channel and the bot posts one line per command or button press: who, what (command and which options were used, never what was typed), where, when, and whether it worked or the error if not. Failed reminders and command registration are logged too. Mentions in the log don't ping anyone. To check it's set up, open `https://guildlog.uk/api/discord?task=logtest&key=YOUR_CRON_SECRET`: it posts a test line, or says what's wrong.
 
 The bot reads the same stored fights as the site (see **Stored fights** below), so its DMs and raid summary always match what the site shows, and button presses are instant.

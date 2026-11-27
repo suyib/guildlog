@@ -335,6 +335,7 @@ function RaidCardView({ raid, raids, archiveDays, canDelete, officer, onDeleted,
           <p className={`muted small raid-status ${raid.status}`}>{statusText(raid, archiveDays)}</p>
         </div>
         <div className="raid-card-links">
+          <a className="button" href={`/#/me/raid?host=${encodeURIComponent(raid.host)}&raid=${encodeURIComponent(raid.code)}`}>Your night</a>
           <a className="button ghost" href={siteLink(raid)}>Open on Guild Logs</a>
           <a className="button ghost" href={logLink(raid)} target="_blank" rel="noreferrer">Warcraft Logs</a>
           <ShareButton path={`/#/raids?raid=${encodeURIComponent(raid.code)}`} label="Copy link" />

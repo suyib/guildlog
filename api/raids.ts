@@ -9,6 +9,10 @@
 //   GET ?view=check&code=  officers: what's stored for a raid, kill by kill, and why something might be missing
 //   POST { read, fresh? }  officers: read a raid now (fresh, guild masters and admins: from the start again)
 //   POST { goal } / { removeGoal }  anyone signed in with Discord: add or remove a personal goal for their own character
+//   GET ?view=myraid&host=&raid=&character=  one character's raid: the bot's DM pages and more (own characters; officers, raid leaders and loot council: anyone)
+//   GET ?view=performance&range=raid|4w|8w[&host=&raid=]  officers, raid leaders and loot council: the /performance report
+//   GET ?view=perfchar&…&character=        the same for one character, with who claimed them and the officer note
+//   POST { perfDm: { range, host?, raid?, character? } }  …and sent to them as a DM
 import { waitUntil } from '@vercel/functions';
 import { archiveNow, checkRaid, deleteRaid, forgetFights, isListed, listRaids, registerRaid, rereadRaid } from '../server/archive.js';
 import { rest } from '../server/db.js';
@@ -17,7 +21,10 @@ import { bossRanks } from '../server/bossRanks.js';
 import { addGoal, removeGoal } from '../server/goals.js';
 import { homeData, profileData } from '../server/home.js';
 import { auditTask } from '../server/discord/audit.js';
-import { requireOfficer, requireRank } from '../server/officers.js';
+import { liveRank, requireAbility, requireOfficer, requireRank } from '../server/officers.js';
+import { can } from '../server/ranks.js';
+import { performanceCharacter, performanceDm, performancePage, yourRaid } from '../server/sitePages.js';
+import type { PerfRequest } from '../server/discord/perfReport.js';
 import { parseReportUrl } from '../server/wcl.js';
 
 export const maxDuration = 60;
@@ -32,6 +39,27 @@ export async function GET(req: Request): Promise<Response> {
       const check = await requireOfficer(req);
       if ('denied' in check) return check.denied;
       return json(await checkRaid(params.get('code') ?? ''));
+    }
+    if (view === 'myraid') {
+      const session = await readSession(req.headers.get('cookie'), process.env.SESSION_SECRET!);
+      if (!session?.uid) return json({ error: 'Sign in with Discord to see your raid.' }, 403);
+      const { rank } = await liveRank(session);
+      try {
+        return json(await yourRaid(session.uid, can(rank, 'lookup'), { host: params.get('host') ?? '', code: params.get('raid') ?? '', character: params.get('character') }));
+      } catch (e) {
+        return json({ error: (e as Error).message }, 400);
+      }
+    }
+    if (view === 'performance' || view === 'perfchar') {
+      const check = await requireAbility(req, 'lookup');
+      if ('denied' in check) return check.denied;
+      const r = perfRequest(params.get('range'), params.get('host'), params.get('raid'));
+      try {
+        if (view === 'perfchar') return json(await performanceCharacter({ ...r, character: params.get('character') ?? '' }));
+        return json(await performancePage(r));
+      } catch (e) {
+        return json({ error: (e as Error).message }, 400);
+      }
     }
     if (view === 'boss') {
       return json(await bossRanks(params.get('host') ?? '', Number(params.get('encounter')), params.get('metric') ?? '', params.get('scope') ?? ''), 200, { 'Cache-Control': 'private, max-age=600' });
@@ -55,8 +83,20 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function POST(req: Request): Promise<Response> {
   const started = Date.now();
-  const body = (await req.json().catch(() => ({}))) as { url?: string; delete?: string; read?: string; fresh?: boolean; goal?: Parameters<typeof addGoal>[1]; removeGoal?: string };
+  const body = (await req.json().catch(() => ({}))) as { url?: string; delete?: string; read?: string; fresh?: boolean; goal?: Parameters<typeof addGoal>[1]; removeGoal?: string; perfDm?: { range?: string; host?: string; raid?: string; character?: string } };
   if (body.goal || body.removeGoal) return goal(req, body);
+  if (body.perfDm) {
+    const check = await requireAbility(req, 'lookup');
+    if ('denied' in check) return check.denied;
+    if (!check.session.uid) return json({ error: 'Sign in with Discord to get DMs.' }, 403);
+    try {
+      const d = body.perfDm;
+      const ok = await performanceDm(check.session.uid, { ...perfRequest(d.range ?? null, d.host ?? null, d.raid ?? null), character: d.character?.trim() || null });
+      return ok ? json({ ok: true }) : json({ error: 'Your DMs from server members are turned off, so it couldn\u2019t be sent.' }, 400);
+    } catch (e) {
+      return json({ error: (e as Error).message }, 400);
+    }
+  }
   if (body.delete) return remove(req, body.delete);
   if (body.read) return readNow(req, body.read, !!body.fresh, started);
   const check = await requireOfficer(req);
@@ -130,4 +170,12 @@ async function readNow(req: Request, code: string, fresh: boolean, started: numb
   } catch (e) {
     return json({ error: (e as Error).message }, 400);
   }
+}
+
+/** The period or raid for the Performance page, from the address. */
+function perfRequest(range: string | null, host: string | null, raid: string | null): PerfRequest {
+  return {
+    range: range === 'raid' || range === '8w' ? range : '4w',
+    raid: host && raid && /^[A-Za-z0-9]+$/.test(raid) ? { host, code: raid } : null,
+  };
 }

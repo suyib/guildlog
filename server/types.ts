@@ -713,3 +713,85 @@ export interface GuildContext {
 
 /** A character's raids week by week. */
 export interface TrendWeek { week: string; parse: number | null; perSecond: number | null; kills: number }
+
+// ---------- Your raid, and the officers' Performance page (the bot's pages on the site) ----------
+
+/** A Discord message's embed, as the bot sends it: the site shows the same thing. */
+export interface SiteEmbed {
+  title?: string;
+  description?: string;
+  fields?: { name: string; value: string; inline?: boolean }[];
+  footer?: { text: string };
+}
+
+/** One character's raid: the bot's five DM pages plus the site's own extras. */
+export interface YourRaid {
+  host: string;
+  code: string;
+  title: string;
+  startTime: number;
+  zone: { id: number; name: string } | null;
+  card: RaidCard;
+  character: string;
+  className: string;
+  specName: string;
+  role: 'tank' | 'healer' | 'dps';
+  healer: boolean;
+  itemLevel: number | null;
+  /** Their other characters in this raid (the switcher), and whether this one is someone else's (an officer looking). */
+  others: string[];
+  lookingAtSomeoneElse: boolean;
+  /** The bot's pages, exactly as they're DMed. */
+  pages: { summary: SiteEmbed; rotation: SiteEmbed; damage: SiteEmbed; gear: SiteEmbed; survival: SiteEmbed };
+  bosses: {
+    fightId: number;
+    playerId: number;
+    name: string;
+    encounterId: number;
+    seconds: number;
+    parse: number | null;
+    perSecond: number;
+    activePct: number | null;
+    deaths: number;
+    consumes: Consumes | null;
+    potion: boolean | null;
+  }[];
+  /** Against their previous raid (from the guild's kills). */
+  vsLast: { title: string | null; date: string; parse: number | null; perSecond: number | null; parseNow: number | null; perSecondNow: number | null } | null;
+  /** Their goals for this character (only for their own). */
+  goals: PlayerGoal[];
+  /** Kills still being read. */
+  pending: number;
+}
+
+/** The officers' Performance page: the /performance report, structured. */
+export interface PerformancePage {
+  label: string;
+  oneNight: boolean;
+  minKills: number;
+  kills: number;
+  raids: number;
+  itemLevel: number | null;
+  skipped: number;
+  players: {
+    name: string; spec: string; className: string; role: 'tank' | 'healer' | 'dps'; kills: number; parse: number | null; best: number | null; deaths: number; deathsPerKill: number; itemLevel: number | null;
+    /** From the fight summaries, when they're read: average active time, and the share of kills with a flask or elixir (and a potion on long fights). */
+    activePct: number | null;
+    consumesPct: number | null;
+    /** Raids they were in, of the raids in the period. */
+    attended: number;
+  }[];
+  high: string[];
+  low: { name: string; why: string[]; help: string[] }[];
+  watch: string[];
+  caveat: string;
+  pending: number;
+}
+
+/** One character on the Performance page: the bot's /performance message for them, plus who claimed them. */
+export interface PerformanceCharacter {
+  embeds: SiteEmbed[];
+  claimedBy: string | null;
+  note: string | null;
+  latestRaid: { host: string; code: string } | null;
+}

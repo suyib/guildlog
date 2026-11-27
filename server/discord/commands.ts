@@ -13,14 +13,15 @@ import { guildContext, trendFor } from '../benchmarks.js';
 import {
   BRAND, bugButton, EPHEMERAL, type Embed, type MessageBody, button, discord, editReply, env, linkButton, memberRoles, postToChannel, row, sendDm,
 } from './api.js';
-import { type FightDigest, type RaidDigest, healsMost, playerFights, raidDigest } from './digest.js';
+import { type RaidDigest, healsMost, playerFights, raidDigest } from './digest.js';
 import { RAID_CHECKLIST, ROLE_CHOICES, type Role, consumablesMessage, lookupMessage } from './info.js';
 import { PAGES, type Page, pageButtons, personalPage, raidSummary, siteLink } from './pages.js';
 import {
   type Claim, approvedClaimsFor, claimOnCharacter, claimsFor, createClaim, createRaid, createReminder, decideClaim, endRaid, getClaim, lastSeen,
   latestOpenRaid, latestRaidStartedBy, raidByCode, recentRaids, removeClaim,
 } from './store.js';
-import { type PerfRange, RANGE_SCOPE, characterMessage, performance, performanceMessage, performanceRows, rowsFromDigests, summarize } from './performance.js';
+import { type PerfRange, performanceRows } from './performance.js';
+import { perfReport } from './perfReport.js';
 import { parseWhen } from './time.js';
 
 // ---------- Command definitions (sent to Discord by GET /api/discord?task=register) ----------
@@ -488,43 +489,10 @@ async function performanceCommand(i: Interaction): Promise<Outcome> {
   const user = userOf(i);
   return deferred(i, async () => {
     let body: MessageBody;
-    if (character) {
-      // One character: the raid's kills (stored, or read now), or the range's
-      let rows = parsed && !parsed.fight ? await performanceRows({ code: parsed.code }) : [];
-      let label = RANGE_SCOPE[range].label;
-      let oneNight = RANGE_SCOPE[range].oneNight;
-      // Their fight summaries too (active time, cooldowns, potions…), for what could go even better
-      let fights: FightDigest[] = [];
-      if (parsed) {
-        oneNight = true;
-        const fightId = Number(parsed.fight);
-        if (!rows.length || fightId > 0) {
-          const digest = await raidDigest(parsed.host, parsed.code);
-          fights = fightId > 0 ? digest.fights.filter((f) => f.id === fightId) : digest.fights;
-          rows = rowsFromDigests(parsed.code, digest.meta.startTime, fights);
-          label = fightId > 0 && fights[0] ? `${fights[0].name} (${digest.meta.title})` : digest.meta.title;
-        } else {
-          label = (await rest(`guild_raids?report_code=eq.${encodeURIComponent(parsed.code)}&select=title`).catch(() => null))?.[0]?.title ?? parsed.code;
-          fights = await storedDigests(parsed.code).catch(() => []);
-        }
-      } else {
-        rows = await performanceRows(range);
-        const codes = [...new Set(rows.filter((r) => r.name.toLowerCase() === character.toLowerCase()).map((r) => r.report_code))].slice(0, 8);
-        fights = (await Promise.all(codes.map((c) => storedDigests(c).catch(() => [])))).flat();
-      }
-      body = characterMessage({ label, oneNight, minKills: 1 }, rows, character, env.site(), fights);
-    } else if (parsed) {
-      // A pasted raid (or one fight of it): read from the stored fights, or Warcraft Logs
-      const digest = await raidDigest(parsed.host, parsed.code);
-      const fightId = Number(parsed.fight);
-      const fights = fightId > 0 ? digest.fights.filter((f) => f.id === fightId) : digest.fights;
-      if (fightId > 0 && !fights.length) return { content: 'That fight isn\u2019t a boss kill, or it hasn\u2019t been read yet. Try again in a minute, or paste the raid without ?fight=.' };
-      const label = fightId > 0 ? `${fights[0].name} (${digest.meta.title})` : digest.meta.title;
-      const scope = { label, oneNight: true, minKills: fightId > 0 ? 1 : 2 };
-      body = performanceMessage(scope, summarize(rowsFromDigests(parsed.code, digest.meta.startTime, fights), scope.minKills), env.site());
-      if (digest.pending) body.content = `${digest.pending} boss kill${digest.pending === 1 ? ' is' : 's are'} still being read, so ${digest.pending === 1 ? 'it\u2019s' : 'they\u2019re'} not included yet.`;
-    } else {
-      body = performanceMessage(RANGE_SCOPE[range], await performance(range), env.site());
+    try {
+      body = (await perfReport({ range, raid: parsed, character })).body;
+    } catch (e) {
+      return { content: (e as Error).message };
     }
     const ok = await sendDm(user.id, body);
     return ok ? { content: 'Sent to your DMs.' } : { content: 'Your DMs are closed, so here it is (only you can see this):', embeds: body.embeds };

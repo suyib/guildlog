@@ -1,11 +1,11 @@
 // Left-hand menu: app pages, then the sections of the analysis on screen.
 import { useEffect, useState } from 'react';
-import { type Me, RANK_LABEL, loadMe } from '../api';
+import { type Me, RANK_LABEL, canLookup, loadMe } from '../api';
 import { sectionsFor, useNav } from '../nav';
 import Glyph from './Glyph';
 import { ShareButton } from './ResultView';
 
-export default function Sidebar({ page }: { page: 'analyze' | 'guild' | 'raids' | 'rankings' | 'history' | 'admin' | 'me' | 'changelog' | 'saved' }) {
+export default function Sidebar({ page }: { page: 'analyze' | 'guild' | 'performance' | 'myraid' | 'raids' | 'rankings' | 'history' | 'admin' | 'me' | 'changelog' | 'saved' }) {
   const { result, section, setSection, view } = useNav();
   const [me, setMe] = useState<Me | null>(null);
   useEffect(() => {
@@ -39,6 +39,7 @@ export default function Sidebar({ page }: { page: 'analyze' | 'guild' | 'raids' 
         <nav className="side-nav side-menu" id="side-menu" aria-label="Pages" onClick={() => setOpen(false)}>
           <a href="/" className={page === 'analyze' || page === 'saved' ? 'on' : ''}><Glyph name="compass" />Analyze</a>
           <a href="/#/guild" className={page === 'guild' ? 'on' : ''}><Glyph name="users" />Guild</a>
+          {canLookup(me?.rank) && <a href="/#/performance" className={page === 'performance' ? 'on' : ''}><Glyph name="pulse" />Performance</a>}
           <a href="/#/raids" className={page === 'raids' ? 'on' : ''}><Glyph name="calendar" />Past raids</a>
           <a href="/#/rankings" className={page === 'rankings' ? 'on' : ''}><Glyph name="bars" />Rankings</a>
           <a href="/#/history" className={page === 'history' ? 'on' : ''}><Glyph name="clock" />History</a>

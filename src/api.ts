@@ -9,6 +9,8 @@ import type {
   FightPlayerRow,
   FightRef,
   HistoryRow,
+  PerformanceCharacter,
+  PerformancePage,
   PlayerGoal,
   PlayerSnapshot,
   AdminEdit,
@@ -22,6 +24,7 @@ import type {
   ReportSummary,
   SavedRaid,
   SnapshotTarget,
+  YourRaid,
 } from '../server/types';
 
 /** Viewing a shared analysis without signing in: nothing else is asked for, and nothing reloads the page. */
@@ -77,6 +80,17 @@ export const checkRaid = (code: string) => call<RaidCheck>(`/api/raids?view=chec
 export const readRaidNow = (code: string, fresh = false) => post<RaidCheck>('/api/raids', { read: code, fresh });
 export const addGoal = (goal: { character: string; encounterId: number | null; encounter: string | null; target: number }) => post<PlayerGoal>('/api/raids', { goal });
 export const removeGoal = (id: string) => post<{ ok: true }>('/api/raids', { removeGoal: id });
+
+/** The Performance page's choice: a period, or one raid. */
+export interface PerfChoice { range: 'raid' | '4w' | '8w'; host?: string | null; raid?: string | null }
+const perfQuery = (c: PerfChoice) => `range=${c.range}${c.host && c.raid ? `&host=${encodeURIComponent(c.host)}&raid=${encodeURIComponent(c.raid)}` : ''}`;
+export const loadYourRaid = (host: string, raid: string, character?: string | null) =>
+  call<YourRaid>(`/api/raids?view=myraid&host=${encodeURIComponent(host)}&raid=${encodeURIComponent(raid)}${character ? `&character=${encodeURIComponent(character)}` : ''}`);
+export const loadPerformance = (c: PerfChoice) => call<PerformancePage>(`/api/raids?view=performance&${perfQuery(c)}`);
+export const loadPerfCharacter = (c: PerfChoice, character: string) => call<PerformanceCharacter>(`/api/raids?view=perfchar&${perfQuery(c)}&character=${encodeURIComponent(character)}`);
+export const sendPerfDm = (c: PerfChoice, character?: string | null) => post<{ ok: true }>('/api/raids', { perfDm: { range: c.range, host: c.host ?? undefined, raid: c.raid ?? undefined, character: character ?? undefined } });
+/** Officers, raid leaders and loot council: /check anyone, /performance, and their pages on the site. */
+export const canLookup = (rank: Rank | null | undefined) => !!rank && ['admin', 'guild_master', 'officer', 'raid_leader', 'loot_council'].includes(rank);
 export const loadSaved = (id: string) => call<AnalysisResult>(`/api/history?id=${encodeURIComponent(id)}`);
 
 export interface Progress { label: string; state: 'loading' | 'done' | 'failed'; seconds?: number }

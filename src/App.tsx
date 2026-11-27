@@ -4,6 +4,8 @@ import AnalyzePage from './components/AnalyzePage';
 import ChangelogPage from './components/ChangelogPage';
 import Footer from './components/Footer';
 import GuildPage from './components/GuildPage';
+import PerformancePage from './components/PerformancePage';
+import YourRaidPage from './components/YourRaidPage';
 import HistoryPage from './components/HistoryPage';
 import LegalPage from './components/LegalPage';
 import ProfilePage from './components/ProfilePage';
@@ -13,7 +15,7 @@ import SavedPage from './components/SavedPage';
 import Sidebar from './components/Sidebar';
 import { NavProvider } from './nav';
 
-type Page = { page: 'analyze' } | { page: 'guild' } | { page: 'history' } | { page: 'raids' } | { page: 'rankings' } | { page: 'admin' } | { page: 'me' } | { page: 'changelog' } | { page: 'saved'; id: string };
+type Page = { page: 'analyze' } | { page: 'guild' } | { page: 'performance' } | { page: 'myraid' } | { page: 'history' } | { page: 'raids' } | { page: 'rankings' } | { page: 'admin' } | { page: 'me' } | { page: 'changelog' } | { page: 'saved'; id: string };
 /** A page and the address it came from: a page opens afresh when Back or Forward changes it. */
 type Route = Page & { key: string };
 
@@ -26,6 +28,8 @@ function pageOf(): Page {
   const h = window.location.hash.replace(/^#\/?/, '');
   if (h === 'history') return { page: 'history' };
   if (h === 'guild') return { page: 'guild' };
+  if (h === 'performance' || h.startsWith('performance?')) return { page: 'performance' };
+  if (h.startsWith('me/raid')) return { page: 'myraid' };
   if (h === 'raids' || h.startsWith('raids?')) return { page: 'raids' };
   if (h === 'rankings' || h.startsWith('rankings?')) return { page: 'rankings' };
   if (h === 'admin') return { page: 'admin' };
@@ -60,6 +64,8 @@ export default function App() {
         <main className="content">
           {route.page === 'analyze' && <AnalyzePage key={route.key} />}
           {route.page === 'guild' && <GuildPage />}
+          {route.page === 'performance' && <PerformancePage key={route.key.replace(/&character=[^&]*/, '')} />}
+          {route.page === 'myraid' && <YourRaidPage key={route.key.replace(/&(character|tab)=[^&]*/g, '')} />}
           {route.page === 'raids' && <RaidsPage key={route.key} />}
           {route.page === 'rankings' && <RankingsPage key={route.key} />}
           {route.page === 'admin' && <AdminPage />}

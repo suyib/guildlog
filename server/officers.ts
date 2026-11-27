@@ -61,6 +61,21 @@ export async function requireRank(req: Request, min: Rank = 'officer'): Promise<
 }
 
 /** Officer-only actions (kept for existing callers). */
+/**
+ * For routes open to a rank's ability rather than a level, e.g. "lookup" (officers, raid leaders and
+ * loot council: /check anyone and /performance).
+ */
+export async function requireAbility(req: Request, ability: Parameters<typeof can>[1]): Promise<{ session: Session; rank: Rank } | { denied: Response }> {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) return { denied: json({ error: 'Server is missing SESSION_SECRET' }, 500) };
+  const session = await readSession(req.headers.get('cookie'), secret);
+  if (!session || !forThisGuild(session)) return { denied: json({ error: 'Not signed in' }, 401) };
+  if (session.kind === 'discord' && session.uid && (await isBlocked(session.uid))) return { denied: json({ error: 'Your access to Guild Logs has been turned off by an officer.' }, 403) };
+  const { rank } = await liveRank(session);
+  if (!can(rank, ability)) return { denied: json({ error: 'Only officers, raid leaders and loot council can see this.' }, 403) };
+  return { session, rank };
+}
+
 export async function requireOfficer(req: Request): Promise<{ session: Session } | { denied: Response }> {
   return requireRank(req, 'officer');
 }

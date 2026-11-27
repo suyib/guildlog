@@ -93,7 +93,10 @@ function CharacterCard({ c }: { c: ProfileCharacter }) {
             {c.healer ? 'Healing parse' : 'Average parse'} <strong className={parseCss(r.avgParse)}>{r.avgParse ?? '–'}</strong>
             {r.best.parse !== null && <> · best on {r.best.boss} <strong className={parseCss(r.best.parse)}>{Math.round(r.best.parse)}</strong></>}
           </span>
-          <a className="button ghost" href={analysisLink(c)!}><Glyph name="bars" size={16} />Analyze {r.best.boss}</a>
+          <span className="row wrap-center">
+            <a className="button" href={`/#/me/raid?host=${encodeURIComponent(r.host)}&raid=${encodeURIComponent(r.code)}&character=${encodeURIComponent(c.name)}`}>Your night</a>
+            <a className="button ghost" href={analysisLink(c)!}><Glyph name="bars" size={16} />Analyze {r.best.boss}</a>
+          </span>
         </div>
       ) : (
         <p className="muted small">No raids with this character yet. It fills in after the next /raidend.</p>

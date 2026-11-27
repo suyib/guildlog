@@ -43,7 +43,10 @@ export default function NightView({ data, onBoss, onPlayer, onRefresh, refreshin
           sub={`${new Date(data.startTime).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · ${c.kills} of ${c.bosses.length} bosses killed · ${c.raiders.length} raiders`}
         />
       </header>
-      <p className="muted small">Click a boss for its breakdown, or anyone to analyze their best boss.</p>
+      <div className="row wrap-center night-actions">
+        <a className="button" href={`/#/me/raid?host=${encodeURIComponent(data.host)}&raid=${encodeURIComponent(data.code)}`}>Your night</a>
+        <span className="muted small">Your own pages for this raid, the same as the bot&rsquo;s DMs. Click a boss below for its breakdown, or anyone to analyze their best boss.</span>
+      </div>
 
       {partial && (
         <p className="warning">

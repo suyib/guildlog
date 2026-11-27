@@ -1051,6 +1051,54 @@ button.boss-pick:first-child { padding-left: 12px; }
 button.boss-pick:hover:not(:disabled) { background: var(--hover); }
 button.boss-pick.on, button.boss-pick.on:hover:not(:disabled) { border-color: var(--gold-dim); background: rgba(var(--primary-tint), 0.18); color: var(--gold); }
 
+/* ---------- The bot's messages on the site (Your raid, Performance) ---------- */
+.md { display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.5; }
+.md p { margin: 0; }
+.md code { font-family: var(--font-mono); font-size: 12px; padding: 1px 5px; border-radius: 4px; background: var(--raised); }
+.md-list { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
+.md-list li::marker { color: var(--gold); }
+.md-quote { padding-left: 10px; border-left: 2px solid var(--gold-dim); color: var(--ink-2); }
+.muted-md { color: var(--ink-3); font-size: 13px; }
+.md-good .md-list li::marker { color: var(--win); }
+.md-work .md-list li::marker { color: var(--medium); }
+.stat-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.stat-tile { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--surface); }
+.stat-tile > span { font: 400 11px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.stat-tile > strong { font-size: 18px; }
+.embed-blocks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: var(--space); align-items: start; }
+.embed-view { gap: 8px; }
+.embed-field { display: flex; flex-direction: column; gap: 4px; }
+.your-raid { display: flex; flex-direction: column; gap: var(--space); }
+.your-raid-actions select { width: auto; }
+.tabs-seg { align-self: flex-start; flex-wrap: wrap; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space); }
+@media (max-width: 960px) { .grid-3 { grid-template-columns: minmax(0, 1fr); } }
+.cons-grid th.c, .cons-grid td.c { text-align: center; }
+.cons-grid th.c .icon { vertical-align: -4px; margin-right: 4px; border-radius: 3px; }
+.cons-cell { display: inline-grid; place-items: center; width: 28px; height: 22px; border-radius: 5px; font-weight: 800; }
+.cons-cell.yes { background: rgba(95, 211, 141, 0.15); color: var(--win); }
+.cons-cell.no { background: rgba(255, 107, 107, 0.15); color: var(--high); }
+.cons-cell.none { color: var(--ink-3); }
+.night-actions { margin-top: -4px; }
+.perf-filters select { width: auto; }
+.kpis.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .kpis.five { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .kpis.five { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.perf-caveat { margin: 0; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--gold-dim); background: rgba(255, 179, 71, 0.06); color: var(--ink-2); font-size: 13px; }
+.perf-person { border-radius: 10px; border: 1px solid var(--line); background: var(--raised); }
+.perf-person + .perf-person { margin-top: 6px; }
+.perf-person.open { border-color: var(--gold-dim); }
+button.perf-person-head { width: 100%; height: auto; display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: transparent; border-radius: 10px; color: var(--ink); text-align: left; font-weight: 400; letter-spacing: 0; white-space: normal; }
+button.perf-person-head:hover:not(:disabled) { background: var(--hover); }
+.perf-person-name { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.perf-parse { font: 700 16px var(--font-mono); }
+.perf-drawer { display: flex; flex-direction: column; gap: 10px; padding: 0 10px 12px; }
+.perf-drawer .embed-view { background: rgba(0, 0, 0, 0.2); }
+.perf-note { color: var(--gold); }
+.perf-open { margin-top: 10px; }
+button.sort-button { font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; }
+.perf-table tr.on td { background: rgba(var(--primary-tint), 0.1); }
+
 /* ---------- Guild page ---------- */
 .guild-hero { position: relative; }
 .guild-range { position: absolute; top: var(--card-pad); right: var(--card-pad); width: auto; min-width: 170px; }

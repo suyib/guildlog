@@ -137,6 +137,15 @@ const quick = personalPage('summary', digest, 'Suy', null)!;
 const quickFields = Object.fromEntries(quick.embeds![0].fields!.map((f) => [f.name, f.value]));
 assert.ok(quickFields['What went well'].includes('**No deaths**'));
 assert.ok(quickFields['What to work on'].includes('Bestial Wrath 2 of 4'), 'under-used cooldowns are listed');
+// The site's "Your raid" page shows exactly what the bot DMs
+{
+  const { personalPages } = await import('../server/discord/pages');
+  const site = personalPages(digest, 'Suy', null)!;
+  for (const page of ['summary', 'rotation', 'damage', 'gear', 'survival'] as const) {
+    assert.deepEqual(site.pages[page].fields, personalPage(page, digest, 'Suy', null)!.embeds![0].fields, `the site's ${page} page matches the DM`);
+  }
+  assert.ok(JSON.stringify(quick.components).includes('/#/me/raid?host='), 'DMs link to the page on the site');
+}
 assert.ok(quickFields['What to work on'].includes('No enchant on: head'));
 // Six page buttons, split across two rows (Discord allows five per row)
 assert.equal(summary.components!.length, 2);

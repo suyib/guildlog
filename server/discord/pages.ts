@@ -112,7 +112,7 @@ export function raidSummary(digest: RaidDigest, loggerId: string | null): Messag
 
 type Point = { title: string; detail: string };
 type Field = NonNullable<Embed['fields']>[number];
-type Rows = { fight: FightDigest; p: PlayerDigest }[];
+export type Rows = { fight: FightDigest; p: PlayerDigest }[];
 
 const bullets = (points: Point[], max = 6) => points.slice(0, max).map((x) => `• **${x.title}**: ${x.detail}`).join('\n');
 const stat = (name: string, value: string): Field => ({ name, value: value || '–', inline: true });
@@ -193,41 +193,52 @@ const missingEnchants = (p?: PlayerDigest) => (p?.gear ?? []).filter((g) => g.en
 /** The Warcraft Logs site of the page being built (game-version rules depend on it). */
 let pageHost = '';
 
-/** bests: a line on tonight's personal bests for the quick summary (from the guild's Past raids). */
-export function personalPage(page: Page, digest: RaidDigest, character: string, realm: string | null, bests?: string | null): MessageBody | null {
+/** The five personal pages for one character in a raid, as embeds: the bot DMs them and the site's
+ * "Your raid" page shows the very same content. Null when they're not in any boss kill read so far. */
+export function personalPages(digest: RaidDigest, character: string, realm: string | null, bests?: string | null): { healer: boolean; rows: Rows; pages: Record<Exclude<Page, 'overview'>, Embed> } | null {
   pageHost = digest.host;
   const rows = playerFights(digest, character, realm);
   if (rows.length === 0) return null;
   const me = rows[0].p;
   const head = `${me.name} · ${spaced(me.specName)} ${spaced(me.className)}`.trim();
-  const base: Embed = { color: BRAND, url: `https://${digest.host}/reports/${digest.code}`, footer: { text: `${digest.meta.title} · ${new Date(digest.meta.startTime).toLocaleDateString('en-GB')}` } };
-  const healerLink = rows.filter((r) => healsMost(r.p)).length * 2 > rows.length;
-  const best = [...rows].sort((a, b) => ((healerLink ? b.p.healing?.parse : b.p.parse) ?? -1) - ((healerLink ? a.p.healing?.parse : a.p.parse) ?? -1))[0];
-  const links = row(
-    linkButton('Open full analysis', siteLink(digest.host, digest.code, best.fight.id, best.p.id)),
-    linkButton('Warcraft Logs', `https://${digest.host}/reports/${digest.code}`),
-  );
+  const base: Embed = { color: BRAND, url: `https://${digest.host}/reports/${digest.code}`, footer: { text: `${digest.meta.title} · ${new Date(digest.meta.startTime).toLocaleDateString('en-US')}` } };
   const pendingNote = digest.pending ? `\n_${bosses(digest.pending)} still being read; press the button again in a minute to include ${digest.pending > 1 ? 'them' : 'it'}._` : '';
   const intro = `${bosses(rows.length)} in ${digest.meta.title}.${pendingNote}`;
-
   // Healers (healing well above their damage on most bosses) get their pages in terms of healing
   const healer = rows.filter((r) => healsMost(r.p)).length * 2 > rows.length;
-  const build: Record<Page, () => Embed> = {
-    summary: () => ({ ...base, title: `Quick summary: ${head}`, description: intro, fields: [...(healer ? healerSummaryFields(rows) : summaryFields(rows)), ...(bests ? [{ name: 'Personal bests', value: clip(bests) }] : [])] }),
-    overview: () => build.summary(),
-    damage: () => (healer
+  const pages = {
+    summary: { ...base, title: `Quick summary: ${head}`, description: intro, fields: [...(healer ? healerSummaryFields(rows) : summaryFields(rows)), ...(bests ? [{ name: 'Personal bests', value: clip(bests) }] : [])] },
+    damage: healer
       ? { ...base, title: `Healing breakdown: ${head}`, description: intro, fields: healingFields(rows) }
-      : { ...base, title: `Damage breakdown: ${head}`, description: intro, fields: damageFields(rows) }),
-    rotation: () => ({ ...base, title: `Rotation & cooldowns: ${head}`, description: intro, fields: rotationFields(rows, healer) }),
-    gear: () => ({ ...base, title: `Gear & stats: ${head}`, description: gearIntro(rows), fields: gearFields(rows) }),
-    survival: () => ({
+      : { ...base, title: `Damage breakdown: ${head}`, description: intro, fields: damageFields(rows) },
+    rotation: { ...base, title: `Rotation & cooldowns: ${head}`, description: intro, fields: rotationFields(rows, healer) },
+    gear: { ...base, title: `Gear & stats: ${head}`, description: gearIntro(rows), fields: gearFields(rows) },
+    survival: {
       ...base,
       title: `Survival: ${head}`,
       description: `${intro}\n_"Likely avoidable" means it hit fewer than half of the non-tanks. Check the boss mechanics before treating it as a mistake._`,
       fields: survivalFields(rows),
-    }),
+    },
   };
-  return { embeds: [fit(build[page]())], components: [links] };
+  return { healer, rows, pages };
+}
+
+/** The address of a character's "Your raid" page on the site. */
+export const yourRaidLink = (host: string, code: string, character: string) =>
+  `${env.site()}/#/me/raid?host=${encodeURIComponent(host)}&raid=${encodeURIComponent(code)}&character=${encodeURIComponent(character)}`;
+
+/** bests: a line on tonight's personal bests for the quick summary (from the guild's Past raids). */
+export function personalPage(page: Page, digest: RaidDigest, character: string, realm: string | null, bests?: string | null): MessageBody | null {
+  const built = personalPages(digest, character, realm, bests);
+  if (!built) return null;
+  const { rows, healer, pages } = built;
+  const best = [...rows].sort((a, b) => ((healer ? b.p.healing?.parse : b.p.parse) ?? -1) - ((healer ? a.p.healing?.parse : a.p.parse) ?? -1))[0];
+  const links = row(
+    linkButton('Your night on Guild Logs', yourRaidLink(digest.host, digest.code, rows[0].p.name)),
+    linkButton('Open full analysis', siteLink(digest.host, digest.code, best.fight.id, best.p.id)),
+    linkButton('Warcraft Logs', `https://${digest.host}/reports/${digest.code}`),
+  );
+  return { embeds: [fit(pages[page === 'overview' ? 'summary' : page])], components: [links] };
 }
 
 // ---------- Quick summary ----------

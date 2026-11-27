@@ -9,6 +9,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.48.0',
+    date: '2026-11-27',
+    changes: [
+      'Your night: a page for each of your characters in each raid with the same five pages the bot DMs (Quick summary, Rotation & cooldowns, Damage or Healing, Gear & stats, Survival), plus boss by boss, against your last raid, your goals, the raid\u2019s achievements and your consumables. Open it from your profile, a raid on Past raids, the whole-night view, or the new button on every bot DM. Officers, raid leaders and loot council can open anyone\u2019s, like /check.',
+      'Performance (officers, raid leaders and loot council): the /performance report on the site, built by the same code. Pick a period or one raid, filter by role or name, and see who\u2019s doing well, who could use a hand and what to watch for. Click anyone for what /performance character: says, who claimed them and the officer note, with a button to send it to you as a DM. An Everyone table adds kills, parses, deaths, active time, consumables and raids attended.',
+    ],
+  },
+  {
     version: '0.47.0',
     date: '2026-11-27',
     changes: [
